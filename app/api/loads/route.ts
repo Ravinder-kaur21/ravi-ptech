@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
+import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { load } from "@/lib/schema"
-import { withTenant } from "@/lib/dal"
+import { load, user as userTable } from "@/lib/schema"
+import { withTenant, requirePermission } from "@/lib/dal"
+import { recordAuditEvent } from "@/lib/audit"
 import { randomUUID } from "crypto"
 
 const createLoadSchema = z.object({
@@ -21,7 +23,11 @@ const createLoadSchema = z.object({
 
 // [API/LOADS] Create a load. tenantId comes from the session via
 // withTenant() — never from the request body.
-export const POST = withTenant(async (req: Request, { tenantId }) => {
+export const POST = withTenant(async (req: Request, { tenantId, userId }) => {
+  // Phase 2 (R-01): server-side RBAC gate. Driver / member roles do
+  // not have `load: ["create"]` in lib/auth-roles.ts → they are denied.
+  await requirePermission({ resource: "load", action: "create" })
+
   const body = await req.json().catch(() => null)
   const parsed = createLoadSchema.safeParse(body)
   if (!parsed.success) {
@@ -56,6 +62,19 @@ export const POST = withTenant(async (req: Request, { tenantId }) => {
     console.error("[API/LOADS] insert failed:", err)
     return NextResponse.json({ error: "Failed to create load" }, { status: 500 })
   }
+
+  // Phase 2 (R-07): audit the create.
+  const [actor] = await db
+    .select({ email: userTable.email })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .limit(1)
+  await recordAuditEvent({
+    actor: { id: userId, email: actor?.email ?? "(unknown)" },
+    action: "load.create",
+    target: { type: "load", id, label: data.loadNumber },
+    metadata: { tenantId, customerName: data.customerName ?? null },
+  })
 
   return NextResponse.json({ id, loadNumber: data.loadNumber }, { status: 201 })
 })

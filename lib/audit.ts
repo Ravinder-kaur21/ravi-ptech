@@ -63,6 +63,21 @@ export type AuditAction =
   | "api-key.revoke"
   | "dsar.export"
   | "dsar.erase"
+  | "load.create"
+  | "load.update"
+  | "load.delete"
+  | "invoice.create"
+  | "invoice.update"
+  | "invoice.delete"
+  | "trip.create"
+  | "trip.update"
+  | "trip.delete"
+  | "driver.create"
+  | "driver.update"
+  | "driver.delete"
+  | "truck.create"
+  | "truck.update"
+  | "truck.delete"
 
 export type AuditTargetType =
   | "user"
@@ -77,6 +92,11 @@ export type AuditTargetType =
   | "webhook"
   | "api-key"
   | "dsar"
+  | "load"
+  | "invoice"
+  | "trip"
+  | "driver"
+  | "truck"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { load } from "@/lib/schema"
-import { withTenant } from "@/lib/dal"
+import { withTenant, requirePermission } from "@/lib/dal"
 
 // [API/LOAD-STAR] Star/unstar a load. The tenant_id predicate means a
 // load id from another tenant simply won't match — 404, not 403, so we
@@ -13,6 +13,10 @@ export const PATCH = withTenant(
     { tenantId },
     ctx: { params: Promise<{ id: string }> }
   ) => {
+    // Phase 2 (R-01): require `load: ["update"]`. Driver role has
+    // only `load: ["read"]` → denied.
+    await requirePermission({ resource: "load", action: "update" })
+
     const { id } = await ctx.params
     const body = await req.json().catch(() => null)
     const isStarred = Boolean((body as { isStarred?: unknown } | null)?.isStarred)

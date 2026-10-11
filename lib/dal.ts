@@ -231,6 +231,46 @@ export async function requireTenant() {
   }
 }
 
+/**
+ * requirePermission — Phase 2 (R-01 from the audit).
+ *
+ * Wraps Better Auth's `auth.api.hasPermission` server call. Reads the
+ * current session + the active-org membership role from BA's RBAC
+ * declarations in `lib/auth-roles.ts`. Throws `TenantError("FORBIDDEN")`
+ * on deny so `withTenant` maps it to HTTP 403.
+ *
+ * Usage:
+ *   export const POST = withTenant(async (req, { tenantId }) => {
+ *     await requirePermission({ resource: "load", action: "create" })
+ *     // ...
+ *   })
+ */
+export async function requirePermission(opts: {
+  resource: string
+  action: string
+}): Promise<void> {
+  const headersList = await headers()
+  try {
+    const result = await auth.api.hasPermission({
+      headers: headersList,
+      body: { permissions: { [opts.resource]: [opts.action] } },
+    })
+    if (!result?.success) {
+      console.log(
+        `[DAL] requirePermission deny: ${opts.resource}.${opts.action}`,
+      )
+      throw new TenantError("FORBIDDEN")
+    }
+  } catch (err) {
+    if (err instanceof TenantError) throw err
+    console.error(
+      `[DAL] requirePermission error for ${opts.resource}.${opts.action}:`,
+      err,
+    )
+    throw new TenantError("FORBIDDEN")
+  }
+}
+
 const TENANT_ERROR_STATUS: Record<TenantError["code"], number> = {
   UNAUTHORIZED: 401,
   NO_ACTIVE_ORGANIZATION: 409,
