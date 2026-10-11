@@ -9,6 +9,11 @@ import { notFound } from "next/navigation"
 import { getEnrichedUserById, resolveUserRoles, requireAdmin } from "@/lib/dal"
 import { UserDetailPage } from "./user-detail-page"
 
+// Detail pages run data fetches at render time, so they must not be
+// prerendered (the (admin) layout already calls `getSession` which
+// is also non-prerenderable).
+export const instant = false
+
 export default async function AdminUserDetailPage({
   params,
 }: {

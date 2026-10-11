@@ -9,6 +9,11 @@ import { notFound } from "next/navigation"
 import { getEnrichedOrgById, getOrgStats, requireAdmin } from "@/lib/dal"
 import { WorkspaceDetailPage } from "./workspace-detail-page"
 
+// Detail pages run data fetches at render time, so they must not be
+// prerendered (the (admin) layout already calls `getSession` which
+// is also non-prerenderable).
+export const instant = false
+
 export default async function AdminWorkspaceDetailPage({
   params,
 }: {

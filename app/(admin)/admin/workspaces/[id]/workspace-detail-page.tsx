@@ -2,30 +2,28 @@
 
 /**
  * /admin/workspaces/[id] — comprehensive dedicated detail page for
- * one workspace. Replaces the tiny Sheet in the WorkspacesTable.
+ * one workspace. 2026 enterprise pattern (Linear/Stripe/Vercel):
  *
- * Sections:
- *   1. Header (back link, name, plan/status badges)
- *   2. Overview + TMS stat grid (6 tiles)
- *   3. Members (paginated, with per-row actions)
- *   4. Activity (org-scoped audit events)
- *   5. Actions toolbar (Suspend/Unsuspend, View as workspace)
- *   6. Danger zone (typed-confirmation delete)
+ *   1.  Breadcrumb header with large logo, name, status/plan badges
+ *   2.  KPI strip (6 hero metrics with sparkline-friendly data)
+ *   3.  Two-column main grid:
+ *        LEFT (8/12)  Overview · Members · Activity timeline
+ *        RIGHT (4/12) Suspension card · Plan & metadata · Risk score
+ *   4.  Action toolbar
+ *   5.  Danger zone with typed + checkbox confirmation
+ *
+ * Uses Item, Field, Alert, Kbd, Progress, Switch, InputGroup, Accordion,
+ * Separator, Tooltip, Popover, HoverCard, Breadcrumb, etc.
  */
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { formatDistanceToNow } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import {
   ArrowLeft,
   Building2,
-  TruckIcon,
-  Users,
-  ScrollText,
-  Pause,
-  PlayCircle,
   Trash2,
   Eye,
   Copy,
@@ -35,11 +33,36 @@ import {
   DollarSign,
   Package,
   TrendingUp,
+  MoreHorizontal,
+  ShieldAlert,
+  AlertCircle,
+  Users,
+  ScrollText,
+  Pause,
+  PlayCircle,
+  Settings2,
+  Gauge,
+  Hash,
+  CircleDot,
+  Sparkles,
+  TruckIcon,
+  CreditCard,
+  Activity as ActivityIcon,
+  ChevronRight,
+  Crown,
+  Briefcase,
+  ShieldCheck,
 } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -88,6 +111,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Separator } from "@/components/ui/separator"
+import { Kbd } from "@/components/ui/kbd"
+import { Progress } from "@/components/ui/progress"
+import { Switch } from "@/components/ui/switch"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { cn } from "@/lib/utils"
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -146,45 +207,6 @@ type Props = {
   initialStats: OrgStats
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-function StatTile({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  label: string
-  value: React.ReactNode
-  hint?: string
-  icon?: React.ComponentType<{ className?: string }>
-}) {
-  return (
-    <Card className="border-brand-rule bg-brand-card p-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          {label}
-        </div>
-        {Icon && <Icon className="size-3.5 text-brand-muted-soft" />}
-      </div>
-      <div className="font-serif text-2xl leading-tight text-brand-ink">
-        {value}
-      </div>
-      {hint && <div className="text-[11px] text-brand-muted-soft">{hint}</div>}
-    </Card>
-  )
-}
-
-function formatMoney(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(n)
-}
-
-// ─── Page ──────────────────────────────────────────────────────────────────
-
 const WORKSPACE_ROLES = [
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
@@ -196,11 +218,39 @@ const WORKSPACE_ROLES = [
   { value: "safety", label: "Safety" },
 ] as const
 
+const ROLE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  owner: Crown,
+  admin: ShieldAlert,
+  member: Users,
+  operations_manager: Briefcase,
+  dispatcher: TruckIcon,
+  accounting: DollarSign,
+  driver: TruckIcon,
+  safety: ShieldCheck,
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function formatMoney(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n)
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────
+
 export function WorkspaceDetailPage({ org, initialStats }: Props) {
   console.log(`[WORKSPACE-DETAIL-PAGE] rendering org=${org.id} ${org.slug}`)
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [copied, setCopied] = React.useState(false)
+  const [copied, setCopied] = React.useState<string | null>(null)
+  const copy = (label: string, value: string) => {
+    navigator.clipboard.writeText(value)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 1200)
+  }
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-orgs"] })
@@ -208,11 +258,12 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
     queryClient.invalidateQueries({ queryKey: ["admin-workspace", org.id] })
     queryClient.invalidateQueries({ queryKey: ["admin-workspace-members", org.id] })
     queryClient.invalidateQueries({ queryKey: ["admin-workspace-activity", org.id] })
+    router.refresh()
   }
 
   // ── Suspend / unsuspend ───────────────────────────────────────────
   const [suspendOpen, setSuspendOpen] = React.useState(false)
-  const [suspendReason, setSususpendReason] = React.useState("")
+  const [suspendReason, setSuspendReason] = React.useState("")
   const suspendMutation = useMutation({
     mutationFn: async () => {
       const r = await fetch(`/api/admin/workspaces/${org.id}/suspend`, {
@@ -228,9 +279,8 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
     onSuccess: () => {
       toast.success(`${org.name} suspended`)
       setSuspendOpen(false)
-      setSususpendReason("")
+      setSuspendReason("")
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -250,7 +300,6 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
     onSuccess: () => {
       toast.success(`${org.name} unsuspended`)
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -299,94 +348,162 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ──────────────────────────────────────────────── */}
+      {/* ── Breadcrumb ────────────────────────────────────────── */}
       <div className="px-4 lg:px-6">
-        <Link
-          href="/admin/workspaces"
-          className="inline-flex items-center gap-1.5 text-xs text-brand-muted-soft hover:text-brand-ink transition-colors"
-        >
-          <ArrowLeft className="size-3" />
-          Back to workspaces
-        </Link>
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/admin" />}>Admin</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/admin/workspaces" />}>
+                Workspaces
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{org.name}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
 
-        <div className="mt-3 flex items-start gap-4">
-          <div className="flex size-14 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent shrink-0">
-            {org.logo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={org.logo}
-                alt={org.name}
-                className="size-14 rounded-lg object-cover"
-              />
-            ) : (
-              <Building2 className="size-6" />
-            )}
+      {/* ── Hero header ───────────────────────────────────────── */}
+      <div className="px-4 lg:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex size-20 items-center justify-center rounded-xl bg-brand-accent-tint text-brand-accent shrink-0">
+              {org.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={org.logo}
+                  alt={org.name}
+                  className="size-20 rounded-xl object-cover"
+                />
+              ) : (
+                <Building2 className="size-8" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="size-2 shrink-0 rounded-full bg-brand-accent" />
+                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-ink">
+                  Workspace
+                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px] uppercase tracking-[0.04em] gap-1",
+                          org.suspended
+                            ? "border-amber-300 bg-amber-50 text-amber-900"
+                            : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                        )}
+                      />
+                    }
+                  >
+                    <CircleDot
+                      className={cn(
+                        "size-2",
+                        org.suspended ? "text-amber-700" : "text-emerald-700"
+                      )}
+                    />
+                    {org.suspended ? "Suspended" : "Active"}
+                  </TooltipTrigger>
+                  <TooltipContent>Workspace status</TooltipContent>
+                </Tooltip>
+                <Badge
+                  variant="outline"
+                  className="font-mono text-[10px] uppercase tracking-[0.04em]"
+                >
+                  /{org.slug}
+                </Badge>
+                {org.ownerCount > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px] uppercase tracking-[0.04em] gap-1 border-violet-300 bg-violet-50 text-violet-900"
+                        />
+                      }
+                    >
+                      <Crown className="size-2.5" />
+                      {org.ownerCount} owner
+                    </TooltipTrigger>
+                    <TooltipContent>Owners can transfer ownership and delete the workspace</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+              <h1 className="mt-2 font-serif text-[clamp(28px,3.5vw,40px)] leading-[1.05] tracking-tight text-brand-ink">
+                {org.name}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-[13px] text-brand-ink/70">
+                <span className="inline-flex items-center gap-1">
+                  <Calendar className="size-3" />
+                  Created {format(new Date(org.createdAt), "PP")}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Users className="size-3" />
+                  {org.memberCount} member{org.memberCount === 1 ? "" : "s"}
+                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => copy("id", org.id)}
+                        className="inline-flex items-center gap-1 rounded p-1 text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream-soft transition-colors"
+                      />
+                    }
+                  >
+                    {copied === "id" ? (
+                      <Check className="size-3 text-emerald-700" />
+                    ) : (
+                      <Copy className="size-3" />
+                    )}
+                    <span className="font-mono text-[10px]">
+                      {org.id.slice(0, 8)}…
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Click to copy full workspace id</TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="size-1.5 shrink-0 rounded-full bg-brand-accent" />
-              <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-ink">
-                WORKSPACE
-              </span>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-mono text-[10px] uppercase tracking-[0.04em]",
-                  org.suspended
-                    ? "border-amber-300 bg-amber-50 text-amber-900"
-                    : "border-emerald-300 bg-emerald-50 text-emerald-900"
+          {/* Right side — quick actions */}
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-9"
+                    onClick={() => viewAsMutation.mutate()}
+                    disabled={viewAsMutation.isPending}
+                    aria-label="View as this workspace"
+                  />
+                }
+              >
+                {viewAsMutation.isPending ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <ExternalLink className="size-4" />
                 )}
-              >
-                {org.suspended ? "Suspended" : "Active"}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="font-mono text-[10px] uppercase tracking-[0.04em]"
-              >
-                /{org.slug}
-              </Badge>
-            </div>
-            <h1 className="mt-2 font-serif text-[clamp(28px,3.5vw,40px)] leading-[1.05] tracking-tight text-brand-ink">
-              {org.name}
-            </h1>
-            <div className="mt-1 flex items-center gap-3 text-[13px] text-brand-ink/70">
-              <span>
-                <Calendar className="inline size-3 -mt-0.5 mr-1 text-brand-muted-soft" />
-                Created {new Date(org.createdAt).toLocaleDateString()}
-              </span>
-              <span>
-                <Users className="inline size-3 -mt-0.5 mr-1 text-brand-muted-soft" />
-                {org.memberCount} member{org.memberCount === 1 ? "" : "s"} ·{" "}
-                {org.ownerCount} owner{org.ownerCount === 1 ? "" : "s"}
-              </span>
-              <HoverCard>
-                <HoverCardTrigger
-                  render={
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(org.id)
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 1500)
-                      }}
-                      className="inline-flex items-center gap-1 rounded p-1 text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream-soft transition-colors"
-                    />
-                  }
-                >
-                  {copied ? (
-                    <Check className="size-3" />
-                  ) : (
-                    <Copy className="size-3" />
-                  )}
-                  <span className="font-mono text-[10px]">
-                    {org.id.slice(0, 8)}…
-                  </span>
-                </HoverCardTrigger>
-                <HoverCardContent>
-                  <p className="text-xs">Click to copy full workspace id</p>
-                </HoverCardContent>
-              </HoverCard>
-            </div>
+              </TooltipTrigger>
+              <TooltipContent>View as this workspace</TooltipContent>
+            </Tooltip>
+            <WorkspaceActionsMenu
+              suspended={org.suspended}
+              onSuspend={() => setSuspendOpen(true)}
+              onUnsuspend={() => unsuspendMutation.mutate()}
+              unsuspendPending={unsuspendMutation.isPending}
+              onDelete={() => setDeleteOpen(true)}
+            />
           </div>
         </div>
       </div>
@@ -394,30 +511,23 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
       {/* ── Suspended banner ────────────────────────────────────── */}
       {org.suspended && (
         <div className="px-4 lg:px-6">
-          <Card className="border-amber-200 bg-amber-50 p-4">
-            <div className="flex items-start gap-3">
-              <Pause className="size-4 text-amber-700 mt-0.5" />
-              <div className="flex-1">
-                <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-amber-900">
-                  Workspace suspended
-                </div>
-                {org.suspendedReason && (
-                  <p className="mt-1 text-sm text-amber-900">
-                    {org.suspendedReason}
-                  </p>
-                )}
-                <p className="mt-1 text-[11px] text-amber-700">
-                  {org.suspendedAt
-                    ? `Suspended ${formatDistanceToNow(new Date(org.suspendedAt), { addSuffix: true })}`
-                    : ""}
-                </p>
-              </div>
+          <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+            <Pause className="size-4" />
+            <AlertTitle>Workspace suspended</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              {org.suspendedReason && <span>{org.suspendedReason}</span>}
+              {org.suspendedAt && (
+                <span className="text-[11px] opacity-80">
+                  · suspended{" "}
+                  {formatDistanceToNow(new Date(org.suspendedAt), { addSuffix: true })}
+                </span>
+              )}
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => unsuspendMutation.mutate()}
                 disabled={unsuspendMutation.isPending}
-                className="gap-1.5"
+                className="ml-auto gap-1.5"
               >
                 {unsuspendMutation.isPending ? (
                   <Spinner className="size-3" />
@@ -426,146 +536,362 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
                 )}
                 Unsuspend
               </Button>
-            </div>
-          </Card>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
-      {/* ── TMS stats grid ──────────────────────────────────────── */}
+      {/* ── KPI strip (6 tiles) ───────────────────────────────── */}
       <div className="px-4 lg:px-6">
         <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-          <StatTile
+          <KpiCard
             label="Loads"
-            value={`${initialStats.loads.active} / ${initialStats.loads.total}`}
-            hint={`${initialStats.loads.total - initialStats.loads.active} closed`}
+            value={`${initialStats.loads.active}`}
+            hint={`of ${initialStats.loads.total} total`}
             icon={Package}
+            tone={initialStats.loads.active > 0 ? "ok" : "muted"}
+            progress={
+              initialStats.loads.total > 0
+                ? (initialStats.loads.active / initialStats.loads.total) * 100
+                : 0
+            }
+            progressTone="ok"
           />
-          <StatTile
+          <KpiCard
             label="Drivers"
-            value={`${initialStats.drivers.active} / ${initialStats.drivers.total}`}
-            hint={`${initialStats.drivers.total - initialStats.drivers.active} inactive`}
+            value={`${initialStats.drivers.active}`}
+            hint={`of ${initialStats.drivers.total} total`}
             icon={Users}
+            tone={initialStats.drivers.active > 0 ? "ok" : "muted"}
+            progress={
+              initialStats.drivers.total > 0
+                ? (initialStats.drivers.active / initialStats.drivers.total) * 100
+                : 0
+            }
+            progressTone="ok"
           />
-          <StatTile
+          <KpiCard
             label="Trucks"
-            value={`${initialStats.trucks.active} / ${initialStats.trucks.total}`}
-            hint={`${initialStats.trucks.total - initialStats.trucks.active} off-fleet`}
+            value={`${initialStats.trucks.active}`}
+            hint={`of ${initialStats.trucks.total} total`}
             icon={TruckIcon}
+            tone={initialStats.trucks.active > 0 ? "ok" : "muted"}
+            progress={
+              initialStats.trucks.total > 0
+                ? (initialStats.trucks.active / initialStats.trucks.total) * 100
+                : 0
+            }
+            progressTone="ok"
           />
-          <StatTile
+          <KpiCard
             label="Invoices"
-            value={`${initialStats.invoices.paid} / ${initialStats.invoices.paid + initialStats.invoices.outstanding}`}
-            hint={`${initialStats.invoices.outstanding} outstanding`}
+            value={`${initialStats.invoices.paid}`}
+            hint={`of ${
+              initialStats.invoices.paid + initialStats.invoices.outstanding
+            } total`}
             icon={ScrollText}
+            tone={
+              initialStats.invoices.outstanding > 0 ? "warn" : "ok"
+            }
+            progress={
+              initialStats.invoices.paid +
+                initialStats.invoices.outstanding >
+              0
+                ? (initialStats.invoices.paid /
+                    (initialStats.invoices.paid +
+                      initialStats.invoices.outstanding)) *
+                  100
+                : 0
+            }
+            progressTone={
+              initialStats.invoices.outstanding > 0 ? "warn" : "ok"
+            }
           />
-          <StatTile
+          <KpiCard
             label="Revenue (30d)"
             value={formatMoney(initialStats.revenue.last30d)}
-            hint={`All-time ${formatMoney(initialStats.revenue.allTime)}`}
+            hint={`all-time ${formatMoney(initialStats.revenue.allTime)}`}
             icon={DollarSign}
+            tone="ok"
           />
-          <StatTile
+          <KpiCard
             label="Last activity"
             value={
               initialStats.lastActivityAt
-                ? formatDistanceToNow(new Date(initialStats.lastActivityAt), { addSuffix: false })
+                ? formatDistanceToNow(new Date(initialStats.lastActivityAt), {
+                    addSuffix: false,
+                  })
                 : "—"
             }
             hint={initialStats.lastActivityAt ? "ago" : "no events yet"}
             icon={TrendingUp}
+            tone={initialStats.lastActivityAt ? "ok" : "muted"}
           />
         </div>
       </div>
 
-      {/* ── Tabs ─────────────────────────────────────────────────── */}
-      <div className="px-4 lg:px-6">
-        <Tabs defaultValue="members" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="members">Members ({org.memberCount})</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+      {/* ── Main grid ─────────────────────────────────────────── */}
+      <div className="px-4 lg:px-6 grid gap-6 lg:grid-cols-12">
+        {/* LEFT 8/12 */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Overview section */}
+          <Section
+            eyebrow="Overview"
+            title="Workspace identity"
+            description="Name, slug, plan, and lifecycle."
+            icon={Building2}
+          >
+            <ItemGroup>
+              <Item>
+                <ItemMedia variant="icon">
+                  <Hash className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Workspace id</ItemTitle>
+                  <ItemDescription className="font-mono text-[11px] break-all">
+                    {org.id}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => copy("id", org.id)}
+                        />
+                      }
+                    >
+                      {copied === "id" ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Copy workspace id</TooltipContent>
+                  </Tooltip>
+                </ItemActions>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Building2 className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Slug</ItemTitle>
+                  <ItemDescription className="font-mono">/{org.slug}</ItemDescription>
+                </ItemContent>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Calendar className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Created</ItemTitle>
+                  <ItemDescription>
+                    {format(new Date(org.createdAt), "PPpp")} ·{" "}
+                    {formatDistanceToNow(new Date(org.createdAt), { addSuffix: true })}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <CreditCard className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Plan</ItemTitle>
+                  <ItemDescription>Standard (no plan upgrade yet)</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[10px] uppercase tracking-[0.04em]"
+                  >
+                    standard
+                  </Badge>
+                </ItemActions>
+              </Item>
+            </ItemGroup>
+          </Section>
 
-          <TabsContent value="members">
+          {/* Members */}
+          <Section
+            eyebrow="Members"
+            title={`${org.memberCount} member${org.memberCount === 1 ? "" : "s"}`}
+            description="Every user with access to this workspace and their role."
+            icon={Users}
+            action={
+              org.memberCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="font-mono text-[10px] uppercase tracking-[0.04em] gap-1"
+                >
+                  <Crown className="size-2.5 text-violet-700" />
+                  {org.ownerCount} owner
+                </Badge>
+              )
+            }
+          >
             <MembersTab orgId={org.id} />
-          </TabsContent>
+          </Section>
 
-          <TabsContent value="activity">
+          {/* Activity */}
+          <Section
+            eyebrow="Activity"
+            title="Recent audit events"
+            description="Actions targeting this workspace, scoped via the audit chain."
+            icon={ActivityIcon}
+          >
             <ActivityTab orgId={org.id} />
-          </TabsContent>
+          </Section>
+        </div>
 
-          <TabsContent value="settings">
-            <SettingsTab org={org} />
-          </TabsContent>
-        </Tabs>
-      </div>
+        {/* RIGHT 4/12 */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Suspension controls */}
+          <Section
+            eyebrow="Status"
+            title={org.suspended ? "Workspace suspended" : "Workspace active"}
+            description={
+              org.suspended
+                ? "All members blocked at sign-in."
+                : "Members can sign in and use the TMS normally."
+            }
+            icon={org.suspended ? Pause : PlayCircle}
+            compact
+          >
+            <FieldGroup>
+              <Field orientation="horizontal" className="items-center justify-between">
+                <FieldContent>
+                  <FieldLabel>Suspended</FieldLabel>
+                  <FieldDescription>
+                    Block all members at sign-in.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  checked={org.suspended}
+                  onCheckedChange={(v) => {
+                    if (v) setSuspendOpen(true)
+                    else unsuspendMutation.mutate()
+                  }}
+                  disabled={unsuspendMutation.isPending}
+                />
+              </Field>
+            </FieldGroup>
+          </Section>
 
-      {/* ── Actions toolbar ─────────────────────────────────────── */}
-      <div className="px-4 lg:px-6">
-        <Card className="border-brand-rule bg-brand-card p-5 space-y-3">
-          <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-            Workspace actions
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {!org.suspended && (
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setSuspendOpen(true)}
-              >
-                <Pause className="size-4" />
-                Suspend workspace
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => viewAsMutation.mutate()}
-              disabled={viewAsMutation.isPending}
+          {/* Plan / billing */}
+          <Section
+            eyebrow="Plan"
+            title="Standard"
+            description="No plan upgrade yet — Muvx is in early access."
+            icon={CreditCard}
+            compact
+          >
+            <FieldGroup>
+              <Field orientation="horizontal">
+                <FieldLabel>Members</FieldLabel>
+                <FieldContent className="text-right">
+                  <FieldDescription>
+                    {org.memberCount} of unlimited
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+              <Field orientation="horizontal">
+                <FieldLabel>Loads</FieldLabel>
+                <FieldContent className="text-right">
+                  <FieldDescription>{initialStats.loads.total}</FieldDescription>
+                </FieldContent>
+              </Field>
+              <Field orientation="horizontal">
+                <FieldLabel>Revenue (all-time)</FieldLabel>
+                <FieldContent className="text-right">
+                  <FieldDescription className="font-mono">
+                    {formatMoney(initialStats.revenue.allTime)}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+          </Section>
+
+          {/* Settings (raw metadata) */}
+          {org.metadata && (
+            <Section
+              eyebrow="Settings"
+              title="Raw metadata"
+              description="Stored organization.metadata blob."
+              icon={Settings2}
+              compact
             >
-              {viewAsMutation.isPending ? (
-                <Spinner className="size-4" />
-              ) : (
-                <ExternalLink className="size-4" />
-              )}
-              View as this workspace
-            </Button>
-          </div>
-        </Card>
+              <pre className="max-h-48 overflow-auto rounded-lg bg-brand-cream-soft p-3 font-mono text-[11px] text-brand-ink">
+                {(() => {
+                  try {
+                    return JSON.stringify(JSON.parse(org.metadata), null, 2)
+                  } catch {
+                    return org.metadata
+                  }
+                })()}
+              </pre>
+            </Section>
+          )}
+
+          {/* Member growth sparkline (mock for now, real data via future API) */}
+          <Section
+            eyebrow="Health"
+            title="Activity score"
+            description="Heuristic based on member engagement and recent events."
+            icon={Gauge}
+            compact
+          >
+            <ActivityScore stats={initialStats} memberCount={org.memberCount} />
+          </Section>
+        </div>
       </div>
 
-      {/* ── Danger zone ──────────────────────────────────────────── */}
+      {/* ── Danger zone ──────────────────────────────────────── */}
       <div className="px-4 lg:px-6">
         <Card className="border-red-200 bg-red-50/40 p-5 space-y-3">
-          <div>
-            <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
-              Danger zone
-            </h2>
-            <p className="mt-1 text-sm text-red-900/80">
-              Permanently delete <b>{org.name}</b> and every record that
-              belongs to it: {initialStats.loads.total} loads,{" "}
-              {initialStats.drivers.total} drivers, {initialStats.trucks.total}{" "}
-              trucks, every trip, invoice, pay stub, and member row. This
-              cannot be undone.
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 items-center justify-center rounded-md bg-red-100 text-red-900 shrink-0">
+              <ShieldAlert className="size-4" />
+            </div>
+            <div>
+              <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
+                Danger zone
+              </h2>
+              <p className="mt-1 text-sm text-red-900/80">
+                Permanently delete <b>{org.name}</b> and every record that
+                belongs to it: {initialStats.loads.total} loads,{" "}
+                {initialStats.drivers.total} drivers, {initialStats.trucks.total}{" "}
+                trucks, every trip, invoice, pay stub, and member row. This
+                cannot be undone.
+              </p>
+            </div>
           </div>
-          <Button
-            variant="destructive"
-            className="gap-2"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="size-4" />
-            Delete workspace permanently
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              Delete workspace permanently
+            </Button>
+            <Kbd>type {org.name} to confirm</Kbd>
+          </div>
         </Card>
       </div>
 
-      {/* ── Dialogs ──────────────────────────────────────────────── */}
+      {/* ── Dialogs ──────────────────────────────────────────── */}
       <SuspendDialog
         open={suspendOpen}
         onOpenChange={setSuspendOpen}
         reason={suspendReason}
-        setReason={setSususpendReason}
+        setReason={setSuspendReason}
         name={org.name}
         pending={suspendMutation.isPending}
         onConfirm={() => suspendMutation.mutate()}
@@ -586,10 +912,256 @@ export function WorkspaceDetailPage({ org, initialStats }: Props) {
   )
 }
 
-// ─── Tabs ──────────────────────────────────────────────────────────────────
+// ─── Building blocks ───────────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone,
+  progress,
+  progressTone,
+}: {
+  label: string
+  value: string
+  hint?: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: "ok" | "warn" | "destructive" | "muted"
+  progress?: number
+  progressTone?: "ok" | "warn"
+}) {
+  return (
+    <Card className="border-brand-rule bg-brand-card p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+          {label}
+        </div>
+        <Icon
+          className={cn(
+            "size-3.5",
+            tone === "ok" && "text-emerald-600",
+            tone === "warn" && "text-amber-600",
+            tone === "destructive" && "text-brand-accent",
+            tone === "muted" && "text-brand-muted-soft"
+          )}
+        />
+      </div>
+      <div className="font-serif text-2xl leading-none text-brand-ink">
+        {value}
+      </div>
+      {progress !== undefined && (
+        <Progress
+          value={progress}
+          className={cn(
+            "h-1",
+            progressTone === "warn" ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
+          )}
+        />
+      )}
+      {hint && <div className="text-[11px] text-brand-muted-soft">{hint}</div>}
+    </Card>
+  )
+}
+
+function Section({
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+  action,
+  compact,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  description?: string
+  icon: React.ComponentType<{ className?: string }>
+  action?: React.ReactNode
+  compact?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Card className="border-brand-rule bg-brand-card overflow-hidden p-0">
+      <CardHeader
+        className={cn(
+          "flex flex-row items-start justify-between gap-3 space-y-0",
+          compact ? "p-4 pb-3" : "p-5 pb-4"
+        )}
+      >
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex size-6 items-center justify-center rounded-md bg-brand-cream-soft text-brand-ink">
+              <Icon className="size-3.5" />
+            </div>
+            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+              {eyebrow}
+            </span>
+          </div>
+          <CardTitle className="font-serif text-lg leading-tight text-brand-ink">
+            {title}
+          </CardTitle>
+          {description && (
+            <p className="text-[12px] text-brand-ink/60">{description}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </CardHeader>
+      <CardContent className={cn(compact ? "px-4 pb-4" : "px-5 pb-5")}>
+        {children}
+      </CardContent>
+    </Card>
+  )
+}
+
+function WorkspaceActionsMenu({
+  suspended,
+  onSuspend,
+  onUnsuspend,
+  unsuspendPending,
+  onDelete,
+}: {
+  suspended: boolean
+  onSuspend: () => void
+  onUnsuspend: () => void
+  unsuspendPending: boolean
+  onDelete: () => void
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-9"
+            aria-label="More actions"
+          />
+        }
+      >
+        <MoreHorizontal className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-1">
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+          Workspace
+        </div>
+        {suspended ? (
+          <PopoverItem
+            icon={PlayCircle}
+            label="Unsuspend"
+            onClick={onUnsuspend}
+            disabled={unsuspendPending}
+          />
+        ) : (
+          <PopoverItem
+            icon={Pause}
+            label="Suspend workspace"
+            onClick={onSuspend}
+          />
+        )}
+        <Separator className="my-1" />
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+          Shortcuts
+        </div>
+        <div className="px-2 py-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-brand-muted-soft">Suspend / Unsuspend</span>
+          <Kbd>⌘S</Kbd>
+        </div>
+        <div className="px-2 py-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-brand-muted-soft">View as workspace</span>
+          <Kbd>⌘V</Kbd>
+        </div>
+        <Separator className="my-1" />
+        <PopoverItem
+          icon={Trash2}
+          label="Delete workspace"
+          onClick={onDelete}
+          destructive
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PopoverItem({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  destructive?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-brand-cream-soft disabled:opacity-50 disabled:hover:bg-transparent transition-colors",
+        destructive && "text-brand-accent hover:bg-brand-accent/10"
+      )}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  )
+}
+
+function ActivityScore({
+  stats,
+  memberCount,
+}: {
+  stats: OrgStats
+  memberCount: number
+}) {
+  // Heuristic: more recent activity + more members = higher score
+  let score = 0
+  if (memberCount > 0) score += 20
+  if (stats.loads.total > 0) score += 20
+  if (stats.drivers.total > 0) score += 15
+  if (stats.trucks.total > 0) score += 15
+  if (stats.invoices.paid > 0) score += 15
+  if (stats.lastActivityAt) score += 15
+  score = Math.min(100, score)
+  const tone = score >= 70 ? "ok" : score >= 40 ? "warn" : "muted"
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end gap-2">
+        <span
+          className={cn(
+            "font-serif text-3xl",
+            tone === "ok" && "text-emerald-700",
+            tone === "warn" && "text-amber-700",
+            tone === "muted" && "text-brand-muted-soft"
+          )}
+        >
+          {score}
+        </span>
+        <span className="text-xs text-brand-muted-soft mb-1">/ 100</span>
+      </div>
+      <Progress
+        value={score}
+        className={cn(
+          "h-2",
+          tone === "ok" && "[&>div]:bg-emerald-500",
+          tone === "warn" && "[&>div]:bg-amber-500",
+          tone === "muted" && "[&>div]:bg-brand-muted-soft"
+        )}
+      />
+      <p className="text-[11px] text-brand-muted-soft">
+        Based on members, TMS data, invoices, and last activity.
+      </p>
+    </div>
+  )
+}
+
+// ─── Tabs (inlined as sections) ──────────────────────────────────────────
 
 function MembersTab({ orgId }: { orgId: string }) {
-  console.log(`[WORKSPACE-DETAIL-PAGE] MembersTab orgId=${orgId}`)
   const [search, setSearch] = React.useState("")
   const q = useQuery({
     queryKey: ["admin-workspace-members", orgId, search],
@@ -604,7 +1176,9 @@ function MembersTab({ orgId }: { orgId: string }) {
   })
 
   const queryClient = useQueryClient()
-  const [changeRoleMember, setChangeRoleMember] = React.useState<Member | null>(null)
+  const [changeRoleMember, setChangeRoleMember] = React.useState<Member | null>(
+    null
+  )
   const changeRoleMutation = useMutation({
     mutationFn: async ({ memberId, role }: { memberId: string; role: string }) => {
       const r = await fetch(`/api/admin/users/${changeRoleMember?.userId}/action`, {
@@ -624,33 +1198,35 @@ function MembersTab({ orgId }: { orgId: string }) {
     onSuccess: () => {
       toast.success("Role updated")
       setChangeRoleMember(null)
-      queryClient.invalidateQueries({ queryKey: ["admin-workspace-members", orgId] })
+      queryClient.invalidateQueries({
+        queryKey: ["admin-workspace-members", orgId],
+      })
     },
     onError: (e) => toast.error((e as Error).message),
   })
 
   return (
-    <Card className="border-brand-rule bg-brand-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-brand-rule p-4">
+    <>
+      <div className="mb-3 flex items-center gap-2">
         <Input
           placeholder="Search by name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 max-w-sm"
         />
-        <div className="text-xs text-brand-muted-soft">
+        <div className="ml-auto text-xs text-brand-muted-soft">
           {q.data?.total ?? 0} member{(q.data?.total ?? 0) === 1 ? "" : "s"}
         </div>
       </div>
 
       {q.isLoading ? (
-        <div className="p-6 space-y-2">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
         </div>
       ) : q.isError ? (
-        <div className="p-6 text-sm text-brand-accent">
+        <div className="text-sm text-brand-accent">
           {(q.error as Error).message}
         </div>
       ) : (q.data?.members?.length ?? 0) === 0 ? (
@@ -668,58 +1244,74 @@ function MembersTab({ orgId }: { orgId: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-brand-cream-soft/50 hover:bg-brand-cream-soft/50">
-              <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                User
-              </TableHead>
-              <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                Role
-              </TableHead>
-              <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                Last active
-              </TableHead>
-              <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                Joined
-              </TableHead>
-              <TableHead className="w-12" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {q.data!.members.map((m) => (
-              <TableRow key={m.memberId}>
-                <TableCell>
-                  <Link
-                    href={`/admin/users/${m.userId}`}
-                    className="font-medium text-brand-ink hover:underline"
-                  >
-                    {m.name}
-                  </Link>
-                  <div className="text-[11px] text-brand-muted-soft">
-                    {m.email}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <Badge
-                      variant="outline"
-                      className="font-mono text-[10px] uppercase tracking-[0.04em] w-fit"
+        <ItemGroup>
+          {q.data!.members.map((m) => {
+            const RoleIcon = ROLE_ICONS[m.role] ?? Users
+            const initials = (m.name || m.email)
+              .split(/[\s@]/g)
+              .map((w) => w[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase()
+            return (
+              <Item
+                key={m.memberId}
+                className="flex-row items-center gap-3 py-3"
+              >
+                <Avatar className="size-9 rounded-lg">
+                  <AvatarImage src={m.image ?? undefined} alt={m.name} />
+                  <AvatarFallback className="rounded-lg bg-brand-ink text-brand-cream text-xs font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <ItemContent>
+                  <ItemTitle>
+                    <Link
+                      href={`/admin/users/${m.userId}`}
+                      className="hover:underline"
                     >
-                      {m.role}
-                    </Badge>
+                      {m.name}
+                    </Link>
+                    <span className="ml-2 text-[11px] text-brand-muted-soft font-normal">
+                      {m.email}
+                    </span>
+                  </ItemTitle>
+                  <ItemDescription>
+                    joined{" "}
+                    {formatDistanceToNow(new Date(m.joinedAt), { addSuffix: true })}
+                    {m.lastActiveAt && (
+                      <>
+                        <span className="mx-1.5 text-brand-muted-soft">·</span>
+                        last active{" "}
+                        {formatDistanceToNow(new Date(m.lastActiveAt), {
+                          addSuffix: true,
+                        })}
+                      </>
+                    )}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <div className="flex items-center gap-1.5">
                     {m.platformRole === "admin" && (
-                      <Badge
-                        variant="outline"
-                        className="font-mono text-[9px] uppercase tracking-[0.04em] w-fit border-violet-300 bg-violet-50 text-violet-900"
-                      >
-                        platform admin
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-[10px] uppercase tracking-[0.04em] gap-1 border-violet-300 bg-violet-50 text-violet-900"
+                            />
+                          }
+                        >
+                          <Sparkles className="size-2.5" />
+                          platform
+                        </TooltipTrigger>
+                        <TooltipContent>This user is a platform admin</TooltipContent>
+                      </Tooltip>
                     )}
                     {m.banned && (
                       <Badge
                         variant="outline"
-                        className="font-mono text-[9px] uppercase tracking-[0.04em] w-fit border-red-300 bg-red-50 text-red-900"
+                        className="font-mono text-[10px] uppercase tracking-[0.04em] border-red-300 bg-red-50 text-red-900"
                       >
                         banned
                       </Badge>
@@ -727,35 +1319,42 @@ function MembersTab({ orgId }: { orgId: string }) {
                     {m.suspended && !m.banned && (
                       <Badge
                         variant="outline"
-                        className="font-mono text-[9px] uppercase tracking-[0.04em] w-fit border-amber-300 bg-amber-50 text-amber-900"
+                        className="font-mono text-[10px] uppercase tracking-[0.04em] border-amber-300 bg-amber-50 text-amber-900"
                       >
                         suspended
                       </Badge>
                     )}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "font-mono text-[10px] uppercase tracking-[0.04em] gap-1",
+                              m.role === "owner" &&
+                                "border-violet-300 bg-violet-50 text-violet-900"
+                            )}
+                          />
+                        }
+                      >
+                        <RoleIcon className="size-2.5" />
+                        {m.role}
+                      </TooltipTrigger>
+                      <TooltipContent>{WORKSPACE_ROLES.find((r) => r.value === m.role)?.label}</TooltipContent>
+                    </Tooltip>
                   </div>
-                </TableCell>
-                <TableCell className="text-xs text-brand-muted-soft">
-                  {m.lastActiveAt
-                    ? formatDistanceToNow(new Date(m.lastActiveAt), { addSuffix: true })
-                    : "never"}
-                </TableCell>
-                <TableCell className="text-xs text-brand-muted-soft">
-                  {new Date(m.joinedAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setChangeRoleMember(m)}
-                    className="text-xs"
                   >
                     Change role
                   </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                </ItemActions>
+              </Item>
+            )
+          })}
+        </ItemGroup>
       )}
 
       <ChangeRoleDialog
@@ -767,12 +1366,11 @@ function MembersTab({ orgId }: { orgId: string }) {
         }}
         pending={changeRoleMutation.isPending}
       />
-    </Card>
+    </>
   )
 }
 
 function ActivityTab({ orgId }: { orgId: string }) {
-  console.log(`[WORKSPACE-DETAIL-PAGE] ActivityTab orgId=${orgId}`)
   const q = useQuery({
     queryKey: ["admin-workspace-activity", orgId],
     queryFn: async () => {
@@ -785,139 +1383,77 @@ function ActivityTab({ orgId }: { orgId: string }) {
 
   if (q.isLoading)
     return (
-      <Card className="border-brand-rule bg-brand-card p-6 space-y-2">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
-      </Card>
+      <div className="space-y-2">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
     )
 
   if (q.isError)
-    return (
-      <Card className="border-brand-rule bg-brand-card p-6 text-sm text-brand-accent">
-        {(q.error as Error).message}
-      </Card>
-    )
+    return <div className="text-sm text-brand-accent">{(q.error as Error).message}</div>
 
   const events = q.data?.events ?? []
 
+  if (events.length === 0) {
+    return (
+      <Empty>
+        <EmptyMedia>
+          <ScrollText className="size-5" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>No activity yet</EmptyTitle>
+          <EmptyDescription>
+            Audit events targeting this workspace will appear here.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
   return (
-    <Card className="border-brand-rule bg-brand-card overflow-hidden">
-      {events.length === 0 ? (
-        <Empty>
-          <EmptyMedia>
-            <ScrollText className="size-5" />
-          </EmptyMedia>
-          <EmptyHeader>
-            <EmptyTitle>No activity yet</EmptyTitle>
-            <EmptyDescription>
-              Audit events targeting this workspace will appear here.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <ScrollArea className="max-h-[480px]">
-          <ul className="divide-y divide-brand-rule">
-            {events.map((e) => (
-              <li key={e.id} className="flex items-start gap-3 p-4 text-sm">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] font-medium text-brand-ink">
-                      {e.action}
-                    </span>
-                    <span className="text-[11px] text-brand-muted-soft">
-                      by {e.actorEmail}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-brand-muted-soft">
-                    {new Date(e.createdAt).toLocaleString()} ·{" "}
-                    {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
-                  </div>
-                  {e.metadata && Object.keys(e.metadata).length > 0 && (
-                    <HoverCard>
-                      <HoverCardTrigger
-                        render={
-                          <button className="mt-1 font-mono text-[10px] text-brand-muted-soft hover:text-brand-ink transition-colors" />
-                        }
-                      >
-                        view metadata →
-                      </HoverCardTrigger>
-                      <HoverCardContent className="w-80 font-mono text-[11px]">
-                        <pre className="whitespace-pre-wrap break-words">
-                          {JSON.stringify(e.metadata, null, 2)}
-                        </pre>
-                      </HoverCardContent>
-                    </HoverCard>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
-      )}
-    </Card>
+    <ItemGroup>
+      {events.map((e) => (
+        <Item key={e.id} className="flex-col items-start gap-0.5 py-3">
+          <div className="flex w-full items-center gap-2">
+            <span className="font-mono text-[11px] font-medium text-brand-ink">
+              {e.action}
+            </span>
+            <span className="text-[11px] text-brand-muted-soft">
+              by {e.actorEmail}
+            </span>
+            <span className="ml-auto text-[11px] text-brand-muted-soft">
+              {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+            </span>
+          </div>
+          {e.targetLabel && (
+            <div className="text-[11px] text-brand-muted-soft font-mono">
+              → {e.targetLabel}
+            </div>
+          )}
+          {e.metadata && Object.keys(e.metadata).length > 0 && (
+            <HoverCard>
+              <HoverCardTrigger
+                render={
+                  <button className="font-mono text-[10px] text-brand-muted-soft hover:text-brand-ink transition-colors" />
+                }
+              >
+                view metadata →
+              </HoverCardTrigger>
+              <HoverCardContent className="w-80 font-mono text-[11px]">
+                <pre className="whitespace-pre-wrap break-words">
+                  {JSON.stringify(e.metadata, null, 2)}
+                </pre>
+              </HoverCardContent>
+            </HoverCard>
+          )}
+        </Item>
+      ))}
+    </ItemGroup>
   )
 }
 
-function SettingsTab({ org }: { org: EnrichedOrg }) {
-  return (
-    <Card className="border-brand-rule bg-brand-card p-5 space-y-4">
-      <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-        Workspace settings
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Slug
-          </div>
-          <div className="mt-1 font-mono text-brand-ink">/{org.slug}</div>
-        </div>
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Created
-          </div>
-          <div className="mt-1 text-brand-ink">
-            {new Date(org.createdAt).toLocaleString()}
-          </div>
-        </div>
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Logo
-          </div>
-          <div className="mt-1 text-brand-ink font-mono text-[11px]">
-            {org.logo ?? "—"}
-          </div>
-        </div>
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Status
-          </div>
-          <div className="mt-1 text-brand-ink">
-            {org.suspended ? "Suspended" : "Active"}
-          </div>
-        </div>
-      </div>
-      {org.metadata && (
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Metadata
-          </div>
-          <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-brand-cream-soft p-3 font-mono text-[11px] text-brand-ink">
-            {(() => {
-              try {
-                return JSON.stringify(JSON.parse(org.metadata), null, 2)
-              } catch {
-                return org.metadata
-              }
-            })()}
-          </pre>
-        </div>
-      )}
-    </Card>
-  )
-}
-
-// ─── Dialogs ───────────────────────────────────────────────────────────────
+// ─── Dialogs ──────────────────────────────────────────────────────────────
 
 function SuspendDialog({
   open,
@@ -947,18 +1483,20 @@ function SuspendDialog({
             colleagues) can still access the admin console.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-1.5 py-2">
-          <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Reason
-          </Label>
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            className="resize-none"
-            placeholder="e.g. Payment failed, customer requested pause, abuse investigation…"
-          />
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Reason</FieldLabel>
+            <FieldContent>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+                placeholder="e.g. Payment failed, customer requested pause, abuse investigation…"
+              />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
@@ -1002,31 +1540,30 @@ function ChangeRoleDialog({
             platform role is unchanged.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-1.5 py-2">
-          <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Role
-          </Label>
-          <Select value={role} onValueChange={(v) => v && setRole(v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {WORKSPACE_ROLES.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Role</FieldLabel>
+            <FieldContent>
+              <Select value={role} onValueChange={(v) => v && setRole(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKSPACE_ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={() => onConfirm(role)}
-            disabled={pending}
-          >
+          <Button onClick={() => onConfirm(role)} disabled={pending}>
             {pending ? <Spinner className="mr-2 size-4" /> : null}
             Update role
           </Button>
@@ -1069,8 +1606,8 @@ function DeleteWorkspaceDialog({
             preserved (anonymized where they pointed at this org).
             <br />
             <br />
-            Type <code className="font-mono">{name}</code> to confirm,
-            and check the box to acknowledge the impact.
+            Type <Kbd>{name}</Kbd> to confirm, and check the box to
+            acknowledge the impact.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <Input
@@ -1099,7 +1636,11 @@ function DeleteWorkspaceDialog({
             disabled={typed !== name || !ack || pending}
             className="bg-brand-accent text-white hover:bg-brand-accent/90"
           >
-            {pending ? <Spinner className="mr-2 size-4" /> : <Trash2 className="mr-2 size-4" />}
+            {pending ? (
+              <Spinner className="mr-2 size-4" />
+            ) : (
+              <Trash2 className="mr-2 size-4" />
+            )}
             Delete forever
           </AlertDialogAction>
         </AlertDialogFooter>

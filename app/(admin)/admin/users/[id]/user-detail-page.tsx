@@ -3,19 +3,36 @@
 /**
  * /admin/users/[id] — comprehensive dedicated detail page for one user.
  *
- * Replaces the previous right-side Sheet (user-detail-sheet.tsx) with
- * a real full page that has: profile, action toolbar, sessions/activity/
- * workspaces tabs, and a danger-zone with typed-confirmation delete.
+ * Design follows the 2026 enterprise pattern (Linear/Stripe/Vercel):
  *
- * The page is fed the initial user + role payload from the server
- * component (so the first paint has data); the live state for the
- * tabs is loaded via React Query.
+ *   1.  Breadcrumb header with large avatar, name, role/status badges
+ *   2.  KPI strip (4 hero metrics with sparkline-friendly data)
+ *   3.  Two-column main grid:
+ *        LEFT (8/12)  Profile item-list · Activity timeline · Workspaces
+ *        RIGHT (4/12) Security & access · Linked accounts · Risk · Actions
+ *   4.  Tabbed deep-dive: Sessions · Sign-in history · Activity · Workspaces
+ *   5.  Danger zone with typed-confirmation delete
+ *
+ * Components used (in addition to the earlier set):
+ *   - Item, ItemGroup, ItemMedia, ItemContent, ItemTitle,
+ *     ItemDescription, ItemActions, ItemSeparator, ItemHeader, ItemFooter
+ *   - Field, FieldGroup, FieldSet, FieldLabel, FieldDescription
+ *   - Alert, AlertTitle, AlertDescription, AlertAction
+ *   - Kbd, KbdGroup
+ *   - Progress
+ *   - Switch
+ *   - InputGroup, InputGroupInput
+ *   - Accordion
+ *   - Separator (extensively)
+ *   - Tooltip (extensively)
+ *   - Popover (for inline action menus)
+ *   - HoverCard (for sign-in detail previews)
  */
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { formatDistanceToNow } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
 import {
@@ -40,8 +57,26 @@ import {
   History,
   AlertCircle,
   Clock,
+  ChevronRight,
+  MoreHorizontal,
+  ExternalLink,
+  Activity as ActivityIcon,
+  MapPin,
+  Calendar,
+  Phone,
+  AtSign,
+  Fingerprint,
+  Gauge,
+  Bell,
+  Settings2,
+  Zap,
+  Hash,
+  ShieldAlert,
+  CircleDot,
+  Sparkles,
+  CalendarClock,
 } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
@@ -96,9 +131,63 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Separator } from "@/components/ui/separator"
+import { Kbd } from "@/components/ui/kbd"
+import { Progress } from "@/components/ui/progress"
+import { Switch } from "@/components/ui/switch"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemHeader,
+  ItemMedia,
+  ItemSeparator,
+  ItemTitle,
+} from "@/components/ui/item"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSet,
+  FieldTitle,
+} from "@/components/ui/field"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
 
-// ─── Types (server-rendered shape) ─────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
 
 type DistinctIp = {
   ip: string
@@ -174,47 +263,63 @@ function userStatus(u: EnrichedUser): "active" | "suspended" | "banned" {
   return "active"
 }
 
-function statusTone(
-  s: "active" | "suspended" | "banned"
-): { label: string; cls: string } {
+function statusTone(s: "active" | "suspended" | "banned") {
   if (s === "banned")
     return {
       label: "Banned",
       cls: "border-red-300 bg-red-50 text-red-900",
+      dot: "bg-red-500",
     }
   if (s === "suspended")
     return {
       label: "Suspended",
       cls: "border-amber-300 bg-amber-50 text-amber-900",
+      dot: "bg-amber-500",
     }
   return {
     label: "Active",
     cls: "border-emerald-300 bg-emerald-50 text-emerald-900",
+    dot: "bg-emerald-500",
   }
 }
 
-function StatCell({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: React.ReactNode
-  hint?: string
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-        {label}
-      </div>
-      <div className="font-serif text-lg leading-tight text-brand-ink">
-        {value}
-      </div>
-      {hint && (
-        <div className="text-[11px] text-brand-muted-soft">{hint}</div>
-      )}
-    </div>
-  )
+function parseDevice(ua: string | null): {
+  browser: string
+  os: string
+  isMobile: boolean
+} {
+  if (!ua) return { browser: "Unknown", os: "Unknown", isMobile: false }
+  let browser = "Browser"
+  if (/Edg\//.test(ua)) browser = "Edge"
+  else if (/Chrome\//.test(ua)) browser = "Chrome"
+  else if (/Firefox\//.test(ua)) browser = "Firefox"
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = "Safari"
+  let os = "Unknown OS"
+  if (/iPhone|iPad/.test(ua)) os = "iOS"
+  else if (/Android/.test(ua)) os = "Android"
+  else if (/Mac OS X/.test(ua)) os = "macOS"
+  else if (/Windows/.test(ua)) os = "Windows"
+  else if (/Linux/.test(ua)) os = "Linux"
+  const isMobile = /Mobile|Android|iPhone|iPad/.test(ua)
+  return { browser, os, isMobile }
+}
+
+function deviceIcon(ua: string | null) {
+  const d = parseDevice(ua)
+  if (d.isMobile) return <Smartphone className="size-3.5" />
+  return <Monitor className="size-3.5" />
+}
+
+function providerIcon(providerId: string) {
+  if (providerId === "google")
+    return (
+      <span className="text-[10px] font-bold leading-none text-brand-ink">
+        G
+      </span>
+    )
+  if (providerId === "credential")
+    return <KeyRound className="size-3.5" />
+  return <Link2 className="size-3.5" />
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────
@@ -223,7 +328,12 @@ export function UserDetailPage({ user: u, memberships }: Props) {
   console.log(`[USER-DETAIL-PAGE] rendering user=${u.id} ${u.email}`)
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [copied, setCopied] = React.useState(false)
+  const [copied, setCopied] = React.useState<string | null>(null)
+  const copy = (label: string, value: string) => {
+    navigator.clipboard.writeText(value)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 1200)
+  }
 
   const status = userStatus(u)
   const tone = statusTone(status)
@@ -240,7 +350,7 @@ export function UserDetailPage({ user: u, memberships }: Props) {
     queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
     queryClient.invalidateQueries({ queryKey: ["admin-user-sessions", u.id] })
     queryClient.invalidateQueries({ queryKey: ["admin-user-activity", u.id] })
-    queryClient.invalidateQueries({ queryKey: ["admin-user", u.id] })
+    router.refresh()
   }
 
   // ── Action: ban / unban ─────────────────────────────────────────────
@@ -269,7 +379,6 @@ export function UserDetailPage({ user: u, memberships }: Props) {
       toast.success(`${u.email} banned`)
       setBanOpen(false)
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -287,7 +396,6 @@ export function UserDetailPage({ user: u, memberships }: Props) {
     onSuccess: () => {
       toast.success(`${u.email} unbanned`)
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -318,7 +426,6 @@ export function UserDetailPage({ user: u, memberships }: Props) {
       setSuspendOpen(false)
       setSuspendReason("")
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -338,7 +445,6 @@ export function UserDetailPage({ user: u, memberships }: Props) {
     onSuccess: () => {
       toast.success(`Suspension lifted`)
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -357,9 +463,10 @@ export function UserDetailPage({ user: u, memberships }: Props) {
       }
     },
     onSuccess: (_d, toRole) => {
-      toast.success(`Now ${toRole === "admin" ? "platform admin" : "a regular user"}`)
+      toast.success(
+        `Now ${toRole === "admin" ? "platform admin" : "a regular user"}`
+      )
       refreshAll()
-      router.refresh()
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -406,7 +513,26 @@ export function UserDetailPage({ user: u, memberships }: Props) {
     onSuccess: () => {
       toast.success("Email marked as verified")
       refreshAll()
-      router.refresh()
+    },
+    onError: (e) => toast.error((e as Error).message),
+  })
+
+  // ── Action: impersonate ─────────────────────────────────────────────
+  const [impersonateOpen, setImpersonateOpen] = React.useState(false)
+  const impersonateMutation = useMutation({
+    mutationFn: async () => {
+      const r = await authClient.admin.impersonateUser({ userId: u.id })
+      if (r.error) throw new Error(r.error.message || "Impersonate failed")
+      await fetch(`/api/admin/users/${u.id}/audit-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "user.impersonate" }),
+      })
+    },
+    onSuccess: () => {
+      toast.success(`Impersonating ${u.email}`)
+      setImpersonateOpen(false)
+      window.location.href = "/dashboard"
     },
     onError: (e) => toast.error((e as Error).message),
   })
@@ -436,342 +562,845 @@ export function UserDetailPage({ user: u, memberships }: Props) {
     onError: (e) => toast.error((e as Error).message),
   })
 
+  // Risk score: simple heuristic, 0–100 (low is good).
+  //  - banned or suspended → 100
+  //  - unverified email → +20
+  //  - many distinct IPs in 90d → +10 per IP above 3
+  //  - no sign-ins at all → +15
+  const risk = (() => {
+    let r = 0
+    if (u.banned) r += 60
+    if (u.suspendedAt && (u.suspendedUntil === null || new Date(u.suspendedUntil) > new Date())) r += 30
+    if (!u.emailVerified) r += 20
+    if (u.distinctSignInIps.length > 3) r += (u.distinctSignInIps.length - 3) * 10
+    if (!u.lastSignInAt) r += 15
+    return Math.min(100, r)
+  })()
+  const riskTone =
+    risk >= 70 ? "destructive" : risk >= 40 ? "warn" : "ok"
+  const riskLabel = riskTone === "destructive" ? "High" : riskTone === "warn" ? "Medium" : "Low"
+
   return (
     <div className="space-y-6">
-      {/* ── Header ──────────────────────────────────────────────── */}
+      {/* ── Breadcrumb ─────────────────────────────────────────── */}
       <div className="px-4 lg:px-6">
-        <Link
-          href="/admin/users"
-          className="inline-flex items-center gap-1.5 text-xs text-brand-muted-soft hover:text-brand-ink transition-colors"
-        >
-          <ArrowLeft className="size-3" />
-          Back to users
-        </Link>
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/admin" />}>Admin</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link href="/admin/users" />}>
+                Users
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{u.email}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
 
-        <div className="mt-3 flex items-start gap-4">
-          <Avatar className="size-14 rounded-lg">
-            <AvatarImage src={u.image ?? undefined} alt={u.name} />
-            <AvatarFallback className="rounded-lg bg-brand-ink text-brand-cream text-base font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="size-1.5 shrink-0 rounded-full bg-brand-accent" />
-              <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-ink">
-                USER
-              </span>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-mono text-[10px] uppercase tracking-[0.04em]",
-                  tone.cls
+      {/* ── Hero header ────────────────────────────────────────── */}
+      <div className="px-4 lg:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-4">
+            <Avatar className="size-20 rounded-xl">
+              <AvatarImage src={u.image ?? undefined} alt={u.name} />
+              <AvatarFallback className="rounded-xl bg-brand-ink text-brand-cream text-2xl font-semibold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="size-2 shrink-0 rounded-full bg-brand-accent" />
+                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-ink">
+                  User
+                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px] uppercase tracking-[0.04em] gap-1",
+                          tone.cls
+                        )}
+                      />
+                    }
+                  >
+                    <CircleDot className={cn("size-2", tone.dot)} />
+                    {tone.label}
+                  </TooltipTrigger>
+                  <TooltipContent>Current account status</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px] uppercase tracking-[0.04em] gap-1",
+                          role === "admin"
+                            ? "border-violet-300 bg-violet-50 text-violet-900"
+                            : "border-brand-rule bg-brand-card text-brand-muted-soft"
+                        )}
+                      />
+                    }
+                  >
+                    {role === "admin" && <Sparkles className="size-2.5" />}
+                    {role === "admin" ? "Platform admin" : "Standard user"}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Platform role (independent of workspace roles)
+                  </TooltipContent>
+                </Tooltip>
+                {u.emailVerified ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px] uppercase tracking-[0.04em] gap-1 border-emerald-300 bg-emerald-50 text-emerald-900"
+                        />
+                      }
+                    >
+                      <Check className="size-2.5" />
+                      Email verified
+                    </TooltipTrigger>
+                    <TooltipContent>Email is verified</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px] uppercase tracking-[0.04em] gap-1 border-amber-300 bg-amber-50 text-amber-900"
+                        />
+                      }
+                    >
+                      <AlertCircle className="size-2.5" />
+                      Email unverified
+                    </TooltipTrigger>
+                    <TooltipContent>User has not verified their email</TooltipContent>
+                  </Tooltip>
                 )}
-              >
-                {tone.label}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "font-mono text-[10px] uppercase tracking-[0.04em]",
-                  role === "admin"
-                    ? "border-violet-300 bg-violet-50 text-violet-900"
-                    : "border-brand-rule bg-brand-card text-brand-muted-soft"
-                )}
-              >
-                {role}
-              </Badge>
-              {u.emailVerified ? (
-                <Badge
-                  variant="outline"
-                  className="font-mono text-[10px] uppercase tracking-[0.04em] border-emerald-300 bg-emerald-50 text-emerald-900"
-                >
-                  email verified
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="font-mono text-[10px] uppercase tracking-[0.04em] border-amber-300 bg-amber-50 text-amber-900"
-                >
-                  email unverified
-                </Badge>
-              )}
-            </div>
-            <h1 className="mt-2 font-serif text-[clamp(28px,3.5vw,40px)] leading-[1.05] tracking-tight text-brand-ink">
-              {u.name || u.email}
-            </h1>
-            <div className="mt-1 flex items-center gap-2 text-[13px] text-brand-ink/70">
-              <span>{u.email}</span>
-              <HoverCard>
-                <HoverCardTrigger
-                  render={
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(u.id)
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 1500)
-                      }}
-                      className="inline-flex items-center gap-1 rounded p-1 text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream-soft transition-colors"
-                      aria-label="Copy user id"
-                    />
-                  }
-                >
-                  {copied ? (
-                    <Check className="size-3" />
-                  ) : (
-                    <Copy className="size-3" />
-                  )}
-                  <span className="font-mono text-[10px]">
-                    {u.id.slice(0, 8)}…
+              </div>
+              <h1 className="mt-2 font-serif text-[clamp(28px,3.5vw,40px)] leading-[1.05] tracking-tight text-brand-ink">
+                {u.name || u.email}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-brand-ink/70">
+                <span className="font-mono">{u.email}</span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        onClick={() => copy("id", u.id)}
+                        className="inline-flex items-center gap-1 rounded p-1 text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream-soft transition-colors"
+                      />
+                    }
+                  >
+                    {copied === "id" ? (
+                      <Check className="size-3 text-emerald-700" />
+                    ) : (
+                      <Copy className="size-3" />
+                    )}
+                    <span className="font-mono text-[10px]">
+                      {u.id.slice(0, 8)}…
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Click to copy full user id</TooltipContent>
+                </Tooltip>
+                {u.username && (
+                  <span className="inline-flex items-center gap-1 text-brand-muted-soft">
+                    <AtSign className="size-3" />
+                    <span className="font-mono">{u.username}</span>
                   </span>
-                </HoverCardTrigger>
-                <HoverCardContent>
-                  <p className="text-xs">Click to copy full user id</p>
-                </HoverCardContent>
-              </HoverCard>
+                )}
+                {u.phone && (
+                  <span className="inline-flex items-center gap-1 text-brand-muted-soft">
+                    <Phone className="size-3" />
+                    <span className="font-mono">{u.phone}</span>
+                  </span>
+                )}
+              </div>
             </div>
+          </div>
+
+          {/* Right side — quick actions menu */}
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => impersonateMutation.mutate()}
+                    disabled={status !== "active" || impersonateMutation.isPending}
+                    className="size-9"
+                    aria-label="Impersonate"
+                  />
+                }
+              >
+                {impersonateMutation.isPending ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <UserCog className="size-4" />
+                )}
+              </TooltipTrigger>
+              <TooltipContent>Impersonate user</TooltipContent>
+            </Tooltip>
+            <ActionsMenu
+              user={u}
+              status={status}
+              onBan={() => setBanOpen(true)}
+              onUnban={() => unbanMutation.mutate()}
+              unbanPending={unbanMutation.isPending}
+              onSuspend={() => setSuspendOpen(true)}
+              onLift={() => liftMutation.mutate()}
+              liftPending={liftMutation.isPending}
+              onPromoteToggle={() =>
+                promoteMutation.mutate(role === "admin" ? "user" : "admin")
+              }
+              promotePending={promoteMutation.isPending}
+              onResetPwd={() => setResetOpen(true)}
+              onForceVerify={() => verifyMutation.mutate()}
+              verifyPending={verifyMutation.isPending}
+              isAdmin={role === "admin"}
+              canImpersonate={status === "active"}
+            />
           </div>
         </div>
       </div>
 
-      {/* ── Profile + Actions ────────────────────────────────────── */}
-      <div className="px-4 lg:px-6 grid gap-6 lg:grid-cols-3">
-        <Card className="border-brand-rule bg-brand-card p-5 lg:col-span-2 space-y-5">
-          <div>
-            <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-              Profile
-            </h2>
-            <div className="mt-3 grid grid-cols-2 gap-4 md:grid-cols-3">
-              <StatCell label="Email" value={u.email} />
-              <StatCell
-                label="Phone"
-                value={u.phone ?? <span className="text-brand-muted-soft">—</span>}
-              />
-              <StatCell
-                label="Joined"
-                value={new Date(u.createdAt).toLocaleDateString()}
-                hint={
-                  u.lastSignInAt
-                    ? `last sign-in ${formatDistanceToNow(new Date(u.lastSignInAt), { addSuffix: true })}`
-                    : "never signed in"
-                }
-              />
-              <StatCell
-                label="Email verified"
-                value={u.emailVerified ? "Yes" : "No"}
-              />
-              <StatCell label="Platform role" value={role} />
-              <StatCell
-                label="Workspaces"
-                value={memberships.length}
-                hint={
-                  memberships.length === 1
-                    ? memberships[0].organizationName
-                    : `${memberships.length} memberships`
-                }
-              />
-            </div>
-          </div>
-
+      {/* ── Status alerts (banned / suspended / unverified) ── */}
+      {(u.banned || u.suspendedAt || !u.emailVerified) && (
+        <div className="px-4 lg:px-6 space-y-2">
           {u.banned && u.banReason && (
-            <Card className="border-red-200 bg-red-50 p-3">
-              <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
-                Ban reason
-              </div>
-              <p className="mt-1 text-sm text-red-900">{u.banReason}</p>
-              {u.banExpires && (
-                <p className="mt-1 text-[11px] text-red-700">
-                  Expires {new Date(u.banExpires).toLocaleString()}
-                </p>
-              )}
-            </Card>
+            <Alert variant="destructive">
+              <ShieldAlert className="size-4" />
+              <AlertTitle>Account banned</AlertTitle>
+              <AlertDescription className="flex items-center gap-2">
+                <span>{u.banReason}</span>
+                {u.banExpires && (
+                  <span className="text-[11px] opacity-80">
+                    · expires {new Date(u.banExpires).toLocaleString()}
+                  </span>
+                )}
+              </AlertDescription>
+            </Alert>
           )}
-
           {u.suspendedAt &&
             (u.suspendedUntil === null ||
               new Date(u.suspendedUntil) > new Date()) &&
             u.suspendedReason && (
-              <Card className="border-amber-200 bg-amber-50 p-3">
-                <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-amber-900">
-                  Suspension reason
-                </div>
-                <p className="mt-1 text-sm text-amber-900">
-                  {u.suspendedReason}
-                </p>
-                <p className="mt-1 text-[11px] text-amber-700">
-                  {u.suspendedUntil
-                    ? `Ends ${new Date(u.suspendedUntil).toLocaleString()}`
-                    : "Indefinite"}{" "}
-                  · started{" "}
-                  {new Date(u.suspendedAt).toLocaleString()}
-                </p>
-              </Card>
-            )}
-        </Card>
-
-        <Card className="border-brand-rule bg-brand-card p-5 space-y-3">
-          <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-            Quick actions
-          </h2>
-          <div className="space-y-2">
-            {u.banned ? (
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => unbanMutation.mutate()}
-                disabled={unbanMutation.isPending}
-              >
-                {unbanMutation.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <ShieldCheck className="size-4" />
-                )}
-                Unban user
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => setBanOpen(true)}
-                disabled={!!u.banned}
-              >
-                <ShieldOff className="size-4" />
-                Ban user
-              </Button>
-            )}
-
-            {status === "suspended" ? (
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => liftMutation.mutate()}
-                disabled={liftMutation.isPending}
-              >
-                {liftMutation.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <PlayCircle className="size-4" />
-                )}
-                Lift suspension
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => setSuspendOpen(true)}
-                disabled={!!u.banned}
-              >
+              <Alert className="border-amber-300 bg-amber-50 text-amber-900">
                 <Pause className="size-4" />
-                Suspend
-              </Button>
+                <AlertTitle>Account suspended</AlertTitle>
+                <AlertDescription className="flex items-center gap-2">
+                  <span>{u.suspendedReason}</span>
+                  <span className="text-[11px] opacity-80">
+                    ·{" "}
+                    {u.suspendedUntil
+                      ? `ends ${new Date(u.suspendedUntil).toLocaleString()}`
+                      : "indefinite"}{" "}
+                    · started {new Date(u.suspendedAt).toLocaleString()}
+                  </span>
+                </AlertDescription>
+              </Alert>
             )}
+          {!u.emailVerified && (
+            <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+              <MailCheck className="size-4" />
+              <AlertTitle>Email unverified</AlertTitle>
+              <AlertDescription>
+                User has not clicked the verification link sent at sign-up. Use{" "}
+                <Kbd>Force-verify</Kbd> in the actions menu to mark the email
+                as verified.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
 
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2"
-              onClick={() =>
-                promoteMutation.mutate(role === "admin" ? "user" : "admin")
-              }
-              disabled={promoteMutation.isPending}
-            >
-              <UserCog className="size-4" />
-              {role === "admin" ? "Demote to user" : "Promote to platform admin"}
-            </Button>
-
-            <Button
-              variant="outline"
-              className="w-full justify-start gap-2"
-              onClick={() => setResetOpen(true)}
-            >
-              <KeyRound className="size-4" />
-              Reset password
-            </Button>
-
-            {!u.emailVerified && (
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => verifyMutation.mutate()}
-                disabled={verifyMutation.isPending}
-              >
-                {verifyMutation.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <MailCheck className="size-4" />
-                )}
-                Force-verify email
-              </Button>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* ── Security + Linked accounts (deep info) ────────────── */}
-      <div className="px-4 lg:px-6 grid gap-6 lg:grid-cols-2">
-        <SecurityCard user={u} />
-        <LinkedAccountsCard user={u} />
-      </div>
-
-      {/* ── Tabs ─────────────────────────────────────────────────── */}
+      {/* ── KPI strip ─────────────────────────────────────────── */}
       <div className="px-4 lg:px-6">
-        <Tabs defaultValue="sessions" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="sessions">
-              Sessions ({u.activeSessionCount})
-            </TabsTrigger>
-            <TabsTrigger value="signin">Sign-in history</TabsTrigger>
-            <TabsTrigger value="activity">Activity ({u.auditEventCount})</TabsTrigger>
-            <TabsTrigger value="workspaces">
-              Workspaces ({memberships.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="sessions">
-            <SessionsTab userId={u.id} />
-          </TabsContent>
-
-          <TabsContent value="signin">
-            <SignInHistoryTab user={u} />
-          </TabsContent>
-
-          <TabsContent value="activity">
-            <ActivityTab userId={u.id} />
-          </TabsContent>
-
-          <TabsContent value="workspaces">
-            <WorkspacesTab memberships={memberships} />
-          </TabsContent>
-        </Tabs>
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+          <KpiCard
+            label="Active sessions"
+            value={`${u.activeSessionCount} / ${u.totalSessionCount}`}
+            icon={Zap}
+            tone={u.activeSessionCount > 0 ? "ok" : "muted"}
+            hint={
+              u.activeSessionCount > 0
+                ? "Sessions live right now"
+                : "No live sessions"
+            }
+            extra={
+              u.lastSignInAt
+                ? `last ${formatDistanceToNow(new Date(u.lastSignInAt), { addSuffix: true })}`
+                : "never"
+            }
+          />
+          <KpiCard
+            label="Distinct IPs (90d)"
+            value={String(u.distinctSignInIps.length)}
+            icon={Globe}
+            tone={
+              u.distinctSignInIps.length > 5
+                ? "warn"
+                : u.distinctSignInIps.length === 0
+                  ? "muted"
+                  : "ok"
+            }
+            hint={
+              u.distinctSignInIps.length > 5
+                ? "Multiple locations"
+                : u.distinctSignInIps.length === 0
+                  ? "No sign-ins yet"
+                  : u.distinctSignInIps.length === 1
+                    ? "Single location"
+                    : "A few locations"
+            }
+            extra={
+              u.lastSignInIp
+                ? `last from ${u.lastSignInIp}`
+                : "no IP on file"
+            }
+          />
+          <KpiCard
+            label="Workspaces"
+            value={String(memberships.length)}
+            icon={Building2}
+            tone={memberships.length === 0 ? "muted" : "ok"}
+            hint={
+              memberships.length === 0
+                ? "No memberships"
+                : memberships.length === 1
+                  ? memberships[0].organizationName
+                  : `${memberships.length} memberships`
+            }
+            extra={
+              memberships.some((m) => m.role === "owner")
+                ? "is an owner"
+                : memberships.length > 0
+                  ? "is a member"
+                  : undefined
+            }
+          />
+          <KpiCard
+            label="Audit events"
+            value={u.auditEventCount.toLocaleString()}
+            icon={ScrollText}
+            tone={u.auditEventCount > 100 ? "warn" : "ok"}
+            hint="as actor or target"
+            extra={
+              <Link
+                href={`/admin/audit?target=user:${u.id}`}
+                className="inline-flex items-center gap-1 text-brand-accent hover:underline"
+              >
+                open audit log
+                <ChevronRight className="size-3" />
+              </Link>
+            }
+          />
+        </div>
       </div>
 
-      {/* ── Danger zone ──────────────────────────────────────────── */}
+      {/* ── Main grid ─────────────────────────────────────────── */}
+      <div className="px-4 lg:px-6 grid gap-6 lg:grid-cols-12">
+        {/* LEFT 8/12 */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Profile section */}
+          <Section
+            eyebrow="Profile"
+            title="Identity & contact"
+            description="How the user identifies themselves across Muvx."
+            icon={Fingerprint}
+          >
+            <ItemGroup>
+              <Item>
+                <ItemMedia variant="icon">
+                  <AtSign className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Email</ItemTitle>
+                  <ItemDescription className="font-mono text-brand-ink">
+                    {u.email}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => copy("email", u.email)}
+                          aria-label="Copy email"
+                        />
+                      }
+                    >
+                      {copied === "email" ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Copy email</TooltipContent>
+                  </Tooltip>
+                </ItemActions>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <UserCog className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Display name</ItemTitle>
+                  <ItemDescription>{u.name || "—"}</ItemDescription>
+                </ItemContent>
+              </Item>
+              {u.username && (
+                <>
+                  <ItemSeparator />
+                  <Item>
+                    <ItemMedia variant="icon">
+                      <AtSign className="size-4" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>Username</ItemTitle>
+                      <ItemDescription className="font-mono">
+                        @{u.username}
+                      </ItemDescription>
+                    </ItemContent>
+                  </Item>
+                </>
+              )}
+              {u.phone && (
+                <>
+                  <ItemSeparator />
+                  <Item>
+                    <ItemMedia variant="icon">
+                      <Phone className="size-4" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>Phone</ItemTitle>
+                      <ItemDescription className="font-mono">
+                        {u.phone}
+                      </ItemDescription>
+                    </ItemContent>
+                  </Item>
+                </>
+              )}
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Calendar className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Account created</ItemTitle>
+                  <ItemDescription>
+                    {format(new Date(u.createdAt), "PPpp")} ·{" "}
+                    {formatDistanceToNow(new Date(u.createdAt), { addSuffix: true })}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Hash className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>User id</ItemTitle>
+                  <ItemDescription className="font-mono text-[11px] break-all">
+                    {u.id}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => copy("id", u.id)}
+                        />
+                      }
+                    >
+                      {copied === "id" ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        <Copy className="size-3.5" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Copy user id</TooltipContent>
+                  </Tooltip>
+                </ItemActions>
+              </Item>
+            </ItemGroup>
+          </Section>
+
+          {/* Workspace memberships */}
+          <Section
+            eyebrow="Workspaces"
+            title={`${memberships.length} workspace${memberships.length === 1 ? "" : "s"}`}
+            description="Organizations this user belongs to, with their role in each."
+            icon={Building2}
+            action={
+              memberships.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="font-mono text-[10px] uppercase tracking-[0.04em]"
+                >
+                  {memberships.filter((m) => m.role === "owner").length} owner
+                </Badge>
+              )
+            }
+          >
+            {memberships.length === 0 ? (
+              <Empty>
+                <EmptyMedia>
+                  <Building2 className="size-5" />
+                </EmptyMedia>
+                <EmptyHeader>
+                  <EmptyTitle>No workspace memberships</EmptyTitle>
+                  <EmptyDescription>
+                    This user is not a member of any workspace. They can sign
+                    in but will not see any TMS data.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <ItemGroup>
+                {memberships.map((m) => (
+                  <Item
+                    key={m.organizationId}
+                    render={<Link href={`/admin/workspaces/${m.organizationId}`} />}
+                    className="cursor-pointer hover:bg-brand-cream-soft/50 transition-colors"
+                  >
+                    <ItemMedia variant="icon">
+                      <Building2 className="size-4" />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{m.organizationName}</ItemTitle>
+                      <ItemDescription>
+                        <span className="font-mono">/{m.organizationSlug}</span>
+                        {" · "}
+                        joined{" "}
+                        {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-mono text-[10px] uppercase tracking-[0.04em]",
+                          m.role === "owner" &&
+                            "border-violet-300 bg-violet-50 text-violet-900"
+                        )}
+                      >
+                        {m.role}
+                      </Badge>
+                      <ChevronRight className="size-4 text-brand-muted-soft" />
+                    </ItemActions>
+                  </Item>
+                ))}
+              </ItemGroup>
+            )}
+          </Section>
+
+          {/* Tabs (deep-dive) */}
+          <Section
+            eyebrow="Deep dive"
+            title="Sign-in, sessions, activity"
+            description="Detailed logs and sign-in forensics."
+            icon={ActivityIcon}
+          >
+            <Tabs defaultValue="sessions" className="w-full">
+              <TabsList>
+                <TabsTrigger value="sessions">
+                  Sessions ({u.activeSessionCount})
+                </TabsTrigger>
+                <TabsTrigger value="signin">Sign-in history</TabsTrigger>
+                <TabsTrigger value="activity">
+                  Activity ({u.auditEventCount})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="sessions" className="mt-4">
+                <SessionsTab userId={u.id} />
+              </TabsContent>
+              <TabsContent value="signin" className="mt-4">
+                <SignInHistoryTab user={u} />
+              </TabsContent>
+              <TabsContent value="activity" className="mt-4">
+                <ActivityTab userId={u.id} />
+              </TabsContent>
+            </Tabs>
+          </Section>
+        </div>
+
+        {/* RIGHT 4/12 */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Security & access */}
+          <Section
+            eyebrow="Security"
+            title="Access & devices"
+            description="Last sign-in origin and risk."
+            icon={ShieldCheck}
+            compact
+          >
+            <ItemGroup>
+              <Item>
+                <ItemMedia variant="icon">
+                  <Clock className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Last sign-in</ItemTitle>
+                  <ItemDescription>
+                    {u.lastSignInAt
+                      ? `${format(new Date(u.lastSignInAt), "PPp")} · ${formatDistanceToNow(new Date(u.lastSignInAt), { addSuffix: true })}`
+                      : "No sign-in recorded"}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Globe className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Last sign-in IP</ItemTitle>
+                  <ItemDescription className="font-mono">
+                    {u.lastSignInIp ?? "—"}
+                  </ItemDescription>
+                </ItemContent>
+                {u.lastSignInIp && (
+                  <ItemActions>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => copy("lastip", u.lastSignInIp!)}
+                          />
+                        }
+                      >
+                        {copied === "lastip" ? (
+                          <Check className="size-3" />
+                        ) : (
+                          <Copy className="size-3" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>Copy IP</TooltipContent>
+                    </Tooltip>
+                  </ItemActions>
+                )}
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  {deviceIcon(u.lastSignInUserAgent)}
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Last device</ItemTitle>
+                  <ItemDescription className="truncate">
+                    {parseDevice(u.lastSignInUserAgent).browser} ·{" "}
+                    {parseDevice(u.lastSignInUserAgent).os}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+              <ItemSeparator />
+              <Item>
+                <ItemMedia variant="icon">
+                  <Fingerprint className="size-4" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>Signup origin</ItemTitle>
+                  <ItemDescription className="font-mono">
+                    {u.signupFromIp ?? "—"}
+                  </ItemDescription>
+                </ItemContent>
+                {u.signupFromIp && (
+                  <ItemActions>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => copy("signupip", u.signupFromIp!)}
+                          />
+                        }
+                      >
+                        {copied === "signupip" ? (
+                          <Check className="size-3" />
+                        ) : (
+                          <Copy className="size-3" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>Copy signup IP</TooltipContent>
+                    </Tooltip>
+                  </ItemActions>
+                )}
+              </Item>
+            </ItemGroup>
+          </Section>
+
+          {/* Risk score */}
+          <Card className="border-brand-rule bg-brand-card p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+                Risk score
+              </h3>
+              <Gauge className="size-4 text-brand-muted-soft" />
+            </div>
+            <div className="flex items-end gap-2">
+              <span
+                className={cn(
+                  "font-serif text-3xl",
+                  riskTone === "destructive" && "text-brand-accent",
+                  riskTone === "warn" && "text-amber-700",
+                  riskTone === "ok" && "text-emerald-700"
+                )}
+              >
+                {risk}
+              </span>
+              <span className="text-xs text-brand-muted-soft mb-1">/ 100</span>
+            </div>
+            <Progress
+              value={risk}
+              className={cn(
+                "h-2",
+                riskTone === "destructive" && "[&>div]:bg-brand-accent",
+                riskTone === "warn" && "[&>div]:bg-amber-500",
+                riskTone === "ok" && "[&>div]:bg-emerald-500"
+              )}
+            />
+            <p className="text-[11px] text-brand-muted-soft">
+              {riskLabel} risk · calculated from status, email verification,
+              sign-in patterns, and IP history.
+            </p>
+          </Card>
+
+          {/* Linked accounts */}
+          <Section
+            eyebrow="Linked"
+            title="OAuth providers"
+            description="Sign-in methods linked to this account."
+            icon={Link2}
+            compact
+          >
+            {u.linkedAccounts.length === 0 ? (
+              <div className="text-sm text-brand-muted-soft p-3">
+                No OAuth providers linked. User signs in with email + OTP only.
+              </div>
+            ) : (
+              <ItemGroup>
+                {u.linkedAccounts.map((a) => (
+                  <Item key={a.id}>
+                    <ItemMedia variant="icon">
+                      {providerIcon(a.providerId)}
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle className="capitalize">
+                        {a.providerId}
+                      </ItemTitle>
+                      <ItemDescription className="font-mono text-[11px]">
+                        {a.accountId}
+                      </ItemDescription>
+                      <ItemDescription>
+                        linked{" "}
+                        {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}{" "}
+                        · last used{" "}
+                        {formatDistanceToNow(new Date(a.lastSignInAt), { addSuffix: true })}
+                      </ItemDescription>
+                    </ItemContent>
+                  </Item>
+                ))}
+              </ItemGroup>
+            )}
+          </Section>
+
+          {/* Quick info */}
+          <Section
+            eyebrow="Account"
+            title="Lifecycle"
+            description="Account age and last update."
+            icon={CalendarClock}
+            compact
+          >
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Created</FieldLabel>
+                <FieldDescription>
+                  {format(new Date(u.createdAt), "PPpp")}
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel>Last updated</FieldLabel>
+                <FieldDescription>
+                  {format(new Date(u.updatedAt), "PPpp")}
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel>Account age</FieldLabel>
+                <FieldDescription>
+                  {Math.floor(
+                    (Date.now() - new Date(u.createdAt).getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  )}{" "}
+                  days
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+          </Section>
+        </div>
+      </div>
+
+      {/* ── Danger zone ──────────────────────────────────────── */}
       <div className="px-4 lg:px-6">
         <Card className="border-red-200 bg-red-50/40 p-5 space-y-3">
-          <div>
-            <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
-              Danger zone
-            </h2>
-            <p className="mt-1 text-sm text-red-900/80">
-              Permanently delete {u.email}. This hard-deletes the user,
-              their sessions, OAuth links, and any workspaces they own
-              (including every load, driver, truck, trip, invoice, and
-              payroll record in those workspaces). Audit log references
-              are anonymized — the user row cannot be recovered.
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="flex size-9 items-center justify-center rounded-md bg-red-100 text-red-900 shrink-0">
+              <ShieldAlert className="size-4" />
+            </div>
+            <div>
+              <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
+                Danger zone
+              </h2>
+              <p className="mt-1 text-sm text-red-900/80">
+                Permanently delete {u.email}. This hard-deletes the user,
+                their sessions, OAuth links, and any workspaces they own
+                (including every load, driver, truck, trip, invoice, and
+                payroll record in those workspaces). Audit log references
+                are anonymized — the user row cannot be recovered.
+              </p>
+            </div>
           </div>
-          <Button
-            variant="destructive"
-            className="gap-2"
-            onClick={() => setRemoveOpen(true)}
-          >
-            <Trash2 className="size-4" />
-            Remove user permanently
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={() => setRemoveOpen(true)}
+            >
+              <Trash2 className="size-4" />
+              Remove user permanently
+            </Button>
+            <Kbd>type DELETE to confirm</Kbd>
+          </div>
         </Card>
       </div>
 
-      {/* ── Dialogs ──────────────────────────────────────────────── */}
+      {/* ── Dialogs ──────────────────────────────────────────── */}
       <BanDialog
         open={banOpen}
         onOpenChange={setBanOpen}
@@ -806,6 +1435,14 @@ export function UserDetailPage({ user: u, memberships }: Props) {
         onConfirm={() => resetMutation.mutate()}
       />
 
+      <ImpersonateDialog
+        open={impersonateOpen}
+        onOpenChange={setImpersonateOpen}
+        email={u.email}
+        pending={impersonateMutation.isPending}
+        onConfirm={() => impersonateMutation.mutate()}
+      />
+
       <RemoveUserDialog
         open={removeOpen}
         onOpenChange={setRemoveOpen}
@@ -819,275 +1456,273 @@ export function UserDetailPage({ user: u, memberships }: Props) {
   )
 }
 
-// ─── Tabs ──────────────────────────────────────────────────────────────────
+// ─── Building blocks ───────────────────────────────────────────────────────
 
-function SecurityCard({ user: u }: { user: EnrichedUser }) {
-  console.log(`[USER-DETAIL-PAGE] SecurityCard userId=${u.id}`)
-  const ageDays = Math.floor(
-    (Date.now() - new Date(u.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-  )
-
+function KpiCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  hint,
+  extra,
+}: {
+  label: string
+  value: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: "ok" | "warn" | "destructive" | "muted"
+  hint?: string
+  extra?: React.ReactNode
+}) {
   return (
-    <Card className="border-brand-rule bg-brand-card p-5 space-y-4">
+    <Card className="border-brand-rule bg-brand-card p-4 space-y-2">
       <div className="flex items-center justify-between">
-        <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          Security &amp; access
-        </h2>
-        <ShieldCheck className="size-4 text-brand-muted-soft" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <StatCell
-          label="Email verified"
-          value={
-            u.emailVerified ? (
-              <span className="text-emerald-700">Yes</span>
-            ) : (
-              <span className="text-amber-700">No</span>
-            )
-          }
-          hint={u.emailVerified ? "verified" : "unverified"}
-        />
-        <StatCell
-          label="Account age"
-          value={`${ageDays} ${ageDays === 1 ? "day" : "days"}`}
-          hint={`joined ${new Date(u.createdAt).toLocaleDateString()}`}
-        />
-        <StatCell
-          label="Active sessions"
-          value={
-            <span className="font-mono">
-              {u.activeSessionCount} / {u.totalSessionCount}
-            </span>
-          }
-          hint={`${u.totalSessionCount - u.activeSessionCount} expired`}
-        />
-        <StatCell
-          label="Distinct IPs (90d)"
-          value={u.distinctSignInIps.length}
-          hint={
-            u.distinctSignInIps.length === 0
-              ? "no sign-ins yet"
-              : u.distinctSignInIps.length === 1
-                ? "single location"
-                : "multiple locations"
-          }
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+          {label}
+        </div>
+        <Icon
+          className={cn(
+            "size-3.5",
+            tone === "ok" && "text-emerald-600",
+            tone === "warn" && "text-amber-600",
+            tone === "destructive" && "text-brand-accent",
+            tone === "muted" && "text-brand-muted-soft"
+          )}
         />
       </div>
-
-      <div className="border-t border-brand-rule pt-4 space-y-3">
-        <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          Last sign-in
-        </h3>
-        {u.lastSignInAt ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="size-3.5 text-brand-muted-soft" />
-              <span className="text-brand-ink">
-                {new Date(u.lastSignInAt).toLocaleString()}
-              </span>
-              <span className="text-[11px] text-brand-muted-soft">
-                ({formatDistanceToNow(new Date(u.lastSignInAt), { addSuffix: true })})
-              </span>
-            </div>
-            {u.lastSignInIp && (
-              <div className="flex items-center gap-2 text-sm">
-                <Globe className="size-3.5 text-brand-muted-soft" />
-                <span className="font-mono text-brand-ink">
-                  {u.lastSignInIp}
-                </span>
-                <CopyIpButton ip={u.lastSignInIp} />
-              </div>
-            )}
-            {u.lastSignInUserAgent && (
-              <div className="flex items-center gap-2 text-sm">
-                <Monitor className="size-3.5 text-brand-muted-soft" />
-                <span className="text-brand-ink/80 truncate text-[12px]">
-                  {parseDevice(u.lastSignInUserAgent)}
-                </span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-brand-muted-soft">No sign-ins recorded</p>
-        )}
+      <div className="font-serif text-3xl leading-none text-brand-ink">
+        {value}
       </div>
-
-      <div className="border-t border-brand-rule pt-4 space-y-2">
-        <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          Signup origin
-        </h3>
-        {u.signupAt ? (
-          <div className="space-y-1.5 text-sm">
-            <div className="flex items-center gap-2">
-              <Clock className="size-3.5 text-brand-muted-soft" />
-              <span className="text-brand-ink/80">
-                {new Date(u.signupAt).toLocaleString()}
-              </span>
-            </div>
-            {u.signupFromIp && (
-              <div className="flex items-center gap-2">
-                <Globe className="size-3.5 text-brand-muted-soft" />
-                <span className="font-mono text-brand-ink">
-                  {u.signupFromIp}
-                </span>
-                <CopyIpButton ip={u.signupFromIp} />
-              </div>
-            )}
-            {u.signupFromUa && (
-              <div className="flex items-center gap-2">
-                <Monitor className="size-3.5 text-brand-muted-soft" />
-                <span className="text-brand-ink/80 truncate text-[12px]">
-                  {parseDevice(u.signupFromUa)}
-                </span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-brand-muted-soft">
-            No signup attempt record (likely signed up before this tracker existed)
-          </p>
-        )}
-      </div>
-    </Card>
-  )
-}
-
-function LinkedAccountsCard({ user: u }: { user: EnrichedUser }) {
-  console.log(`[USER-DETAIL-PAGE] LinkedAccountsCard userId=${u.id}`)
-  return (
-    <Card className="border-brand-rule bg-brand-card p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          Linked accounts
-        </h2>
-        <Link2 className="size-4 text-brand-muted-soft" />
-      </div>
-
-      {u.linkedAccounts.length === 0 ? (
-        <p className="text-sm text-brand-muted-soft">
-          No OAuth providers linked. User signs in with email + OTP only.
-        </p>
-      ) : (
-        <ul className="divide-y divide-brand-rule">
-          {u.linkedAccounts.map((a) => (
-            <li key={a.id} className="py-3 first:pt-0 last:pb-0">
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-md bg-brand-cream-soft text-brand-ink shrink-0">
-                  {providerIcon(a.providerId)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-brand-ink capitalize">
-                      {a.providerId}
-                    </span>
-                    <span className="font-mono text-[10px] text-brand-muted-soft truncate">
-                      {a.accountId}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-3 text-[11px] text-brand-muted-soft">
-                    <span>
-                      linked{" "}
-                      {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
-                    </span>
-                    <span>
-                      last used{" "}
-                      {formatDistanceToNow(new Date(a.lastSignInAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {hint && (
+        <div className="text-[11px] text-brand-muted-soft">{hint}</div>
       )}
-
-      <div className="border-t border-brand-rule pt-4 space-y-2">
-        <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-          Account identifiers
-        </h3>
-        <dl className="space-y-1.5 text-sm">
-          <div className="flex items-center gap-2">
-            <dt className="text-brand-muted-soft w-24">User id</dt>
-            <dd className="font-mono text-brand-ink truncate">{u.id}</dd>
-          </div>
-          {u.username && (
-            <div className="flex items-center gap-2">
-              <dt className="text-brand-muted-soft w-24">Username</dt>
-              <dd className="font-mono text-brand-ink">@{u.username}</dd>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <dt className="text-brand-muted-soft w-24">Email</dt>
-            <dd className="text-brand-ink truncate">{u.email}</dd>
-          </div>
-          {u.phone && (
-            <div className="flex items-center gap-2">
-              <dt className="text-brand-muted-soft w-24">Phone</dt>
-              <dd className="font-mono text-brand-ink">{u.phone}</dd>
-            </div>
-          )}
-        </dl>
-      </div>
+      {extra && <div className="text-[11px]">{extra}</div>}
     </Card>
   )
 }
 
-function CopyIpButton({ ip }: { ip: string }) {
-  const [copied, setCopied] = React.useState(false)
+function Section({
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+  action,
+  compact,
+  children,
+}: {
+  eyebrow: string
+  title: string
+  description?: string
+  icon: React.ComponentType<{ className?: string }>
+  action?: React.ReactNode
+  compact?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Card
+      className={cn(
+        "border-brand-rule bg-brand-card overflow-hidden",
+        compact ? "p-0" : "p-0"
+      )}
+    >
+      <CardHeader
+        className={cn(
+          "flex flex-row items-start justify-between gap-3 space-y-0",
+          compact ? "p-4 pb-3" : "p-5 pb-4"
+        )}
+      >
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex size-6 items-center justify-center rounded-md bg-brand-cream-soft text-brand-ink">
+              <Icon className="size-3.5" />
+            </div>
+            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+              {eyebrow}
+            </span>
+          </div>
+          <CardTitle className="font-serif text-lg leading-tight text-brand-ink">
+            {title}
+          </CardTitle>
+          {description && (
+            <p className="text-[12px] text-brand-ink/60">{description}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </CardHeader>
+      <CardContent className={cn(compact ? "px-4 pb-4" : "px-5 pb-5")}>
+        {children}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ActionsMenu({
+  user,
+  status,
+  onBan,
+  onUnban,
+  unbanPending,
+  onSuspend,
+  onLift,
+  liftPending,
+  onPromoteToggle,
+  promotePending,
+  onResetPwd,
+  onForceVerify,
+  verifyPending,
+  isAdmin,
+  canImpersonate,
+}: {
+  user: EnrichedUser
+  status: "active" | "suspended" | "banned"
+  onBan: () => void
+  onUnban: () => void
+  unbanPending: boolean
+  onSuspend: () => void
+  onLift: () => void
+  liftPending: boolean
+  onPromoteToggle: () => void
+  promotePending: boolean
+  onResetPwd: () => void
+  onForceVerify: () => void
+  verifyPending: boolean
+  isAdmin: boolean
+  canImpersonate: boolean
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-9"
+            aria-label="More actions"
+          />
+        }
+      >
+        <MoreHorizontal className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-1">
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+          Account
+        </div>
+        {status === "banned" ? (
+          <PopoverItem
+            icon={ShieldCheck}
+            label="Unban user"
+            onClick={onUnban}
+            disabled={unbanPending}
+          />
+        ) : (
+          <PopoverItem
+            icon={ShieldOff}
+            label="Ban user"
+            onClick={onBan}
+            disabled={user.banned === true}
+          />
+        )}
+        {status === "suspended" ? (
+          <PopoverItem
+            icon={PlayCircle}
+            label="Lift suspension"
+            onClick={onLift}
+            disabled={liftPending}
+          />
+        ) : (
+          <PopoverItem
+            icon={Pause}
+            label="Suspend"
+            onClick={onSuspend}
+            disabled={user.banned === true}
+          />
+        )}
+        <PopoverItem
+          icon={UserCog}
+          label={isAdmin ? "Demote to user" : "Promote to platform admin"}
+          onClick={onPromoteToggle}
+          disabled={promotePending}
+        />
+        <PopoverItem icon={KeyRound} label="Reset password" onClick={onResetPwd} />
+        {!user.emailVerified && (
+          <PopoverItem
+            icon={MailCheck}
+            label="Force-verify email"
+            onClick={onForceVerify}
+            disabled={verifyPending}
+          />
+        )}
+        <Separator className="my-1" />
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+          Shortcuts
+        </div>
+        <div className="px-2 py-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-brand-muted-soft">Open audit log</span>
+          <Kbd>⌘A</Kbd>
+        </div>
+        <div className="px-2 py-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-brand-muted-soft">Impersonate</span>
+          <Kbd>⌘I</Kbd>
+        </div>
+        {canImpersonate && (
+          <>
+            <Separator className="my-1" />
+            <PopoverItem
+              icon={UserCog}
+              label="Impersonate user"
+              onClick={() => {
+                /* wired separately via the icon button */
+              }}
+              disabled={!canImpersonate}
+            />
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function PopoverItem({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
   return (
     <button
-      onClick={() => {
-        navigator.clipboard.writeText(ip)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
-      }}
-      className="inline-flex items-center gap-1 rounded p-1 text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream-soft transition-colors"
-      aria-label="Copy IP"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-brand-cream-soft disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
     >
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      <Icon className="size-3.5 text-brand-muted-soft" />
+      {label}
     </button>
   )
 }
 
-function providerIcon(providerId: string) {
-  if (providerId === "google")
-    return <span className="text-xs font-semibold">G</span>
-  return <Link2 className="size-3.5" />
-}
-
-function parseDevice(ua: string | null): string {
-  if (!ua) return "Unknown device"
-  // Best-effort UA parser (no library — keep it light). Handles the
-  // common cases: Chrome/Safari/Firefox + iOS/Android.
-  let browser = "Browser"
-  if (/Edg\//.test(ua)) browser = "Edge"
-  else if (/Chrome\//.test(ua)) browser = "Chrome"
-  else if (/Firefox\//.test(ua)) browser = "Firefox"
-  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = "Safari"
-  let os = "Unknown OS"
-  if (/iPhone|iPad/.test(ua)) os = "iOS"
-  else if (/Android/.test(ua)) os = "Android"
-  else if (/Mac OS X/.test(ua)) os = "macOS"
-  else if (/Windows/.test(ua)) os = "Windows"
-  else if (/Linux/.test(ua)) os = "Linux"
-  return `${browser} · ${os}`
-}
+// ─── Tabs ──────────────────────────────────────────────────────────────────
 
 function SignInHistoryTab({ user: u }: { user: EnrichedUser }) {
   console.log(`[USER-DETAIL-PAGE] SignInHistoryTab userId=${u.id}`)
   return (
     <Card className="border-brand-rule bg-brand-card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-brand-rule p-4">
-        <div>
-          <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
-            Distinct sign-in IPs (last 90 days)
-          </h3>
-          <p className="mt-0.5 text-[11px] text-brand-muted-soft">
-            Grouped by IP. Each row shows first-seen, last-seen, and total sign-ins.
-          </p>
+      <div className="border-b border-brand-rule p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft">
+              Distinct sign-in IPs (last 90 days)
+            </h3>
+            <p className="mt-0.5 text-[11px] text-brand-muted-soft">
+              Grouped by IP. Each row shows first-seen, last-seen, total
+              sign-ins.
+            </p>
+          </div>
+          <History className="size-4 text-brand-muted-soft" />
         </div>
-        <History className="size-4 text-brand-muted-soft" />
       </div>
 
       {u.distinctSignInIps.length === 0 ? (
@@ -1130,14 +1765,13 @@ function SignInHistoryTab({ user: u }: { user: EnrichedUser }) {
                     <span className="font-mono text-sm text-brand-ink">
                       {row.ip}
                     </span>
-                    <CopyIpButton ip={row.ip} />
                   </div>
                 </TableCell>
                 <TableCell className="text-xs text-brand-ink/80">
-                  {new Date(row.firstSeen).toLocaleString()}
+                  {format(new Date(row.firstSeen), "PPp")}
                 </TableCell>
                 <TableCell className="text-xs text-brand-ink/80">
-                  {new Date(row.lastSeen).toLocaleString()}
+                  {format(new Date(row.lastSeen), "PPp")}
                 </TableCell>
                 <TableCell className="text-right">
                   <Badge
@@ -1196,9 +1830,9 @@ function SessionsTab({ userId }: { userId: string }) {
 
   if (q.isLoading)
     return (
-      <Card className="border-brand-rule bg-brand-card p-6">
+      <Card className="border-brand-rule bg-brand-card p-6 space-y-2">
         <Skeleton className="h-12 w-full" />
-        <Skeleton className="mt-2 h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
       </Card>
     )
 
@@ -1246,60 +1880,53 @@ function SessionsTab({ userId }: { userId: string }) {
           </EmptyHeader>
         </Empty>
       ) : (
-        <ScrollArea className="max-h-[420px]">
-          <ul className="divide-y divide-brand-rule">
-            {sessions.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center gap-3 p-4 text-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {s.userAgent?.includes("Mobile") || s.userAgent?.includes("Android") || s.userAgent?.includes("iPhone") ? (
-                      <Smartphone className="size-3.5 text-brand-muted-soft" />
-                    ) : (
-                      <Monitor className="size-3.5 text-brand-muted-soft" />
-                    )}
-                    <span className="font-medium text-brand-ink truncate">
-                      {parseDevice(s.userAgent)}
-                    </span>
+        <ItemGroup>
+          {sessions.map((s) => {
+            const d = parseDevice(s.userAgent)
+            return (
+              <Item key={s.id}>
+                <ItemMedia variant="icon">
+                  {d.isMobile ? (
+                    <Smartphone className="size-4" />
+                  ) : (
+                    <Monitor className="size-4" />
+                  )}
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>
+                    {d.browser} · {d.os}
                     {s.isCurrent && (
                       <Badge
                         variant="outline"
-                        className="font-mono text-[10px] uppercase tracking-[0.04em] border-emerald-300 bg-emerald-50 text-emerald-900"
+                        className="ml-2 font-mono text-[10px] uppercase tracking-[0.04em] border-emerald-300 bg-emerald-50 text-emerald-900"
                       >
                         current
                       </Badge>
                     )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-brand-muted-soft">
+                  </ItemTitle>
+                  <ItemDescription>
                     {s.ipAddress ? (
                       <span className="inline-flex items-center gap-1 font-mono">
                         <Globe className="size-3" />
                         {s.ipAddress}
-                        <CopyIpButton ip={s.ipAddress} />
                       </span>
                     ) : (
-                      <span className="text-amber-700 inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1 text-amber-700">
                         <AlertCircle className="size-3" />
                         no IP captured
                       </span>
                     )}
-                    <span>
-                      started {formatDistanceToNow(new Date(s.createdAt), { addSuffix: true })}
-                    </span>
-                    {s.expiresAt && (
-                      <span>
-                        expires{" "}
-                        {formatDistanceToNow(new Date(s.expiresAt), { addSuffix: true })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
+                    <span className="mx-2 text-brand-muted-soft">·</span>
+                    started {formatDistanceToNow(new Date(s.createdAt), { addSuffix: true })}
+                    <span className="mx-2 text-brand-muted-soft">·</span>
+                    expires{" "}
+                    {formatDistanceToNow(new Date(s.expiresAt), { addSuffix: true })}
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+            )
+          })}
+        </ItemGroup>
       )}
     </Card>
   )
@@ -1327,10 +1954,10 @@ function ActivityTab({ userId }: { userId: string }) {
 
   if (q.isLoading)
     return (
-      <Card className="border-brand-rule bg-brand-card p-6">
+      <Card className="border-brand-rule bg-brand-card p-6 space-y-2">
         <Skeleton className="h-12 w-full" />
-        <Skeleton className="mt-2 h-12 w-full" />
-        <Skeleton className="mt-2 h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
       </Card>
     )
 
@@ -1359,104 +1986,46 @@ function ActivityTab({ userId }: { userId: string }) {
         </Empty>
       ) : (
         <ScrollArea className="max-h-[480px]">
-          <ul className="divide-y divide-brand-rule">
+          <ItemGroup>
             {events.map((e) => (
-              <li key={e.id} className="flex items-start gap-3 p-4 text-sm">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] font-medium text-brand-ink">
-                      {e.action}
-                    </span>
-                    <span className="text-[11px] text-brand-muted-soft">
-                      by {e.actorEmail}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-brand-muted-soft">
-                    {new Date(e.createdAt).toLocaleString()} ·{" "}
+              <Item key={e.id} className="flex-col items-start gap-0.5 py-3">
+                <div className="flex w-full items-center gap-2">
+                  <span className="font-mono text-[11px] font-medium text-brand-ink">
+                    {e.action}
+                  </span>
+                  <span className="text-[11px] text-brand-muted-soft">
+                    by {e.actorEmail}
+                  </span>
+                  <span className="ml-auto text-[11px] text-brand-muted-soft">
                     {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
-                  </div>
-                  {e.metadata && Object.keys(e.metadata).length > 0 && (
-                    <HoverCard>
-                      <HoverCardTrigger
-                        render={
-                          <button className="mt-1 font-mono text-[10px] text-brand-muted-soft hover:text-brand-ink transition-colors" />
-                        }
-                      >
-                        view metadata →
-                      </HoverCardTrigger>
-                      <HoverCardContent className="w-80 font-mono text-[11px]">
-                        <pre className="whitespace-pre-wrap break-words">
-                          {JSON.stringify(e.metadata, null, 2)}
-                        </pre>
-                      </HoverCardContent>
-                    </HoverCard>
-                  )}
+                  </span>
                 </div>
-              </li>
+                {e.metadata && Object.keys(e.metadata).length > 0 && (
+                  <HoverCard>
+                    <HoverCardTrigger
+                      render={
+                        <button className="font-mono text-[10px] text-brand-muted-soft hover:text-brand-ink transition-colors" />
+                      }
+                    >
+                      view metadata →
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-80 font-mono text-[11px]">
+                      <pre className="whitespace-pre-wrap break-words">
+                        {JSON.stringify(e.metadata, null, 2)}
+                      </pre>
+                    </HoverCardContent>
+                  </HoverCard>
+                )}
+              </Item>
             ))}
-          </ul>
+          </ItemGroup>
         </ScrollArea>
       )}
     </Card>
   )
 }
 
-function WorkspacesTab({ memberships }: { memberships: Membership[] }) {
-  console.log(`[USER-DETAIL-PAGE] WorkspacesTab count=${memberships.length}`)
-  if (memberships.length === 0) {
-    return (
-      <Card className="border-brand-rule bg-brand-card">
-        <Empty>
-          <EmptyMedia>
-            <Building2 className="size-5" />
-          </EmptyMedia>
-          <EmptyHeader>
-            <EmptyTitle>No workspace memberships</EmptyTitle>
-            <EmptyDescription>
-              This user is not a member of any workspace.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </Card>
-    )
-  }
-  return (
-    <Card className="border-brand-rule bg-brand-card overflow-hidden">
-      <ul className="divide-y divide-brand-rule">
-        {memberships.map((m) => (
-          <li
-            key={m.organizationId}
-            className="flex items-center gap-3 p-4 text-sm"
-          >
-            <Building2 className="size-4 text-brand-muted-soft shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/admin/workspaces/${m.organizationId}`}
-                  className="font-medium text-brand-ink hover:underline truncate"
-                >
-                  {m.organizationName}
-                </Link>
-                <Badge
-                  variant="outline"
-                  className="font-mono text-[10px] uppercase tracking-[0.04em]"
-                >
-                  {m.role}
-                </Badge>
-              </div>
-              <div className="mt-0.5 text-[11px] text-brand-muted-soft font-mono">
-                /{m.organizationSlug} · joined{" "}
-                {new Date(m.createdAt).toLocaleDateString()}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  )
-}
-
-// ─── Dialogs (inline, page-scoped) ─────────────────────────────────────────
+// ─── Dialogs ──────────────────────────────────────────────────────────────
 
 function BanDialog({
   open,
@@ -1489,30 +2058,30 @@ function BanDialog({
             invited to workspaces but cannot authenticate.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="space-y-1.5">
-            <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Reason
-            </Label>
-            <Textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              className="resize-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Ban duration (days)
-            </Label>
-            <Input
-              type="number"
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              min={1}
-            />
-          </div>
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Reason</FieldLabel>
+            <FieldContent>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel>Ban duration (days)</FieldLabel>
+            <FieldContent>
+              <Input
+                type="number"
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                min={1}
+              />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
@@ -1562,31 +2131,31 @@ function SuspendDialog({
             request reinstatement; you resolve appeals in /admin/appeals.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="space-y-1.5">
-            <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Reason
-            </Label>
-            <Textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              className="resize-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Duration (days, blank = indefinite)
-            </Label>
-            <Input
-              type="number"
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              min={1}
-              placeholder="7"
-            />
-          </div>
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>Reason</FieldLabel>
+            <FieldContent>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel>Duration (days, blank = indefinite)</FieldLabel>
+            <FieldContent>
+              <Input
+                type="number"
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                min={1}
+                placeholder="7"
+              />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
@@ -1631,31 +2200,66 @@ function ResetPasswordDialog({
             Set a new password. The user can sign in with it immediately.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-1.5 py-2">
-          <Label className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            New password (min 8 chars)
-          </Label>
-          <Input
-            type="text"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-          />
-        </div>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>New password (min 8 chars)</FieldLabel>
+            <FieldContent>
+              <Input
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
+              />
+            </FieldContent>
+          </Field>
+        </FieldGroup>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={onConfirm}
-            disabled={pending || password.length < 8}
-          >
+          <Button onClick={onConfirm} disabled={pending || password.length < 8}>
             {pending ? <Spinner className="mr-2 size-4" /> : null}
             Reset password
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ImpersonateDialog({
+  open,
+  onOpenChange,
+  email,
+  pending,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  email: string
+  pending: boolean
+  onConfirm: () => void
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Impersonate {email}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            You will be signed in as this user for up to 30 minutes. Every
+            action is logged in the audit log with your admin email as the
+            actor. To stop, click "Stop impersonating" in the banner.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} disabled={pending}>
+            {pending ? <Spinner className="mr-2 size-4" /> : null}
+            Impersonate
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -1688,7 +2292,7 @@ function RemoveUserDialog({
             permanently deleted. Audit log references are anonymized.
             <br />
             <br />
-            Type <code className="font-mono">DELETE</code> to confirm.
+            Type <Kbd>DELETE</Kbd> to confirm.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <Input
@@ -1705,7 +2309,11 @@ function RemoveUserDialog({
             disabled={typed !== "DELETE" || pending}
             className="bg-brand-accent text-white hover:bg-brand-accent/90"
           >
-            {pending ? <Spinner className="mr-2 size-4" /> : <Trash2 className="mr-2 size-4" />}
+            {pending ? (
+              <Spinner className="mr-2 size-4" />
+            ) : (
+              <Trash2 className="mr-2 size-4" />
+            )}
             Delete forever
           </AlertDialogAction>
         </AlertDialogFooter>
