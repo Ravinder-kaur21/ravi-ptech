@@ -3,7 +3,10 @@ import { createHash } from "node:crypto"
 import { db } from "@/lib/db"
 import { auditLog } from "@/lib/schema"
 import { sql, desc, and, eq, gte, lte, like, or, type SQL } from "drizzle-orm"
+import type { PgTransaction } from "drizzle-orm/pg-core"
 import { headers } from "next/headers"
+
+type DbOrTx = typeof db | PgTransaction<any, any, any>
 
 /**
  * Append-only audit log writer + reader.
@@ -27,17 +30,35 @@ export type AuditAction =
   | "user.suspend"
   | "user.lift-suspension"
   | "user.set-role"
+  | "user.set-member-role"
+  | "user.invite-to-org"
+  | "user.remove-from-org"
   | "user.reset-password"
   | "user.force-verify-email"
   | "user.remove"
   | "user.impersonate"
   | "appeal.resolve"
   | "org.delete"
+  | "org.suspend"
+  | "org.unsuspend"
+  | "org.transfer-ownership"
   | "session.revoke"
   | "session.revoke-all"
   | "system.maintenance"
   | "system.announcement"
+  | "system.email-policy"
+  | "system.ip-allowlist"
   | "feature-flag.update"
+  | "billing.refund"
+  | "billing.credit"
+  | "billing.plan-change"
+  | "webhook.create"
+  | "webhook.delete"
+  | "webhook.rotate-secret"
+  | "api-key.create"
+  | "api-key.revoke"
+  | "dsar.export"
+  | "dsar.erase"
 
 export type AuditTargetType =
   | "user"
@@ -47,6 +68,9 @@ export type AuditTargetType =
   | "system"
   | "billing"
   | "feature-flag"
+  | "webhook"
+  | "api-key"
+  | "dsar"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }
@@ -55,6 +79,16 @@ export type RecordAuditEvent = {
   metadata?: Record<string, unknown>
   /** Skip the IP/UA capture (for background jobs with no request context). */
   skipRequestContext?: boolean
+  /**
+   * Optional Drizzle transaction. When provided, the audit row is
+   * written inside that transaction so a failure in the cascading
+   * writes rolls the audit back too. The hash chain is still
+   * computed from the global chain (since hash linking is global),
+   * so the write MUST be the last step in the caller's transaction.
+   *
+   * Caller is responsible for committing the transaction.
+   */
+  tx?: DbOrTx
 }
 
 /** Hash a payload deterministically. Uses canonical JSON via JCS-lite. */
@@ -77,8 +111,8 @@ function canonicalHash(input: unknown): string {
 }
 
 /** Read the most recent row's hash. Empty string if the chain is empty. */
-async function getLastHash(): Promise<string> {
-  const [row] = await db
+async function getLastHash(executor: DbOrTx = db): Promise<string> {
+  const [row] = await executor
     .select({ hash: auditLog.hash })
     .from(auditLog)
     .orderBy(desc(auditLog.createdAt))
@@ -109,7 +143,8 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
       }
     }
 
-    const prevHash = await getLastHash()
+    const executor = e.tx ?? db
+    const prevHash = await getLastHash(executor)
     const payload = {
       actorId: e.actor.id,
       actorEmail: e.actor.email,
@@ -124,7 +159,7 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
     }
     const hash = canonicalHash(payload)
 
-    await db.insert(auditLog).values({
+    await executor.insert(auditLog).values({
       actorId: e.actor.id,
       actorEmail: e.actor.email,
       action: e.action,

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { sql, gte } from "drizzle-orm"
-import { user } from "@/lib/schema"
+import { sql, gte, and, gte as gteFn } from "drizzle-orm"
+import { user, session as sessionTable } from "@/lib/schema"
 import { requireAdmin } from "@/lib/dal"
 
 const querySchema = z.object({
@@ -39,23 +39,40 @@ export async function GET(req: Request) {
   start.setHours(0, 0, 0, 0)
 
   try {
-    // Signups per day (date_trunc to day in UTC)
-    const signups = await db
-      .select({
-        day: sql<string>`to_char(date_trunc('day', ${user.createdAt}), 'YYYY-MM-DD')`,
-        signups: sql<number>`count(*)::int`,
-      })
-      .from(user)
-      .where(gte(user.createdAt, start))
-      .groupBy(sql`date_trunc('day', ${user.createdAt})`)
-      .orderBy(sql`date_trunc('day', ${user.createdAt})`)
+    // Daily signups + daily new sessions in a single round-trip each.
+    // We bucket both to the same day so they share the X axis.
+    const [signupRows, sessionRows] = await Promise.all([
+      db
+        .select({
+          day: sql<string>`to_char(date_trunc('day', ${user.createdAt}), 'YYYY-MM-DD')`,
+          signups: sql<number>`count(*)::int`,
+        })
+        .from(user)
+        .where(gte(user.createdAt, start))
+        .groupBy(sql`date_trunc('day', ${user.createdAt})`),
+      db
+        .select({
+          day: sql<string>`to_char(date_trunc('day', ${sessionTable.createdAt}), 'YYYY-MM-DD')`,
+          sessions: sql<number>`count(*)::int`,
+        })
+        .from(sessionTable)
+        .where(
+          and(
+            gteFn(sessionTable.createdAt, start),
+            gteFn(sessionTable.expiresAt, new Date())
+          )
+        )
+        .groupBy(sql`date_trunc('day', ${sessionTable.createdAt})`),
+    ])
 
     const byDay = new Map<string, { signups: number; sessions: number }>()
-    for (const r of signups) {
-      byDay.set(r.day, { signups: r.signups, sessions: 0 })
+    for (const r of signupRows) byDay.set(r.day, { signups: r.signups, sessions: 0 })
+    for (const r of sessionRows) {
+      const cur = byDay.get(r.day) ?? { signups: 0, sessions: 0 }
+      cur.sessions = r.sessions
+      byDay.set(r.day, cur)
     }
 
-    // Fill in the days with no signups
     const points: { date: string; signups: number; sessions: number }[] = []
     for (let i = 0; i <= days; i++) {
       const d = new Date(start)
@@ -65,6 +82,9 @@ export async function GET(req: Request) {
       points.push({ date: key, signups: row.signups, sessions: row.sessions })
     }
 
+    console.log(
+      `[API/ADMIN-SIGNUPS] ${points.length} points, range=${parsed.data.range}, total signups=${points.reduce((s, p) => s + p.signups, 0)}`
+    )
     return NextResponse.json({ points, range: parsed.data.range })
   } catch (err) {
     console.error("[API/ADMIN-SIGNUPS] failed:", err)

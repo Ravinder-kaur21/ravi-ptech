@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { removeMemberAction } from "@/app/actions/remove-member"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -190,19 +191,30 @@ function TeamSettingsInner() {
     },
   })
 
-  // ─── Remove member ──
+  // ─── Remove member (cascade) ──
+  // The server action cascadeRemoveMember() detaches the member's
+  // driver rows in this workspace, kills their sessions in this
+  // workspace, deletes the membership, and (if the user has no other
+  // workspaces and is not a platform admin) hard-deletes the user.
   const removeMemberMutation = useMutation({
-    mutationFn: async (memberIdOrEmail: string) => {
-      console.log("[TEAM] removeMember →", memberIdOrEmail)
-      const { error } = await authClient.organization.removeMember({
-        memberIdOrEmail,
-      })
-      if (error) throw new Error(error.message || "Failed to remove member")
-      return true
+    mutationFn: async (memberId: string) => {
+      console.log(`[TEAM] removeMember (cascade) → ${memberId}`)
+      return await removeMemberAction({ memberId })
     },
-    onSuccess: () => {
-      toast.success("Member removed")
+    onSuccess: (result) => {
+      console.log("[TEAM] removeMember cascade result:", result)
+      const msg = result.userDeleted
+        ? "Member removed and their account was permanently deleted (last workspace)"
+        : "Member removed from this workspace"
+      toast.success(msg, { duration: 5000 })
       queryClient.invalidateQueries({ queryKey: ["org-members"] })
+      // If the user was hard-deleted, their row disappears from
+      // many admin views too — invalidate everything.
+      if (result.userDeleted) {
+        queryClient.invalidateQueries({ queryKey: ["admin-users"] })
+        queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
+      }
+      router.refresh()
     },
     onError: (err: Error) => {
       console.error("[TEAM] removeMember failed:", err)
@@ -495,39 +507,12 @@ function TeamSettingsInner() {
                     </Badge>
                   )}
                   {canEditThisMember && (
-                    <AlertDialog>
-                      <AlertDialogTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-brand-muted-soft hover:text-destructive"
-                            aria-label="Remove member"
-                          />
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remove this member?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            They&apos;ll lose access to{" "}
-                            {activeOrg?.name ?? "this workspace"} immediately.
-                            You can re-invite them later.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => removeMemberMutation.mutate(m.id)}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                          >
-                            Remove
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <RemoveMemberDialog
+                      name={m.user.name || m.user.email}
+                      workspaceName={activeOrg?.name ?? "this workspace"}
+                      pending={removeMemberMutation.isPending}
+                      onConfirm={() => removeMemberMutation.mutate(m.id)}
+                    />
                   )}
                 </li>
               )
@@ -711,6 +696,81 @@ function TeamSettingsInner() {
         </div>
       </Card>
     </div>
+  )
+}
+
+// ─── Remove-member confirmation dialog (typed) ─────────────────────────────
+// The cascade is destructive: removes the member, detaches their driver
+// profile in this workspace, kills their sessions in this workspace,
+// and (if it's their last workspace and they're not a platform admin)
+// hard-deletes their user account. So we require a typed confirmation.
+
+function RemoveMemberDialog({
+  name,
+  workspaceName,
+  pending,
+  onConfirm,
+}: {
+  name: string
+  workspaceName: string
+  pending: boolean
+  onConfirm: () => void
+}) {
+  const [typed, setTyped] = useState("")
+  return (
+    <AlertDialog onOpenChange={(o) => !o && setTyped("")}>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-brand-muted-soft hover:text-destructive"
+            aria-label="Remove member"
+          />
+        }
+      >
+        <Trash2 className="h-4 w-4" />
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This removes them from <b>{workspaceName}</b>, detaches their
+            driver profile in this workspace, and kills their active
+            sessions in this workspace.{" "}
+            <b>
+              If this is their only workspace and they are not a platform
+              admin, their account is also permanently deleted.
+            </b>
+            <br />
+            <br />
+            Type <code className="font-mono">REMOVE</code> to confirm.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <Input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder="REMOVE"
+          className="h-10 font-mono"
+          autoFocus
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={typed !== "REMOVE" || pending}
+            className="bg-destructive text-white hover:bg-destructive/90"
+          >
+            {pending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            Remove {typed === "REMOVE" ? "forever" : ""}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

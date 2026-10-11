@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
 import {
@@ -71,7 +72,10 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { UserDetailSheet } from "@/components/admin/user-detail-sheet"
+// Note: the user detail UI now lives at /admin/users/[id] (a dedicated
+// full page) rather than a Sheet drawer. The "View details" item in
+// the row dropdown navigates to that page.
+import { ChangeRoleSheet } from "@/components/admin/change-role-sheet"
 
 type EnrichedUser = {
   id: string
@@ -114,12 +118,11 @@ export function UsersTable() {
   const pageSize = 25
 
   const [activeUser, setActiveUser] = React.useState<EnrichedUser | null>(null)
-  const [detailOpen, setDetailOpen] = React.useState(false)
+  const [changeRoleOpen, setChangeRoleOpen] = React.useState(false)
   const [banOpen, setBanOpen] = React.useState(false)
   const [unbanOpen, setUnbanOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [liftOpen, setLiftOpen] = React.useState(false)
-  const [roleOpen, setRoleOpen] = React.useState(false)
   const [removeOpen, setRemoveOpen] = React.useState(false)
   const [impersonateOpen, setImpersonateOpen] = React.useState(false)
   const [resetPwdOpen, setResetPwdOpen] = React.useState(false)
@@ -352,10 +355,12 @@ export function UsersTable() {
                           <DropdownMenuSeparator className="bg-brand-rule" />
 
                           <DropdownMenuItem
-                            onClick={() => {
-                              setActiveUser(u)
-                              setDetailOpen(true)
-                            }}
+                            render={
+                              <Link
+                                href={`/admin/users/${u.id}`}
+                                className="flex items-center"
+                              />
+                            }
                             className="rounded-md cursor-pointer"
                           >
                             <Eye className="mr-2 size-4 text-brand-muted-soft" />
@@ -377,21 +382,12 @@ export function UsersTable() {
                           <DropdownMenuItem
                             onClick={() => {
                               setActiveUser(u)
-                              setRoleOpen(true)
+                              setChangeRoleOpen(true)
                             }}
                             className="rounded-md cursor-pointer"
                           >
-                            {u.role === "admin" ? (
-                              <>
-                                <UserCog className="mr-2 size-4 text-brand-muted-soft" />
-                                Demote to user
-                              </>
-                            ) : (
-                              <>
-                                <UserPlus className="mr-2 size-4 text-brand-accent" />
-                                Promote to admin
-                              </>
-                            )}
+                            <UserCog className="mr-2 size-4 text-brand-muted-soft" />
+                            Change role
                           </DropdownMenuItem>
 
                           {!u.emailVerified && (
@@ -558,14 +554,14 @@ export function UsersTable() {
         }}
         onSuccess={refresh}
       />
-      <SetRoleDialog
-        user={activeUser}
-        open={roleOpen}
+      <ChangeRoleSheet
+        userId={activeUser?.id ?? null}
+        open={changeRoleOpen}
         onOpenChange={(o) => {
-          setRoleOpen(o)
+          setChangeRoleOpen(o)
           if (!o) closeAll()
         }}
-        onSuccess={refresh}
+        onMutated={refresh}
       />
       <RemoveUserDialog
         user={activeUser}
@@ -600,17 +596,6 @@ export function UsersTable() {
           if (!o) closeAll()
         }}
         onSuccess={refresh}
-      />
-
-      {/* ─── User detail drawer (Profile / Sessions / Activity) ─── */}
-      <UserDetailSheet
-        user={activeUser}
-        open={detailOpen}
-        onOpenChange={(o) => {
-          setDetailOpen(o)
-          if (!o) closeAll()
-        }}
-        onMutated={refresh}
       />
     </>
   )
@@ -671,7 +656,7 @@ function BanUserDialog({
 }) {
   const [reason, setReason] = React.useState("")
   const [durationDays, setDurationDays] = React.useState<string>("30")
-  const mutation = useAdminAction()
+  const [pending, setPending] = React.useState(false)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -723,27 +708,35 @@ function BanUserDialog({
           <Button
             onClick={async () => {
               const days = durationDays === "permanent" ? undefined : Number(durationDays)
-              // Ban uses Better Auth directly via the user's mutation hook;
-              // we call it here for the canonical path.
-              const r = await authClient.admin.banUser({
-                userId: user!.id,
-                banReason: reason.trim() || undefined,
-                banExpiresIn: days ? days * 24 * 60 * 60 : undefined,
-              })
-              if (r.error) throw new Error(r.error.message || "Ban failed")
-              await recordAudit(user!.id, "user.ban", {
-                reason: reason.trim(),
-                durationDays: days ?? null,
-              })
-              toast.success(`${user?.email} banned`)
-              onSuccess()
-              onOpenChange(false)
-              setReason("")
+              setPending(true)
+              console.log(`[USERS-TABLE] ban ${user!.id} days=${days ?? "permanent"}`)
+              try {
+                const r = await authClient.admin.banUser({
+                  userId: user!.id,
+                  banReason: reason.trim() || undefined,
+                  banExpiresIn: days ? days * 24 * 60 * 60 : undefined,
+                })
+                if (r.error) throw new Error(r.error.message || "Ban failed")
+                await recordAudit(user!.id, "user.ban", {
+                  reason: reason.trim(),
+                  durationDays: days ?? null,
+                })
+                console.log(`[USERS-TABLE] ✅ banned ${user!.id}`)
+                toast.success(`${user?.email} banned`)
+                onSuccess()
+                onOpenChange(false)
+                setReason("")
+              } catch (e) {
+                console.error(`[USERS-TABLE] ban failed:`, e)
+                toast.error(e instanceof Error ? e.message : "Ban failed")
+              } finally {
+                setPending(false)
+              }
             }}
-            disabled={mutation.isPending}
+            disabled={pending}
             className="bg-red-700 text-white hover:bg-red-800"
           >
-            {mutation.isPending ? (
+            {pending ? (
               <>
                 <Spinner className="mr-2 size-4" />
                 Banning…

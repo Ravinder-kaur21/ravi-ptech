@@ -128,6 +128,16 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
+  // ─── Suspension (set by platform admin) ──────────────────────────────────
+  // When suspended=true, all workspace members are blocked at the
+  // (dashboard) layout level — they see a "workspace suspended" screen
+  // with the reason. Platform admins (user.role='admin') always bypass.
+  suspended: boolean("suspended").notNull().default(false),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedReason: text("suspended_reason"),
+  suspendedBy: text("suspended_by").references(() => user.id, {
+    onDelete: "set null",
+  }),
 })
 
 export const member = pgTable(
@@ -234,6 +244,34 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
 }))
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM ERROR LOG
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `error_log` — server-side errors and warnings, written by
+// `lib/logger.ts`. Powers the System Health card on the admin
+// overview. Keep this lean: a daily cron could prune rows older
+// than 30 days; we'll add that when we have cron infra.
+//
+
+export const errorLog = pgTable(
+  "error_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** "error" | "warn" | "info" */
+    level: text("level").notNull().default("error"),
+    /** Module / file that wrote the row. */
+    source: text("source").notNull(),
+    message: text("message").notNull(),
+    /** Stack trace (if any). */
+    stack: text("stack"),
+    /** Free-form JSON metadata. */
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("error_log_createdAt_idx").on(table.createdAt)]
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMMUNICATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 //
@@ -291,9 +329,9 @@ export const emailBroadcast = pgTable(
     failedCount: text("failed_count").notNull().default("0"),
     /** Resend batch id (optional). */
     batchId: text("batch_id"),
-    sentBy: text("sent_by")
-      .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
+    // Nullable + SET NULL: when the sender (admin) is hard-deleted,
+    // the broadcast record stays but loses the FK to preserve audit trail.
+    sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
     sentAt: timestamp("sent_at").notNull().defaultNow(),
   },
   (table) => [
@@ -527,9 +565,13 @@ export const auditLog = pgTable(
   "audit_log",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    actorId: text("actor_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "restrict" }),
+    // Nullable + SET NULL: when an admin is hard-deleted, their past
+    // audit rows are preserved but lose the FK. The `actorEmail` column
+    // keeps the email for forensic purposes (or "deleted-user-{id}" once
+    // the cascade library anonymizes it).
+    actorId: text("actor_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     actorEmail: text("actor_email").notNull(),
     // "user.ban" | "user.unban" | "user.suspend" | "user.lift-suspension" |
     // "user.set-role" | "user.reset-password" | "user.force-verify-email" |
@@ -666,7 +708,10 @@ export const driver = pgTable("driver", {
   tenantId: text("tenant_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
-  userId: text("user_id").references(() => user.id),
+  // SET NULL on user delete: the driver record stays (workspace-owned)
+  // but the link to the user account is severed. PII (email, phone) is
+  // wiped by `anonymizeDriverForUser` in `lib/cascade.ts`.
+  userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
   firstName: varchar("first_name", { length: 100 }).notNull(),
   lastName: varchar("last_name", { length: 100 }).notNull(),
   email: varchar("email", { length: 255 }),
@@ -802,9 +847,11 @@ export const payStub = pgTable("pay_stub", {
   tenantId: text("tenant_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  // SET NULL on driver delete: if a driver is removed, their pay stubs
+  // survive (workspace-owned payroll records) but lose the FK pointer.
   driverId: text("driver_id")
     .notNull()
-    .references(() => driver.id),
+    .references(() => driver.id, { onDelete: "set null" }),
   payPeriodStart: timestamp("pay_period_start").notNull(),
   payPeriodEnd: timestamp("pay_period_end").notNull(),
   totalMiles: varchar("total_miles", { length: 50 }),
@@ -825,9 +872,10 @@ export const payItem = pgTable("pay_item", {
   tenantId: text("tenant_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  // CASCADE on pay_stub delete: line items follow the parent stub.
   payStubId: text("pay_stub_id")
     .notNull()
-    .references(() => payStub.id),
+    .references(() => payStub.id, { onDelete: "cascade" }),
   tripId: text("trip_id").references(() => trip.id),
   type: varchar("type", { length: 100 }).notNull(),
   description: varchar("description", { length: 255 }),

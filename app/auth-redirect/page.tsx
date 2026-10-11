@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { authClient } from "@/lib/auth-client"
 import { Loader2 } from "lucide-react"
 
 export default function AuthRedirectPage() {
@@ -11,61 +10,44 @@ export default function AuthRedirectPage() {
 
   useEffect(() => {
     const handleRedirect = async () => {
-      console.log("[AUTH-REDIRECT] Checking session and organizations...")
-
-      // If the user came from an invite link with ?next=, honor it after
-      // we verify they're signed in. This defends the Google callback path
-      // for invitations.
+      console.log("[AUTH-REDIRECT] resolving post-auth destination")
       const params =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search)
           : null
       const nextParam = params?.get("next")
-
       try {
-        // Get current session
-        const { data: session } = await authClient.getSession()
-
-        if (!session?.user) {
-          console.log("[AUTH-REDIRECT] No session, redirecting to login")
-          router.push(nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : "/login")
+        const r = await fetch("/api/me/routing", { cache: "no-store" })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const d = (await r.json()) as {
+          destination: string
+          isPlatformAdmin: boolean
+          email: string | null
+        }
+        if (!d.email) {
+          console.log("[AUTH-REDIRECT] no session, → /login")
+          router.push(
+            nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : "/login"
+          )
           return
         }
-
-        console.log("[AUTH-REDIRECT] Session user:", session.user.email)
-
-        // If we have a ?next= (e.g. /invite/[id]), honor it directly.
-        if (nextParam && nextParam.startsWith("/")) {
-          console.log("[AUTH-REDIRECT] honoring ?next= →", nextParam)
+        // Honor ?next= if it's one of our known destinations
+        if (
+          nextParam &&
+          ["/admin", "/dashboard", "/onboarding", "/select-org"].includes(
+            nextParam
+          )
+        ) {
+          console.log(`[AUTH-REDIRECT] honoring ?next= → ${nextParam}`)
           router.push(nextParam)
           return
         }
-
-        // Check organizations
-        const { data: orgs } = await authClient.organization.list()
-
-        // [AUTH-REDIRECT] organization.list() returns a bare array
-        if (!orgs || orgs.length === 0) {
-          console.log("[AUTH-REDIRECT] No org, redirecting to onboarding")
-          router.push("/onboarding")
-        } else if (orgs.length === 1) {
-          console.log(
-            "[AUTH-REDIRECT] One org, setting active:",
-            orgs[0].id
-          )
-          await authClient.organization.setActive({
-            organizationId: orgs[0].id,
-          })
-          router.push("/dashboard")
-        } else {
-          console.log(
-            "[AUTH-REDIRECT] Multiple orgs, going to selector:",
-            orgs.length
-          )
-          router.push("/select-org")
-        }
+        console.log(
+          `[AUTH-REDIRECT] ${d.email} (admin=${d.isPlatformAdmin}) → ${d.destination}`
+        )
+        router.push(d.destination)
       } catch (err) {
-        console.error("[AUTH-REDIRECT] Error:", err)
+        console.error("[AUTH-REDIRECT] routing fetch failed:", err)
         setError("Something went wrong. Please try signing in again.")
         setTimeout(() => router.push("/login"), 2000)
       }

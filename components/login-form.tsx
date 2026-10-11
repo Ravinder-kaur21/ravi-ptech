@@ -107,16 +107,15 @@ export function LoginForm({
         router.push(nextPath)
         return
       }
-      const { data: orgs } = await authClient.organization.list()
-      // [LOGIN] organization.list() returns a bare array, not { organizations }
-      if (!orgs || orgs.length === 0) {
-        router.push("/onboarding")
-      } else if (orgs.length === 1) {
-        await authClient.organization.setActive({ organizationId: orgs[0].id })
-        router.push("/dashboard")
-      } else {
-        router.push("/select-org")
-      }
+      // Single source of truth for post-auth routing — see
+      // lib/role-paths.ts. Platform admins go to /admin, regular
+      // users follow the org-count branching.
+      console.log("[LOGIN] resolving post-auth destination")
+      const routeRes = await fetch("/api/me/routing", { cache: "no-store" })
+      if (!routeRes.ok) throw new Error(`routing HTTP ${routeRes.status}`)
+      const route = (await routeRes.json()) as { destination: string }
+      console.log(`[LOGIN] → ${route.destination}`)
+      router.push(route.destination)
     } catch (err) {
       console.error("[LOGIN] Verify OTP exception:", err)
       setError("An unexpected error occurred")

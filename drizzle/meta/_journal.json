@@ -50,6 +50,20 @@
       "when": 1791705488850,
       "tag": "0006_abnormal_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791707194408,
+      "tag": "0007_salty_otto_octavius",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791710605714,
+      "tag": "0008_complete_vermin",
+      "breakpoints": true
     }
   ]
 }

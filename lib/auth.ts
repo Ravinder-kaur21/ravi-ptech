@@ -23,6 +23,7 @@ import {
   driverRole,
   safety,
 } from "./auth-roles"
+import { anonymizeUserReferences } from "./cascade"
 
 console.log("[AUTH] Initializing Better Auth...")
 console.log("[AUTH] Database URL exists:", !!process.env.DATABASE_URL)
@@ -54,6 +55,21 @@ export const auth = betterAuth({
       // while still encouraging single-org usage for TMS
       organizationLimit: 3,
       teams: { enabled: false },
+      // Hook fires on every removeMember call from any client. We use it
+      // for observability only — the actual workspace-scoped cascade
+      // (driver detachment, session cleanup, hard-delete-if-last-workspace)
+      // is owned by `app/actions/remove-member.ts` → `lib/cascade.ts`. That
+      // path has proper audit + transaction guarantees; this hook does
+      // not run inside a transaction we control.
+      hooks: {
+        before: {
+          removeMember: async (data: any) => {
+            console.log(
+              `[AUTH] organizationHooks.before.removeMember memberId=${data?.member?.id} orgId=${data?.organization?.id}`
+            )
+          },
+        },
+      },
     }),
     admin({
       defaultRole: "user",
@@ -99,6 +115,40 @@ export const auth = betterAuth({
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    },
+  },
+
+  // ─── Cascade hooks ──────────────────────────────────────────────────
+  // `databaseHooks.user.delete.before` anonymizes audit_log and
+  // email_broadcast references to the user before Better Auth's
+  // internal delete fires. This is belt-and-braces: the cascade
+  // library (`lib/cascade.ts`) also calls this from the server-side
+  // transaction, but external scripts that call removeUser directly
+  // get the same protection.
+  //
+  // `organizationHooks.beforeRemoveMember` does NOT cascade — the
+  // cascade library is the only place that does workspace-scoped
+  // cleanup, and it runs from a server action with proper audit.
+  // This hook just logs the intent for debugging.
+  databaseHooks: {
+    user: {
+      delete: {
+        before: async (user) => {
+          console.log(`[AUTH] databaseHooks.user.delete.before ${user.id}`)
+          try {
+            await anonymizeUserReferences(user.id, db as any)
+          } catch (err) {
+            console.error(
+              `[AUTH] anonymizeUserReferences failed in user.delete.before:`,
+              err
+            )
+            // Don't rethrow — Better Auth will still try the delete,
+            // and the FK is now nullable+SET NULL, so it'll succeed
+            // even if our anonymization had a partial failure.
+          }
+          return true
+        },
+      },
     },
   },
 

@@ -1,22 +1,29 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
 import {
   Building2,
   Trash2,
-  ExternalLink,
   Search,
   Users,
+  ExternalLink,
 } from "lucide-react"
-import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -35,99 +42,83 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+import { cn } from "@/lib/utils"
 
 type AdminOrg = {
   id: string
   name: string
   slug: string
-  logo?: string | null
-  createdAt: Date | string
+  logo: string | null
+  createdAt: string
+  suspended: boolean
+  suspendedAt: string | null
+  suspendedReason: string | null
   memberCount: number
+  ownerCount: number
 }
+
+const STATUSES = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+] as const
+type StatusFilter = (typeof STATUSES)[number]["value"]
 
 export function WorkspacesTable() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [search, setSearch] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
   const [confirmDelete, setConfirmDelete] = React.useState<AdminOrg | null>(null)
   const [deleteTyped, setDeleteTyped] = React.useState("")
-  const [detail, setDetail] = React.useState<AdminOrg | null>(null)
 
-  // [ADMIN-WORKSPACES] Use Better Auth's organization.list (admin can call
-  // any client endpoint since they have an active session).
+  // [ADMIN-WORKSPACES] Server-side filtered list via our /api/admin/workspaces
+  // endpoint — replaces the old authClient.organization.list + N+1 pattern.
   const orgsQuery = useQuery({
-    queryKey: ["admin-orgs"],
+    queryKey: ["admin-orgs", search, statusFilter],
     queryFn: async () => {
-      console.log("[ADMIN-WORKSPACES] organization.list")
-      const { data, error } = await authClient.organization.list()
-      if (error) throw new Error(error.message || "Failed to load orgs")
-      const list = (data ?? []) as Array<{
-        id: string
-        name: string
-        slug: string
-        logo?: string | null
-        createdAt: Date | string
-      }>
-      // Fetch member counts via getFullOrganization for each — heavy but
-      // admin-only and bounded. Could be a custom endpoint later.
-      const withCounts: AdminOrg[] = await Promise.all(
-        list.map(async (o) => {
-          const { data: full } = await authClient.organization.getFullOrganization({
-            query: { organizationId: o.id },
-          })
-          return {
-            ...o,
-            memberCount: (full as any)?.members?.length ?? 0,
-          }
-        })
-      )
-      console.log("[ADMIN-WORKSPACES] orgs loaded:", withCounts.length)
-      return withCounts
+      console.log("[ADMIN-WORKSPACES] fetch", { search, statusFilter })
+      const params = new URLSearchParams({
+        status: statusFilter,
+        limit: "100",
+        offset: "0",
+      })
+      if (search.trim()) params.set("search", search.trim())
+      const r = await fetch(`/api/admin/workspaces?${params}`)
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        throw new Error(body.error || "Failed to load workspaces")
+      }
+      return r.json() as Promise<{ orgs: AdminOrg[]; total: number }>
     },
-    staleTime: 30 * 1000,
+    staleTime: 15 * 1000,
   })
 
-  const orgs = (orgsQuery.data ?? []).filter((o) => {
-    const q = search.trim().toLowerCase()
-    if (!q) return true
-    return (
-      o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q)
-    )
-  })
+  const orgs = orgsQuery.data?.orgs ?? []
+  const total = orgsQuery.data?.total ?? 0
 
   const deleteMutation = useMutation({
     mutationFn: async (org: AdminOrg) => {
       console.log("[ADMIN-WORKSPACES] delete org →", org.id, org.slug)
-      const { error } = await authClient.organization.delete({
-        organizationId: org.id,
+      const r = await fetch(`/api/admin/workspaces/${org.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: org.name }),
       })
-      if (error) throw new Error(error.message || "Failed to delete workspace")
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        throw new Error(body.error || "Failed to delete workspace")
+      }
       return org.id
     },
     onSuccess: async (orgId) => {
       console.log("[ADMIN-WORKSPACES] ✅ deleted", orgId)
-      // Audit log the delete (fire-and-forget — the workspace is already gone)
-      try {
-        await fetch(`/api/admin/users/${orgId}/audit-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "org.delete" }),
-        })
-      } catch (err) {
-        console.warn("[ADMIN-WORKSPACES] audit-event write failed (non-fatal):", err)
-      }
-      toast.success(`Workspace deleted`)
+      toast.success("Workspace deleted")
       queryClient.invalidateQueries({ queryKey: ["admin-orgs"] })
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
       setConfirmDelete(null)
       setDeleteTyped("")
-      if (detail?.id === orgId) setDetail(null)
+      router.refresh()
     },
     onError: (err: Error) => {
       console.error("[ADMIN-WORKSPACES] delete failed:", err)
@@ -140,7 +131,7 @@ export function WorkspacesTable() {
       {/* ─── Toolbar ─── */}
       <Card className="border-brand-rule bg-brand-card p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-60">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-brand-muted-soft" />
             <Input
               placeholder="Search by name or slug…"
@@ -149,6 +140,21 @@ export function WorkspacesTable() {
               className="h-9 pl-9"
             />
           </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v: string | null) => v && setStatusFilter(v as StatusFilter)}
+          >
+            <SelectTrigger className="h-9 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {orgsQuery.isFetching && (
             <div className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
               <Spinner className="size-3" />
@@ -156,8 +162,8 @@ export function WorkspacesTable() {
             </div>
           )}
           <div className="ml-auto text-xs text-brand-muted-soft">
-            {(orgsQuery.data?.length ?? 0).toLocaleString()}{" "}
-            {(orgsQuery.data?.length ?? 0) === 1 ? "workspace" : "workspaces"}
+            {total.toLocaleString()}{" "}
+            {total === 1 ? "workspace" : "workspaces"}
           </div>
         </div>
       </Card>
@@ -174,7 +180,9 @@ export function WorkspacesTable() {
           </div>
         ) : orgs.length === 0 ? (
           <div className="p-12 text-center text-sm text-brand-muted-soft">
-            No workspaces match your search.
+            {search
+              ? "No workspaces match your search."
+              : "No workspaces yet."}
           </div>
         ) : (
           <Table>
@@ -190,17 +198,20 @@ export function WorkspacesTable() {
                   Members
                 </TableHead>
                 <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+                  Status
+                </TableHead>
+                <TableHead className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
                   Created
                 </TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {orgs.map((o) => (
                 <TableRow key={o.id}>
                   <TableCell>
-                    <button
-                      onClick={() => setDetail(o)}
+                    <Link
+                      href={`/admin/workspaces/${o.id}`}
                       className="flex items-center gap-3 text-left hover:no-underline"
                     >
                       <div className="flex size-9 items-center justify-center rounded-md bg-brand-accent-tint text-brand-accent shrink-0">
@@ -220,7 +231,7 @@ export function WorkspacesTable() {
                           {o.name}
                         </p>
                       </div>
-                    </button>
+                    </Link>
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -236,22 +247,50 @@ export function WorkspacesTable() {
                       {o.memberCount.toLocaleString()}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    {o.suspended ? (
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] uppercase tracking-[0.04em] border-amber-300 bg-amber-50 text-amber-900"
+                      >
+                        suspended
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] uppercase tracking-[0.04em] border-emerald-300 bg-emerald-50 text-emerald-900"
+                      >
+                        active
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs text-brand-muted-soft">
                     {new Date(o.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setConfirmDelete(o)
-                        setDeleteTyped("")
-                      }}
-                      className="size-8 text-brand-muted-soft hover:text-brand-accent"
-                      aria-label="Delete workspace"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        render={<Link href={`/admin/workspaces/${o.id}`} />}
+                        className="size-8 text-brand-muted-soft hover:text-brand-ink"
+                        aria-label="View workspace details"
+                      >
+                        <ExternalLink className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setConfirmDelete(o)
+                          setDeleteTyped("")
+                        }}
+                        className="size-8 text-brand-muted-soft hover:text-brand-accent"
+                        aria-label="Delete workspace"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -309,40 +348,6 @@ export function WorkspacesTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* ─── Detail sheet ─── */}
-      <Sheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)}>
-        <SheetContent className="sm:max-w-md border-brand-rule bg-brand-card">
-          <SheetHeader>
-            <SheetTitle>{detail?.name}</SheetTitle>
-            <SheetDescription>
-              Workspace · /{detail?.slug} · created{" "}
-              {detail && new Date(detail.createdAt).toLocaleDateString()}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <Card className="border-brand-rule bg-brand-cream p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-mono uppercase tracking-[0.04em] text-brand-muted-soft">
-                  Members
-                </span>
-                <span className="font-serif text-xl text-brand-ink">
-                  {detail?.memberCount.toLocaleString()}
-                </span>
-              </div>
-            </Card>
-            <div className="space-y-2">
-              <Link
-                href={`/loads?org=${detail?.id}`}
-                className="flex items-center gap-2 rounded-lg p-2.5 -mx-2.5 hover:bg-brand-cream-soft transition-colors group"
-              >
-                <ExternalLink className="size-3.5 text-brand-muted-soft" />
-                <span className="text-sm">View loads (as this workspace)</span>
-              </Link>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
     </>
   )
 }

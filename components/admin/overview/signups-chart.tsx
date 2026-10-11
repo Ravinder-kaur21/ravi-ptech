@@ -1,12 +1,10 @@
 "use client"
 
 /**
- * ChartAreaInteractive — the signups-over-time chart on the admin
- * Overview page. Adapted from shadcn dashboard-01.
+ * SignupsChart — signups + active sessions over time.
  *
- * - Toggle group desktop / select mobile for the time range
- * - Recharts AreaChart with Muvx brand-ink + brand-accent series
- * - chartConfig wires both series to Muvx theme tokens via ChartContainer
+ * Server-fetched once on the parent server component (admin page).
+ * Range toggle (90d/30d/7d) re-fetches via /api/admin/signups.
  */
 import * as React from "react"
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
@@ -38,8 +36,6 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Spinner } from "@/components/ui/spinner"
 
-export const description = "Signups and active sessions over time"
-
 type Point = { date: string; signups: number; sessions: number }
 
 const chartConfig = {
@@ -53,11 +49,12 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export function ChartAreaInteractive() {
+export function SignupsChart() {
   const isMobile = useIsMobile()
   const [range, setRange] = React.useState<"90d" | "30d" | "7d">("90d")
   const [data, setData] = React.useState<Point[] | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (isMobile) setRange("7d")
@@ -66,13 +63,28 @@ export function ChartAreaInteractive() {
   React.useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setError(null)
+    console.log(`[OVERVIEW/CHART] fetching range=${range}`)
     fetch(`/api/admin/signups?range=${range}`)
-      .then((r) => (r.ok ? r.json() : { points: [] }))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => {
-        if (!cancelled) setData(d.points ?? [])
+        if (!cancelled) {
+          setData(d.points ?? [])
+          const totalSignups = (d.points ?? []).reduce(
+            (s: number, p: Point) => s + p.signups,
+            0
+          )
+          console.log(
+            `[OVERVIEW/CHART] ✅ ${d.points?.length ?? 0} points, total signups=${totalSignups}`
+          )
+        }
       })
-      .catch(() => {
-        if (!cancelled) setData([])
+      .catch((e) => {
+        if (!cancelled) {
+          console.error(`[OVERVIEW/CHART] fetch failed:`, e)
+          setError(e instanceof Error ? e.message : "Failed to load")
+          setData([])
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -83,7 +95,7 @@ export function ChartAreaInteractive() {
   }, [range])
 
   const total = React.useMemo(
-    () => (data ?? []).reduce((sum, d) => sum + d.signups, 0),
+    () => (data ?? []).reduce((sum: number, d: Point) => sum + d.signups, 0),
     [data]
   )
 
@@ -98,7 +110,9 @@ export function ChartAreaInteractive() {
             {total.toLocaleString()} new accounts in the last{" "}
             {range === "90d" ? "3 months" : range === "30d" ? "30 days" : "7 days"}
           </span>
-          <span className="@[540px]/card:hidden">Last {range === "90d" ? "3 months" : range === "30d" ? "30 days" : "7 days"}</span>
+          <span className="@[540px]/card:hidden">
+            Last {range === "90d" ? "3 months" : range === "30d" ? "30 days" : "7 days"}
+          </span>
         </CardDescription>
         <CardAction>
           <ToggleGroup
@@ -116,7 +130,7 @@ export function ChartAreaInteractive() {
           </ToggleGroup>
           <Select
             value={range}
-            onValueChange={(v) => {
+            onValueChange={(v: string | null) => {
               if (v) setRange(v as typeof range)
             }}
           >
@@ -146,6 +160,10 @@ export function ChartAreaInteractive() {
           <div className="flex h-[250px] items-center justify-center text-brand-muted-soft">
             <Spinner className="size-4" />
           </div>
+        ) : error ? (
+          <div className="flex h-[250px] items-center justify-center text-[12.5px] text-brand-accent">
+            {error}
+          </div>
         ) : (
           <ChartContainer
             config={chartConfig}
@@ -154,28 +172,12 @@ export function ChartAreaInteractive() {
             <AreaChart data={data ?? []}>
               <defs>
                 <linearGradient id="fillSignups" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="var(--color-signups)"
-                    stopOpacity={1.0}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="var(--color-signups)"
-                    stopOpacity={0.1}
-                  />
+                  <stop offset="5%" stopColor="var(--color-signups)" stopOpacity={1.0} />
+                  <stop offset="95%" stopColor="var(--color-signups)" stopOpacity={0.1} />
                 </linearGradient>
                 <linearGradient id="fillSessions" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="var(--color-sessions)"
-                    stopOpacity={0.7}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="var(--color-sessions)"
-                    stopOpacity={0.1}
-                  />
+                  <stop offset="5%" stopColor="var(--color-sessions)" stopOpacity={0.7} />
+                  <stop offset="95%" stopColor="var(--color-sessions)" stopOpacity={0.1} />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="var(--brand-rule)" />

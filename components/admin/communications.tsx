@@ -102,7 +102,9 @@ type Announcement = {
   title: string
   body: string
   kind: "info" | "warn" | "success" | "maintenance"
-  scope: "global" | "org" | "admins_only"
+  /** "global" reaches every user. "admins_only" is platform-admin only.
+   *  Org-scoped banners are a workspace-side feature (out of scope here). */
+  scope: "global" | "admins_only"
   organizationId: string | null
   organizationName: string | null
   dismissible: boolean
@@ -210,9 +212,7 @@ function AnnouncementsSection() {
                       variant="outline"
                       className="font-mono text-[9px] uppercase tracking-[0.04em]"
                     >
-                      {a.scope === "org" && a.organizationName
-                        ? `/ ${a.organizationName}`
-                        : a.scope}
+                      {a.scope === "admins_only" ? "Admins only" : "All users"}
                     </Badge>
                   </TableCell>
                   <TableCell>

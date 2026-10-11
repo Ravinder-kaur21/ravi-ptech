@@ -1,23 +1,28 @@
 "use client"
 
 /**
- * Admin nav-user — the shadcn sidebar-07 pattern, adapted for Muvx.
+ * Admin nav-user — shadcn sidebar-07, Muvx theme.
  *
- * The "Back to app" link from the old admin-shell is intentionally
- * removed. (See CLAUDE.md — the (admin) route group is OUTSIDE
- * (dashboard), so there is no shared "app" surface to go back to. If
- * the admin is also an org owner, the (dashboard) nav is a separate
- * window — they sign into both via /login, not escape-hatch links.)
- *
- * The dropdown is "Account menu" only: open the admin profile sheet
- * (TODO), trigger impersonation banner status, and sign out.
+ * Provides a "View as workspace" link that switches the platform
+ * admin into a workspace context (sets activeOrganizationId on
+ * their session). This is the inverse of impersonation: the admin
+ * is not pretending to be a user, they are just navigating into
+ * their own workspace to do work.
  */
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
-import { ChevronsUpDown, LogOut, UserCog, ShieldAlert, ExternalLink } from "lucide-react"
+import {
+  ChevronsUpDown,
+  LogOut,
+  UserCog,
+  ShieldAlert,
+  ExternalLink,
+  Building2,
+  Loader2,
+} from "lucide-react"
 import {
   Avatar,
   AvatarFallback,
@@ -31,6 +36,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
@@ -50,6 +58,8 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const router = useRouter()
   const [signingOut, setSigningOut] = React.useState(false)
+  const [switchingOrg, setSwitchingOrg] = React.useState<string | null>(null)
+  const [orgs, setOrgs] = React.useState<{ id: string; name: string; slug: string }[]>([])
 
   const initials = (user.name || user.email)
     .split(/[\s@]/g)
@@ -58,13 +68,51 @@ export function NavUser({
     .join("")
     .toUpperCase()
 
+  // Fetch the admin's workspace memberships so they can "view as"
+  // any of them.
+  React.useEffect(() => {
+    let cancelled = false
+    fetch("/api/me/routing", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.orgs) setOrgs(d.orgs)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function viewAsWorkspace(orgId: string) {
+    setSwitchingOrg(orgId)
+    console.log(`[NAV-USER] view as workspace ${orgId}`)
+    try {
+      const r = await fetch("/api/admin/view-as-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: orgId }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const org = orgs.find((o) => o.id === orgId)
+      toast.success(`Switched to ${org?.name ?? "workspace"}`)
+      router.push("/dashboard")
+    } catch (e) {
+      console.error(`[NAV-USER] view-as-workspace failed:`, e)
+      toast.error("Failed to switch workspace")
+    } finally {
+      setSwitchingOrg(null)
+    }
+  }
+
   async function signOut() {
     setSigningOut(true)
+    console.log(`[NAV-USER] sign out ${user.email}`)
     try {
       await authClient.signOut()
       toast.success("Signed out")
       router.push("/login")
     } catch (e) {
+      console.error(`[NAV-USER] sign out failed:`, e)
       toast.error((e as Error).message || "Sign out failed")
       setSigningOut(false)
     }
@@ -160,6 +208,42 @@ export function NavUser({
                 Account settings
               </DropdownMenuItem>
             </DropdownMenuGroup>
+
+            {orgs.length > 0 && (
+              <>
+                <DropdownMenuSeparator className="bg-brand-rule" />
+                <DropdownMenuGroup>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="cursor-pointer">
+                      <Building2 className="mr-2 size-4 text-brand-muted-soft" />
+                      <span>View as workspace</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="min-w-56 border-brand-rule bg-brand-card">
+                      {orgs.map((o) => (
+                        <DropdownMenuItem
+                          key={o.id}
+                          onClick={() => viewAsWorkspace(o.id)}
+                          disabled={switchingOrg === o.id}
+                          className="cursor-pointer"
+                        >
+                          {switchingOrg === o.id ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                          ) : (
+                            <Building2 className="mr-2 size-4 text-brand-muted-soft" />
+                          )}
+                          <span className="flex flex-col">
+                            <span className="text-sm">{o.name}</span>
+                            <span className="font-mono text-[10px] text-brand-muted-soft">
+                              /{o.slug}
+                            </span>
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuGroup>
+              </>
+            )}
 
             <DropdownMenuSeparator className="bg-brand-rule" />
             <DropdownMenuItem

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { db } from "@/lib/db"
-import { eq } from "drizzle-orm"
-import { user } from "@/lib/schema"
+import { and, eq } from "drizzle-orm"
+import { user, member } from "@/lib/schema"
 import { getSession, requireAdmin } from "@/lib/dal"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
@@ -29,9 +29,27 @@ const bodySchema = z.discriminatedUnion("action", [
     action: z.literal("lift-suspension"),
     note: z.string().max(500).optional(),
   }),
+  // "set-role" handles BOTH the platform role (System A) and the
+  // workspace role (System B) in a single call. Pass `memberRole`
+  // to also change the user's role in a specific workspace.
   z.object({
     action: z.literal("set-role"),
     role: z.enum(["user", "admin"]),
+    memberRole: z
+      .object({
+        organizationId: z.string().min(1),
+        role: z.enum([
+          "owner",
+          "admin",
+          "member",
+          "operations_manager",
+          "dispatcher",
+          "accounting",
+          "driver",
+          "safety",
+        ]),
+      })
+      .optional(),
   }),
   z.object({
     action: z.literal("reset-password"),
@@ -154,7 +172,77 @@ export async function POST(
     }
 
     case "set-role": {
-      // Delegate to Better Auth so the session signal fires
+      // Workspace role change (System B) — optional, runs alongside
+      // the platform role change. Better Auth's
+      // organization.updateMemberRole takes a memberId, not a userId;
+      // resolve the membership row first.
+      if (body.memberRole) {
+        try {
+          const [m] = await db
+            .select({ id: member.id, role: member.role })
+            .from(member)
+            .where(
+              and(
+                eq(member.userId, targetUserId),
+                eq(member.organizationId, body.memberRole.organizationId)
+              )
+            )
+            .limit(1)
+          if (!m) {
+            return NextResponse.json(
+              { error: "USER_NOT_IN_ORG" },
+              { status: 404 }
+            )
+          }
+          const upd = await auth.api.updateMemberRole({
+            body: {
+              memberId: m.id,
+              role: body.memberRole.role as any,
+            },
+            headers: await headers(),
+          })
+          const updErr = (upd as any).error
+          if (updErr) {
+            return NextResponse.json(
+              {
+                error:
+                  updErr.code || updErr.message || "Failed to update workspace role",
+              },
+              { status: 400 }
+            )
+          }
+          await recordAuditEvent({
+            actor: { id: admin.userId, email: admin.userEmail },
+            action: "user.set-member-role",
+            target: {
+              type: "user",
+              id: targetUserId,
+              label: target[0].email,
+            },
+            metadata: {
+              organizationId: body.memberRole.organizationId,
+              fromRole: m.role,
+              toRole: body.memberRole.role,
+            },
+          })
+          console.log(
+            `[API/ADMIN-USER-ACTION] ✅ set member role ${m.role}→${body.memberRole.role} for ${target[0].email} in ${body.memberRole.organizationId}`
+          )
+        } catch (err) {
+          console.error(
+            "[API/ADMIN-USER-ACTION] updateMemberRole failed:",
+            err
+          )
+          return NextResponse.json(
+            { error: "Failed to update workspace role" },
+            { status: 500 }
+          )
+        }
+      }
+
+      // Platform role change (System A) — only if role is "user" or
+      // "admin" (the schema is the same, the action handler is
+      // identical regardless of memberRole).
       const setRoleRes = await auth.api.setRole({
         body: { userId: targetUserId, role: body.role },
         headers: await headers(),
@@ -172,9 +260,9 @@ export async function POST(
         target: { type: "user", id: targetUserId, label: target[0].email },
         metadata: { fromRole: target[0].role, toRole: body.role },
       })
-      invalidateCache(["admin:users"])
+      invalidateCache(["admin:users", "session:role"])
       console.log(
-        `[API/ADMIN-USER-ACTION] ✅ set role ${body.role} for ${target[0].email}`
+        `[API/ADMIN-USER-ACTION] ✅ set platform role ${target[0].role}→${body.role} for ${target[0].email}`
       )
       return NextResponse.json({ ok: true })
     }

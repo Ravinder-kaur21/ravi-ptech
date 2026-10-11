@@ -341,7 +341,22 @@ export default function OnboardingPage() {
         setDone(true)
         toast.success("Welcome to Muvx!")
         reset()
-        setTimeout(() => router.push("/dashboard"), 1500)
+        // Route by data role — platform admins go to /admin,
+        // regular users to /dashboard.
+        setTimeout(async () => {
+          try {
+            const r = await fetch("/api/me/routing", { cache: "no-store" })
+            if (r.ok) {
+              const d = (await r.json()) as { destination: string }
+              console.log(`[ONBOARDING] → ${d.destination}`)
+              router.push(d.destination)
+              return
+            }
+          } catch (err) {
+            console.warn("[ONBOARDING] routing fetch failed:", err)
+          }
+          router.push("/dashboard")
+        }, 1500)
       }
     },
     onError: (err: Error) => {

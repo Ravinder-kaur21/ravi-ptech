@@ -12,6 +12,7 @@ import {
 } from "@/lib/dal"
 import { db } from "@/lib/db"
 import { announcement, member, user as userTable } from "@/lib/schema"
+import { isMaintenanceMode } from "@/lib/request-gate"
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +24,16 @@ export default async function DashboardLayout({
   if (!session?.user) {
     console.log("[DASHBOARD-LAYOUT] no session → /login")
     redirect("/login")
+  }
+
+  // [LAYOUT] Gate: maintenance mode. Admins always see the app.
+  const isAdminForGate = await getIsAdmin()
+  if (!isAdminForGate) {
+    const maintenance = await isMaintenanceMode()
+    if (maintenance) {
+      console.log("[DASHBOARD-LAYOUT] maintenance on, non-admin → /maintenance")
+      redirect("/maintenance")
+    }
   }
 
   // [LAYOUT] Gate: must have an active organization

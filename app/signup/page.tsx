@@ -38,6 +38,33 @@ export default function SignupPage() {
     }
 
     try {
+      // Email allow/block check — runs before we hit Better Auth so
+      // the user gets a friendly message instead of a vague 400.
+      console.log("[SIGNUP] checking email policy for", email)
+      const policyRes = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      if (policyRes.ok) {
+        const policy = (await policyRes.json()) as {
+          ok: boolean
+          reason: string | null
+        }
+        if (!policy.ok) {
+          const msg =
+            policy.reason === "blocked_email"
+              ? "This email is blocked from signing up. Contact support if you believe this is a mistake."
+              : policy.reason === "blocked_domain"
+                ? "Signups from this email domain are not allowed."
+                : "Your email is not on the signup allowlist for this workspace."
+          console.warn(`[SIGNUP] blocked: ${policy.reason}`)
+          setError(msg)
+          setLoading(false)
+          return
+        }
+      }
+
       const result = await authClient.emailOtp.sendVerificationOtp({
         email,
         type: "email-verification",
