@@ -18,6 +18,7 @@ import {
   KeyRound,
   MailCheck,
   Filter,
+  ExternalLink,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -70,6 +71,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { UserDetailSheet } from "@/components/admin/user-detail-sheet"
 
 type EnrichedUser = {
   id: string
@@ -112,6 +114,7 @@ export function UsersTable() {
   const pageSize = 25
 
   const [activeUser, setActiveUser] = React.useState<EnrichedUser | null>(null)
+  const [detailOpen, setDetailOpen] = React.useState(false)
   const [banOpen, setBanOpen] = React.useState(false)
   const [unbanOpen, setUnbanOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
@@ -351,12 +354,23 @@ export function UsersTable() {
                           <DropdownMenuItem
                             onClick={() => {
                               setActiveUser(u)
+                              setDetailOpen(true)
+                            }}
+                            className="rounded-md cursor-pointer"
+                          >
+                            <Eye className="mr-2 size-4 text-brand-muted-soft" />
+                            View details
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setActiveUser(u)
                               setImpersonateOpen(true)
                             }}
                             className="rounded-md cursor-pointer"
                             disabled={status !== "active"}
                           >
-                            <Eye className="mr-2 size-4 text-brand-muted-soft" />
+                            <ExternalLink className="mr-2 size-4 text-brand-muted-soft" />
                             Impersonate
                           </DropdownMenuItem>
 
@@ -586,6 +600,17 @@ export function UsersTable() {
           if (!o) closeAll()
         }}
         onSuccess={refresh}
+      />
+
+      {/* ─── User detail drawer (Profile / Sessions / Activity) ─── */}
+      <UserDetailSheet
+        user={activeUser}
+        open={detailOpen}
+        onOpenChange={(o) => {
+          setDetailOpen(o)
+          if (!o) closeAll()
+        }}
+        onMutated={refresh}
       />
     </>
   )

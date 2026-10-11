@@ -29,6 +29,27 @@
       "when": 1791703602764,
       "tag": "0003_wealthy_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791704732921,
+      "tag": "0004_productive_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791704934768,
+      "tag": "0005_public_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791705488850,
+      "tag": "0006_abnormal_nitro",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
+import { and, eq, isNull, lte, gte, or, sql } from "drizzle-orm"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
+import { AnnouncementBanner } from "@/components/announcement-banner"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import {
   getSession,
@@ -8,6 +10,8 @@ import {
   getMembersForOrg,
   getIsAdmin,
 } from "@/lib/dal"
+import { db } from "@/lib/db"
+import { announcement, member, user as userTable } from "@/lib/schema"
 
 export default async function DashboardLayout({
   children,
@@ -28,11 +32,17 @@ export default async function DashboardLayout({
     redirect("/onboarding")
   }
 
-  // [LAYOUT] Fetch the active org, the user's membership, and admin status in parallel
-  const [org, members, isAdmin] = await Promise.all([
+  // [LAYOUT] Fetch the active org, the user's membership, admin status,
+  // and the list of currently-active announcements — all in parallel.
+  const [org, members, isAdmin, activeAnnouncements] = await Promise.all([
     getOrganizationById(orgId),
     getMembersForOrg(orgId),
     getIsAdmin(),
+    fetchActiveAnnouncements({
+      userId: session.user.id,
+      orgId,
+      isAdmin: false, // updated below
+    }),
   ])
 
   // [LAYOUT] If the active org in session doesn't exist (e.g. deleted),
@@ -91,8 +101,61 @@ export default async function DashboardLayout({
           userImage={session.user.image ?? null}
           isImpersonating={!!impersonatedBy}
         />
+        <AnnouncementBanner initial={activeAnnouncements} />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+/**
+ * Server-side fetch of currently-active announcements for a user.
+ * Mirrors the API route used by the polling client component so the
+ * first paint is banner-aware.
+ */
+async function fetchActiveAnnouncements({
+  userId,
+  orgId,
+  isAdmin,
+}: {
+  userId: string
+  orgId: string
+  isAdmin: boolean
+}) {
+  const now = new Date()
+  const visibilityOr = [eq(announcement.scope, "global")]
+  if (isAdmin) visibilityOr.push(eq(announcement.scope, "admins_only"))
+  // All orgs the user belongs to (just the active one in this layout,
+  // but the API endpoint checks all memberships).
+  visibilityOr.push(
+    and(eq(announcement.scope, "org"), eq(announcement.organizationId, orgId))!
+  )
+
+  const rows = await db
+    .select({
+      id: announcement.id,
+      title: announcement.title,
+      body: announcement.body,
+      kind: announcement.kind,
+      dismissible: announcement.dismissible,
+    })
+    .from(announcement)
+    .where(
+      and(
+        or(...visibilityOr)!,
+        or(isNull(announcement.startsAt), lte(announcement.startsAt, now))!,
+        or(isNull(announcement.endsAt), gte(announcement.endsAt, now))!
+      )
+    )
+    .orderBy(announcement.createdAt)
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    body: r.body,
+    kind: r.kind as "info" | "warn" | "success" | "maintenance",
+    dismissible: r.dismissible,
+    link: null as string | null,
+    linkLabel: null as string | null,
+  }))
 }

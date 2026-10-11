@@ -234,6 +234,280 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
 }))
 
 // ─────────────────────────────────────────────────────────────────────────────
+// COMMUNICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `announcement` — in-app banner shown to users.
+//   - kind: "info" | "warn" | "success" | "maintenance"
+//   - scope: "global" (all users) or "org" (one workspace) or "admins_only"
+//   - dismissible: whether the user can hide it
+//   - startsAt / endsAt: optional scheduling
+//
+// `email_broadcast` — a record of every broadcast email sent.
+//   Stores subject, body, audience size, sent count, fail count, and
+//   the Resend batch id (so we can correlate with their dashboard).
+//
+// `email_log` — every transactional email we sent (OTP, reset, etc.)
+//   so admins can debug "did the user get the email?"
+//
+
+export const announcement = pgTable(
+  "announcement",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    kind: text("kind").notNull().default("info"),
+    /** "global" | "org" | "admins_only" */
+    scope: text("scope").notNull().default("global"),
+    /** When scope="org", the target workspace. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    dismissible: boolean("dismissible").notNull().default(true),
+    startsAt: timestamp("starts_at"),
+    endsAt: timestamp("ends_at"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("announcement_scope_idx").on(table.scope, table.startsAt, table.endsAt),
+  ]
+)
+
+export const emailBroadcast = pgTable(
+  "email_broadcast",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    /** "all" | "active_30d" | "admins" | "org:<id>" */
+    audience: text("audience").notNull(),
+    /** Snapshot of the audience size at send time. */
+    audienceSize: text("audience_size").notNull(),
+    sentCount: text("sent_count").notNull().default("0"),
+    failedCount: text("failed_count").notNull().default("0"),
+    /** Resend batch id (optional). */
+    batchId: text("batch_id"),
+    sentBy: text("sent_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("email_broadcast_sentAt_idx").on(table.sentAt),
+  ]
+)
+
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    to: text("to_email").notNull(),
+    subject: text("subject").notNull(),
+    /** "otp" | "broadcast" | "transactional" | "other" */
+    kind: text("kind").notNull().default("transactional"),
+    /** Resend message id */
+    providerId: text("provider_id"),
+    success: boolean("success").notNull(),
+    error: text("error"),
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("email_log_to_idx").on(table.to),
+    index("email_log_sentAt_idx").on(table.sentAt),
+  ]
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE FLAGS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Three-tier feature-flag system.
+//
+//   feature_flag      — the definition (key, name, default value, rollout %)
+//   user_feature_flag — per-user override (highest precedence)
+//   org_feature_flag  — per-org override (medium precedence)
+//
+// Precedence when reading a flag for a (user, org) pair:
+//   1. user_feature_flag (if row exists)
+//   2. org_feature_flag  (if row exists and user is in that org)
+//   3. rollout % bucket against user.id hash
+//   4. feature_flag.default_value
+//
+// Rollout % uses a stable hash of (flag.key + user.id) so the same
+// user always gets the same answer for the same flag.
+
+export const featureFlag = pgTable("feature_flag", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** "boolean" | "string" | "number" */
+  kind: text("kind").notNull().default("boolean"),
+  /** Default value (stringified; the helper parses to kind). */
+  defaultValue: text("default_value").notNull().default("false"),
+  /** 0..100. When 0, only overrides apply. When 100, everyone gets default. */
+  rolloutPercent: text("rollout_percent").notNull().default("0"),
+  /** Admin who created/updated the flag. */
+  updatedBy: text("updated_by").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+})
+
+export const userFeatureFlag = pgTable(
+  "user_feature_flag",
+  {
+    featureFlagKey: text("feature_flag_key")
+      .notNull()
+      .references(() => featureFlag.key, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    value: text("value").notNull(),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("user_feature_flag_user_idx").on(table.userId),
+    index("user_feature_flag_key_idx").on(table.featureFlagKey),
+  ]
+)
+
+export const orgFeatureFlag = pgTable(
+  "org_feature_flag",
+  {
+    featureFlagKey: text("feature_flag_key")
+      .notNull()
+      .references(() => featureFlag.key, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    value: text("value").notNull(),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("org_feature_flag_org_idx").on(table.organizationId),
+    index("org_feature_flag_key_idx").on(table.featureFlagKey),
+  ]
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY & ABUSE-MITIGATION TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `email_allowlist` — only addresses matching one of these patterns can
+//   sign up. Supports exact email or `*@example.com` wildcards. If the
+//   list is non-empty, signup is gated by it.
+//
+// `email_blocklist` — addresses or domain wildcards that are always
+//   rejected. Checked before allowlist.
+//
+// `ip_allowlist` — admin-source IP allowlist. Empty = allow all
+//   (default). When populated, /admin/* requests must originate from
+//   one of these CIDRs.
+//
+// `signup_attempt` — every signup attempt (success or fail) with the
+//   IP, UA, and failure reason. Powers the brute-force dashboard.
+//
+
+export const emailAllowlist = pgTable(
+  "email_allowlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Either an exact email "user@x.com" or a domain wildcard "*@x.com". */
+    pattern: text("pattern").notNull().unique(),
+    reason: text("reason"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("email_allowlist_pattern_idx").on(table.pattern)]
+)
+
+export const emailBlocklist = pgTable(
+  "email_blocklist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pattern: text("pattern").notNull().unique(),
+    reason: text("reason"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("email_blocklist_pattern_idx").on(table.pattern)]
+)
+
+export const ipAllowlist = pgTable(
+  "ip_allowlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** CIDR or single IP. e.g. "203.0.113.0/24" or "203.0.113.5". */
+    cidr: text("cidr").notNull().unique(),
+    label: text("label"),
+    /** Null = never expires. */
+    expiresAt: timestamp("expires_at"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("ip_allowlist_cidr_idx").on(table.cidr)]
+)
+
+export const signupAttempt = pgTable(
+  "signup_attempt",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    /** True if signup was allowed to proceed (account created). */
+    success: boolean("success").notNull(),
+    /** On success: null. On failure: "blocked_email" | "blocked_ip" | "rate_limited" | "invalid_input" | … */
+    reason: text("reason"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("signup_attempt_created_idx").on(table.createdAt),
+    index("signup_attempt_ip_idx").on(table.ipAddress),
+    index("signup_attempt_email_idx").on(table.email),
+  ]
+)
+
+/**
+ * System settings — singleton row, holds cross-cutting toggles
+ * (maintenance mode, signup policy, default ban duration).
+ * Pattern: most-recent row wins; we never delete old rows so we have
+ * a history of who flipped which switch and when.
+ */
+export const systemSetting = pgTable("system_setting", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull(),
+  value: jsonb("value").$type<unknown>(),
+  updatedBy: text("updated_by").references(() => user.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AUDIT LOG
 // ─────────────────────────────────────────────────────────────────────────────
 //

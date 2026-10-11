@@ -37,6 +37,9 @@ const ROUTE_LABELS: Record<string, string> = {
   "/admin/users": "Users",
   "/admin/workspaces": "Workspaces",
   "/admin/appeals": "Appeals",
+  "/admin/security": "Security",
+  "/admin/flags": "Feature flags",
+  "/admin/comms": "Communications",
   "/admin/audit": "Audit log",
 }
 

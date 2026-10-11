@@ -1,4 +1,6 @@
 import { Resend } from "resend"
+import { db } from "@/lib/db"
+import { emailLog } from "@/lib/schema"
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY
@@ -147,6 +149,74 @@ export async function sendOtpEmail({ email, otp, type }: SendOtpParams) {
       console.error("[EMAIL] Error message:", err.message)
       console.error("[EMAIL] Error stack:", err.stack)
     }
+    throw err
+  }
+}
+
+// ─── Generic transactional email (used by broadcasts + admin comms) ─────
+
+/**
+ * sendTransactionalEmail — sends an arbitrary email via Resend and
+ * writes a row to email_log so the admin console can answer
+ * "did the user get the email?" without digging through Resend.
+ *
+ * Best-effort logging: if the log write fails we don't fail the send
+ * (the user already got their email). The opposite — fail the send if
+ * logging fails — would be worse.
+ */
+export async function sendTransactionalEmail(input: {
+  to: string
+  subject: string
+  html: string
+  text?: string
+  kind?: "otp" | "broadcast" | "transactional" | "other"
+}) {
+  const resend = getResendClient()
+  try {
+    const result = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
+    })
+    if (result.error) {
+      await db
+        .insert(emailLog)
+        .values({
+          to: input.to,
+          subject: input.subject,
+          kind: input.kind ?? "transactional",
+          providerId: null,
+          success: false,
+          error: JSON.stringify(result.error),
+        })
+        .catch((e) => console.warn("[EMAIL] log write failed:", e))
+      throw new Error(`Resend error: ${JSON.stringify(result.error)}`)
+    }
+    await db
+      .insert(emailLog)
+      .values({
+        to: input.to,
+        subject: input.subject,
+        kind: input.kind ?? "transactional",
+        providerId: result.data?.id ?? null,
+        success: true,
+        error: null,
+      })
+      .catch((e) => console.warn("[EMAIL] log write failed:", e))
+    return result
+  } catch (err) {
+    await db
+      .insert(emailLog)
+      .values({
+        to: input.to,
+        subject: input.subject,
+        kind: input.kind ?? "transactional",
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      .catch((e) => console.warn("[EMAIL] log write failed:", e))
     throw err
   }
 }

@@ -20,6 +20,9 @@ import {
   Building2,
   Inbox,
   ScrollText,
+  Shield,
+  Flag,
+  Megaphone,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react"
@@ -57,6 +60,21 @@ const ADMIN_NAV: AdminNavItem[] = [
     title: "Appeals",
     href: "/admin/appeals",
     icon: Inbox,
+  },
+  {
+    title: "Security",
+    href: "/admin/security",
+    icon: Shield,
+  },
+  {
+    title: "Feature flags",
+    href: "/admin/flags",
+    icon: Flag,
+  },
+  {
+    title: "Communications",
+    href: "/admin/comms",
+    icon: Megaphone,
   },
   {
     title: "Audit log",
