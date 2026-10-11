@@ -614,6 +614,24 @@ function useAdminAction() {
   })
 }
 
+/** Fire-and-forget audit-event write for client-driven Better Auth calls
+ *  (ban / unban / impersonate / remove) that bypass /api/admin/users/[id]/action. */
+async function recordAudit(
+  userId: string,
+  action: "user.ban" | "user.unban" | "user.impersonate" | "user.remove",
+  metadata?: Record<string, unknown>
+) {
+  try {
+    await fetch(`/api/admin/users/${userId}/audit-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, metadata }),
+    })
+  } catch (err) {
+    console.warn("[ADMIN-USERS] audit-event write failed (non-fatal):", err)
+  }
+}
+
 // ─── BanUserDialog ──────────────────────────────────────────────
 function BanUserDialog({
   user,
@@ -680,11 +698,6 @@ function BanUserDialog({
           <Button
             onClick={async () => {
               const days = durationDays === "permanent" ? undefined : Number(durationDays)
-              await mutation.mutateAsync({
-                userId: user!.id,
-                action: "ban",
-                payload: { reason: reason.trim(), durationDays: days },
-              })
               // Ban uses Better Auth directly via the user's mutation hook;
               // we call it here for the canonical path.
               const r = await authClient.admin.banUser({
@@ -693,6 +706,10 @@ function BanUserDialog({
                 banExpiresIn: days ? days * 24 * 60 * 60 : undefined,
               })
               if (r.error) throw new Error(r.error.message || "Ban failed")
+              await recordAudit(user!.id, "user.ban", {
+                reason: reason.trim(),
+                durationDays: days ?? null,
+              })
               toast.success(`${user?.email} banned`)
               onSuccess()
               onOpenChange(false)
@@ -734,7 +751,8 @@ function UnbanUserDialog({
       if (r.error) throw new Error(r.error.message || "Unban failed")
       return user!.id
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await recordAudit(user!.id, "user.unban")
       toast.success(`${user?.email} unbanned`)
       onSuccess()
       onOpenChange(false)
@@ -1032,7 +1050,8 @@ function RemoveUserDialog({
       if (r.error) throw new Error(r.error.message || "Remove failed")
       return user!.id
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await recordAudit(user!.id, "user.remove")
       toast.success(`${user?.email} deleted`)
       onSuccess()
       onOpenChange(false)
@@ -1090,7 +1109,8 @@ function ImpersonateDialog({
       if (r.error) throw new Error(r.error.message || "Impersonate failed")
       return user!.id
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await recordAudit(user!.id, "user.impersonate")
       toast.success(`Now viewing as ${user?.email}`)
       onOpenChange(false)
       setConfirmText("")

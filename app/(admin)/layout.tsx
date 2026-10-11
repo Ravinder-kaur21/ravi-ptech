@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getSession, requireAdmin } from "@/lib/dal"
+import { getSession, requireAdmin, getAdminStats } from "@/lib/dal"
 import { AdminShell } from "@/components/admin/admin-shell"
 
 export const metadata = {
@@ -38,6 +38,13 @@ export default async function AdminLayout({
     redirect("/dashboard")
   }
 
+  // Pull stats so the sidebar appeals badge is fresh on every nav.
+  // (We only need the count, but stats is one cheap round-trip.)
+  const stats = await getAdminStats().catch((err) => {
+    console.warn("[ADMIN-LAYOUT] stats fetch failed (non-fatal):", err)
+    return { openAppeals: 0, totalUsers: 0, bannedUsers: 0, suspendedUsers: 0, totalOrgs: 0, totalMembers: 0, pendingInvitations: 0 }
+  })
+
   // Pass impersonation state so the banner can render.
   const impersonatedBy =
     (session.session as any).impersonatedBy ?? null
@@ -48,6 +55,7 @@ export default async function AdminLayout({
       userEmail={admin.userEmail}
       userImage={admin.userImage}
       impersonatedBy={impersonatedBy}
+      unreadAppeals={stats.openAppeals}
     >
       {children}
     </AdminShell>

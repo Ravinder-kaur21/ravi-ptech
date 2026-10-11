@@ -1,216 +1,147 @@
-import Link from "next/link"
-import {
-  Users,
-  Building2,
-  ShieldOff,
-  Pause,
-  Inbox,
-  Mail,
-  ScrollText,
-  ArrowUpRight,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react"
-import { getAdminStats } from "@/lib/dal"
-import { Card } from "@/components/ui/card"
+import { requireAdmin, getAdminStats } from "@/lib/dal"
+import { getSession } from "@/lib/dal"
+import { SectionCards } from "@/components/admin/section-cards"
+import { ChartAreaInteractive } from "@/components/admin/chart-area-interactive"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { ShieldCheck, ArrowUpRight, ScrollText, Users, Building2, type LucideIcon } from "lucide-react"
+import Link from "next/link"
 
-// Server actions / dynamic data — opt out of instant-navigation validation
 export const instant = false
 
 export default async function AdminHomePage() {
   console.log("[ADMIN/HOME] rendering")
-  const stats = await getAdminStats()
+  const [admin, stats, session] = await Promise.all([
+    requireAdmin(),
+    getAdminStats(),
+    getSession(),
+  ])
+  const impersonatedBy = (session?.session as any)?.impersonatedBy ?? null
   console.log("[ADMIN/HOME] stats:", stats)
 
   return (
-    <div className="p-6 lg:p-10 space-y-8 max-w-[1200px]">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2.5">
-          <span className="size-[7px] shrink-0 rounded-full bg-brand-accent" />
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-brand-ink">
-            SUPERADMIN CONSOLE
-          </span>
-          <span className="font-mono text-[11px] tracking-[0.04em] text-brand-muted-soft">
-            · SYSTEM-WIDE OVERVIEW
-          </span>
-        </div>
-        <h1 className="mt-4 font-serif text-[clamp(32px,4vw,44px)] leading-[1.05] tracking-tight text-brand-ink">
-          Muvx is <span className="italic text-brand-accent">healthy</span>.
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-brand-ink/80">
-          Manage every user, every workspace, and every audit event across the
-          entire platform. Use with care — admin actions are logged.
-        </p>
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Users}
-          label="Total users"
-          value={stats.totalUsers}
-          href="/admin/users"
-        />
-        <StatCard
-          icon={Pause}
-          label="Suspended"
-          value={stats.suspendedUsers}
-          accent={stats.suspendedUsers > 0 ? "warn" : undefined}
-          href="/admin/users?status=suspended"
-        />
-        <StatCard
-          icon={ShieldOff}
-          label="Banned"
-          value={stats.bannedUsers}
-          accent={stats.bannedUsers > 0 ? "danger" : undefined}
-        />
-        <StatCard
-          icon={Building2}
-          label="Workspaces"
-          value={stats.totalOrgs}
-          href="/admin/workspaces"
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Inbox}
-          label="Open appeals"
-          value={stats.openAppeals}
-          accent={stats.openAppeals > 0 ? "info" : undefined}
-          href="/admin/appeals"
-        />
-        <StatCard
-          icon={Mail}
-          label="Pending invites"
-          value={stats.pendingInvitations}
-        />
-        <StatCard
-          icon={Users}
-          label="Total members"
-          value={stats.totalMembers}
-        />
-        <div />
-      </div>
-
-      {/* Quick actions */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-serif text-lg text-brand-ink">
-              <span className="italic text-brand-accent">Quick actions</span>
-            </h2>
-            <Badge variant="outline" className="font-mono text-[10px]">
+    <>
+      {/* ── Page title row (replaces the old bespoke header) ── */}
+      <div className="px-4 lg:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="size-1.5 shrink-0 rounded-full bg-brand-accent" />
+              <span className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-ink">
+                SUPERADMIN CONSOLE
+              </span>
+              <span className="font-mono text-[10px] tracking-[0.04em] text-brand-muted-soft">
+                · SYSTEM-WIDE OVERVIEW
+              </span>
+            </div>
+            <h1 className="mt-2 font-serif text-[clamp(28px,3.5vw,40px)] leading-[1.05] tracking-tight text-brand-ink">
+              Welcome back, <span className="italic text-brand-accent">{admin.userName.split(" ")[0]}</span>.
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-[13px] text-brand-ink/70">
+              Every user, every workspace, every audit event — in one place.
+              Use with care. Every action is logged.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="border-brand-rule bg-brand-card font-mono text-[10px] uppercase tracking-[0.04em]">
+              <ShieldCheck className="mr-1 size-3" />
               v1
             </Badge>
           </div>
-          <div className="space-y-2">
+        </div>
+      </div>
+
+      {/* ── KPI strip ── */}
+      <SectionCards stats={stats} impersonatedBy={impersonatedBy} />
+
+      {/* ── Signups chart ── */}
+      <div className="px-4 lg:px-6">
+        <ChartAreaInteractive />
+      </div>
+
+      {/* ── Quick actions + safety card (the "row 3" from the old design) ── */}
+      <div className="grid gap-4 px-4 lg:px-6 @5xl/main:grid-cols-3">
+        <Card className="border-brand-rule bg-brand-card @xl/main:col-span-2">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg tracking-tight text-brand-ink">
+              <span className="italic text-brand-accent">Quick actions</span>
+            </CardTitle>
+            <CardDescription className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+              The four actions you'll use most
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
             <QuickAction
               href="/admin/users"
               icon={Users}
               label="Manage users"
-              hint="Search, ban, impersonate, set role, remove"
+              hint="Search, ban, suspend, impersonate, set role, delete"
             />
             <QuickAction
               href="/admin/workspaces"
               icon={Building2}
               label="Manage workspaces"
-              hint="View every organization, delete test workspaces"
+              hint="View every organization across every tenant"
+            />
+            <QuickAction
+              href="/admin/appeals"
+              icon={ShieldCheck}
+              label="Review appeals"
+              hint={`${stats.openAppeals} open · ${stats.suspendedUsers} active suspensions`}
             />
             <QuickAction
               href="/admin/audit"
               icon={ScrollText}
               label="Audit log"
-              hint="Trace admin actions across the platform"
+              hint="Trace every admin action across the platform"
             />
-          </div>
+          </CardContent>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-6 space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="size-4 text-brand-accent" />
-            <h2 className="font-serif text-lg text-brand-ink">
-              <span className="italic text-brand-accent">Safety</span>
-            </h2>
-          </div>
-          <ul className="space-y-2.5 text-sm text-brand-ink/80">
-            <li>
-              <strong className="text-brand-ink">Impersonation</strong> lasts
-              30 minutes. The amber banner above the chrome tells you when it
-              is active.
-            </li>
-            <li>
-              <strong className="text-brand-ink">Banning a user</strong>{" "}
-              revokes all their sessions immediately. Default expiry is 30 days.
-            </li>
-            <li>
-              <strong className="text-brand-ink">Removing a user</strong>{" "}
-              deletes them and every record that points at them. There is no
-              undo.
-            </li>
-            <li>
-              <strong className="text-brand-ink">Removing a workspace</strong>{" "}
-              deletes the org and every tenant record (loads, drivers, etc.).
-              There is no undo.
-            </li>
-          </ul>
+        <Card className="border-brand-rule bg-brand-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-serif text-lg tracking-tight text-brand-ink">
+              <ShieldCheck className="size-4 text-brand-accent" />
+              <span>
+                <span className="italic text-brand-accent">Safety</span> reminders
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-[12.5px] text-brand-ink/80">
+            <SafetyLine>
+              <strong className="text-brand-ink">Impersonation</strong> lasts 30
+              minutes. The amber banner at the top of every screen tells you
+              when it's active.
+            </SafetyLine>
+            <SafetyLine>
+              <strong className="text-brand-ink">Banning</strong> revokes all
+              sessions immediately and offers no appeal screen — the user
+              cannot get back in until you unban them.
+            </SafetyLine>
+            <SafetyLine>
+              <strong className="text-brand-ink">Deleting a user</strong>{" "}
+              cascades through sessions, accounts, memberships, and
+              invitations. There is no undo.
+            </SafetyLine>
+            <SafetyLine>
+              <strong className="text-brand-ink">Deleting a workspace</strong>{" "}
+              removes the org and every tenant record (loads, drivers,
+              invoices, …). There is no undo.
+            </SafetyLine>
+            <Button
+              render={<Link href="/admin/audit" />}
+              variant="outline"
+              size="sm"
+              className="mt-2 h-8 w-full border-brand-rule text-brand-ink hover:bg-brand-cream-soft"
+            >
+              Open the audit log
+              <ArrowUpRight className="ml-1.5 size-3.5" />
+            </Button>
+          </CardContent>
         </Card>
       </div>
-    </div>
-  )
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  href,
-  accent,
-}: {
-  icon: LucideIcon
-  label: string
-  value: number
-  href?: string
-  accent?: "warn" | "danger" | "info"
-}) {
-  const accentClass =
-    accent === "warn"
-      ? "bg-amber-100 text-amber-900"
-      : accent === "danger"
-        ? "bg-red-100 text-red-900"
-        : accent === "info"
-          ? "bg-blue-100 text-blue-900"
-          : "bg-brand-accent-tint text-brand-accent"
-  const inner = (
-    <Card
-      className={`border-brand-rule bg-brand-card p-5 transition-colors ${
-        href ? "hover:border-brand-ink/30 cursor-pointer" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className={`flex size-9 items-center justify-center rounded-lg ${accentClass}`}
-        >
-          <Icon className="h-4 w-4" strokeWidth={1.8} />
-        </div>
-        {href && (
-          <ArrowUpRight className="size-4 text-brand-muted-soft" />
-        )}
-      </div>
-      <p className="font-serif text-3xl tracking-tight text-brand-ink">
-        {value.toLocaleString()}
-      </p>
-      <p className="text-xs mt-0.5 text-brand-muted-soft">{label}</p>
-    </Card>
-  )
-  return href ? (
-    <Link href={href} className="block">
-      {inner}
-    </Link>
-  ) : (
-    inner
+    </>
   )
 }
 
@@ -219,37 +150,33 @@ function QuickAction({
   icon: Icon,
   label,
   hint,
-  badge,
 }: {
   href: string
   icon: LucideIcon
   label: string
   hint: string
-  badge?: number
 }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-lg p-2.5 -mx-2.5 hover:bg-brand-cream-soft transition-colors group"
+      className="group flex items-center gap-3 rounded-lg border border-brand-rule bg-brand-card p-3 transition-all hover:border-brand-ink/30 hover:shadow-sm"
     >
-      <div className="flex size-9 items-center justify-center rounded-md bg-brand-ink text-brand-cream group-hover:bg-brand-ink-soft">
-        <Icon className="h-4 w-4" />
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand-ink text-brand-cream">
+        <Icon className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-brand-ink">{label}</p>
-          {badge !== undefined && badge > 0 && (
-            <Badge
-              variant="outline"
-              className="border-blue-300 bg-blue-50 text-blue-900 font-mono text-[9px] uppercase tracking-[0.04em]"
-            >
-              {badge}
-            </Badge>
-          )}
-        </div>
-        <p className="text-[11px] text-brand-muted-soft">{hint}</p>
+        <p className="text-sm font-medium text-brand-ink">{label}</p>
+        <p className="line-clamp-1 text-[11px] text-brand-muted-soft">{hint}</p>
       </div>
-      <ArrowUpRight className="h-4 w-4 text-brand-muted-soft group-hover:text-brand-ink" />
+      <ArrowUpRight className="size-4 text-brand-muted-soft transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand-ink" />
     </Link>
+  )
+}
+
+function SafetyLine({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 border-l-2 border-brand-rule pl-3 leading-relaxed">
+      <span className="block">{children}</span>
+    </div>
   )
 }

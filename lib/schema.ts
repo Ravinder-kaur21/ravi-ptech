@@ -7,6 +7,7 @@ import {
   varchar,
   pgEnum,
   index,
+  jsonb,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
@@ -231,6 +232,58 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
     references: [user.id],
   }),
 }))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Append-only audit log. Every admin action (ban, suspend, set role,
+// impersonate, delete user, delete org, …) writes one row.
+//
+// `hash` is SHA-256 of the previous row's hash + the current row's
+// canonical payload — a tamper-evident chain. `prevHash` is stored
+// explicitly so a verifier can walk the chain without a join.
+//
+// We do NOT add update/delete mutations in app code. The only writer
+// is lib/audit.ts (server-side). If a row needs correcting, write a
+// compensating "amendment" row that points at the original.
+//
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    actorEmail: text("actor_email").notNull(),
+    // "user.ban" | "user.unban" | "user.suspend" | "user.lift-suspension" |
+    // "user.set-role" | "user.reset-password" | "user.force-verify-email" |
+    // "user.remove" | "user.impersonate" | "appeal.resolve" |
+    // "org.delete" | "session.revoke" | "session.revoke-all" |
+    // "system.maintenance" | "system.announcement" | …
+    action: text("action").notNull(),
+    // "user" | "org" | "appeal" | "session" | "system" | "billing"
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id"),
+    // Denormalized display label (email / org name / system message)
+    targetLabel: text("target_label"),
+    // Free-form context (reason, duration, payload, before/after diffs)
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    // Hash chain — set in lib/audit.ts on insert
+    prevHash: text("prev_hash"),
+    hash: text("hash"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_log_createdAt_idx").on(table.createdAt),
+    index("audit_log_actorId_idx").on(table.actorId),
+    index("audit_log_action_idx").on(table.action),
+    index("audit_log_target_idx").on(table.targetType, table.targetId),
+  ]
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TMS TABLES (Your business data - all with tenantId for multi-tenancy)

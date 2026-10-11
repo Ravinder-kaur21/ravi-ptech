@@ -7,6 +7,7 @@ import { getSession, requireAdmin } from "@/lib/dal"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { invalidateCache } from "@/lib/cache-tags"
+import { recordAuditEvent } from "@/lib/audit"
 
 /**
  * Admin action endpoint for a single user.
@@ -118,6 +119,12 @@ export async function POST(
       } catch (err) {
         console.warn("[API/ADMIN-USER-ACTION] revoke sessions failed:", err)
       }
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "user.suspend",
+        target: { type: "user", id: targetUserId, label: target[0].email },
+        metadata: { reason: body.reason, durationDays: body.durationDays },
+      })
       invalidateCache(["admin:users", "admin:stats", "admin:appeals"])
       console.log(`[API/ADMIN-USER-ACTION] ✅ suspended ${target[0].email}`)
       return NextResponse.json({ ok: true })
@@ -135,6 +142,12 @@ export async function POST(
           appealResolvedBy: admin.userId,
         })
         .where(eq(user.id, targetUserId))
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "user.lift-suspension",
+        target: { type: "user", id: targetUserId, label: target[0].email },
+        metadata: { note: body.note ?? null },
+      })
       invalidateCache(["admin:users", "admin:stats", "admin:appeals"])
       console.log(`[API/ADMIN-USER-ACTION] ✅ lifted suspension for ${target[0].email}`)
       return NextResponse.json({ ok: true })
@@ -153,6 +166,12 @@ export async function POST(
           { status: 400 }
         )
       }
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "user.set-role",
+        target: { type: "user", id: targetUserId, label: target[0].email },
+        metadata: { fromRole: target[0].role, toRole: body.role },
+      })
       invalidateCache(["admin:users"])
       console.log(
         `[API/ADMIN-USER-ACTION] ✅ set role ${body.role} for ${target[0].email}`
@@ -172,6 +191,11 @@ export async function POST(
           { status: 400 }
         )
       }
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "user.reset-password",
+        target: { type: "user", id: targetUserId, label: target[0].email },
+      })
       console.log(
         `[API/ADMIN-USER-ACTION] ✅ password reset for ${target[0].email}`
       )
@@ -183,6 +207,11 @@ export async function POST(
         .update(user)
         .set({ emailVerified: true })
         .where(eq(user.id, targetUserId))
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "user.force-verify-email",
+        target: { type: "user", id: targetUserId, label: target[0].email },
+      })
       invalidateCache(["admin:users"])
       console.log(
         `[API/ADMIN-USER-ACTION] ✅ force-verified email for ${target[0].email}`
@@ -207,6 +236,12 @@ export async function POST(
             : {}),
         })
         .where(eq(user.id, targetUserId))
+      await recordAuditEvent({
+        actor: { id: admin.userId, email: admin.userEmail },
+        action: "appeal.resolve",
+        target: { type: "appeal", id: targetUserId, label: target[0].email },
+        metadata: { decision: body.decision, note: body.note ?? null },
+      })
       invalidateCache(["admin:users", "admin:stats", "admin:appeals"])
       console.log(
         `[API/ADMIN-USER-ACTION] ✅ appeal ${body.decision} for ${target[0].email}`

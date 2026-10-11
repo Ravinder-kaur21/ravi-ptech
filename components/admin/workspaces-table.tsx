@@ -110,8 +110,18 @@ export function WorkspacesTable() {
       if (error) throw new Error(error.message || "Failed to delete workspace")
       return org.id
     },
-    onSuccess: (orgId) => {
+    onSuccess: async (orgId) => {
       console.log("[ADMIN-WORKSPACES] ✅ deleted", orgId)
+      // Audit log the delete (fire-and-forget — the workspace is already gone)
+      try {
+        await fetch(`/api/admin/users/${orgId}/audit-event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "org.delete" }),
+        })
+      } catch (err) {
+        console.warn("[ADMIN-WORKSPACES] audit-event write failed (non-fatal):", err)
+      }
       toast.success(`Workspace deleted`)
       queryClient.invalidateQueries({ queryKey: ["admin-orgs"] })
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] })

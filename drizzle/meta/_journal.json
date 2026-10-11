@@ -22,6 +22,13 @@
       "when": 1791542758377,
       "tag": "0002_admin_states",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791703602764,
+      "tag": "0003_wealthy_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }
