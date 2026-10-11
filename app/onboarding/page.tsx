@@ -623,7 +623,7 @@ export default function OnboardingPage() {
               type="button"
               onClick={handleSubmit}
               disabled={!isStepValid(currentStep) || submitMutation.isPending}
-              className={cn("btn-primary", "max-w-[260px]")}
+              className="h-9 px-4 inline-flex items-center justify-center rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm transition-colors"
             >
               {submitMutation.isPending ? (
                 <>
@@ -833,8 +833,8 @@ function StepOperation({
         <div>
           <label htmlFor="fleet-size" className="field-label">Fleet size</label>
           <Select value={fleetSize} onValueChange={(v) => onFleetSizeChange(v as FleetSize)}>
-            <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
-              <SelectValue placeholder="Select…" />
+            <SelectTrigger className="w-full h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
+              <SelectValue placeholder="Select fleet size…" />
             </SelectTrigger>
             <SelectContent>
               {FLEET_SIZE_OPTIONS.map((o) => (
@@ -848,8 +848,8 @@ function StepOperation({
       <div>
         <label htmlFor="team-size" className="field-label">Team size</label>
         <Select value={teamSize} onValueChange={(v) => onTeamSizeChange(v as TeamSize)}>
-          <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
-            <SelectValue placeholder="Select…" />
+          <SelectTrigger className="w-full h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
+            <SelectValue placeholder="Select team size…" />
           </SelectTrigger>
           <SelectContent>
             {TEAM_SIZE_OPTIONS.map((o) => (
@@ -862,8 +862,8 @@ function StepOperation({
       <div>
         <label htmlFor="scope" className="field-label">Geographic scope</label>
         <Select value={geographicScope} onValueChange={(v) => onScopeChange(v as GeographicScope)}>
-          <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
-            <SelectValue placeholder="Select…" />
+          <SelectTrigger className="w-full h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
+            <SelectValue placeholder="Select geographic scope…" />
           </SelectTrigger>
           <SelectContent>
             {SCOPE_OPTIONS.map((o) => (
@@ -895,8 +895,8 @@ function StepCurrent({
           How do you manage freight today?
         </label>
         <Select value={currentTool} onValueChange={(v) => onToolChange(v as CurrentTool)}>
-          <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
-            <SelectValue placeholder="Select…" />
+          <SelectTrigger className="w-full h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
+            <SelectValue placeholder="Select an option…" />
           </SelectTrigger>
           <SelectContent>
             {TOOL_OPTIONS.map((o) => (
@@ -984,7 +984,7 @@ function StepTeam({
                   value={inv.role}
                   onValueChange={(v) => onUpdate(i, { role: v as TeamRole })}
                 >
-                  <SelectTrigger className="h-10 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20 text-sm">
+                  <SelectTrigger className="w-full h-10 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
