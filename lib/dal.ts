@@ -433,6 +433,42 @@ export const getOrganizationById = async (orgId: string) => {
   return result ?? null
 }
 
+/** Phase 3 (WS-09) — full workspace profile for /settings/workspace. */
+export const getWorkspaceProfile = async (orgId: string) => {
+  console.log("[DAL] getWorkspaceProfile", orgId)
+  try {
+    const [row] = await db
+      .select({
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        logo: organization.logo,
+        businessType: organization.businessType,
+        dotNumber: organization.dotNumber,
+        mcNumber: organization.mcNumber,
+        ein: organization.ein,
+        phone: organization.phone,
+        addressLine1: organization.addressLine1,
+        addressLine2: organization.addressLine2,
+        city: organization.city,
+        state: organization.state,
+        postalCode: organization.postalCode,
+        country: organization.country,
+        defaultCurrency: organization.defaultCurrency,
+        timeZone: organization.timeZone,
+        fiscalYearStart: organization.fiscalYearStart,
+      })
+      .from(organization)
+      .where(eq(organization.id, orgId))
+      .limit(1)
+    console.log("[DAL] getWorkspaceProfile result:", row ? "found" : "null")
+    return row ?? null
+  } catch (e) {
+    console.error("[DAL] getWorkspaceProfile FAILED:", e)
+    throw e
+  }
+}
+
 export const getMembersForOrg = async (orgId: string) => {
   return db
     .select()

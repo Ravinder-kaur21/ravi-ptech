@@ -614,7 +614,7 @@ export default function OnboardingPage() {
               type="button"
               onClick={handleNext}
               disabled={!isStepValid(currentStep) || checkingSlug}
-              className={cn("btn-primary", "max-w-[200px]")}
+              className="h-9 px-4 inline-flex items-center justify-center rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm transition-colors"
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
             </Button>

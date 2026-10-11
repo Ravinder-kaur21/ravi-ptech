@@ -71,6 +71,13 @@
       "when": 1791719685112,
       "tag": "0009_dizzy_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791727758063,
+      "tag": "0010_slim_valeria_richards",
+      "breakpoints": true
     }
   ]
 }

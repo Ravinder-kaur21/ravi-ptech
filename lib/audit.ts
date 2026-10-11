@@ -78,6 +78,7 @@ export type AuditAction =
   | "truck.create"
   | "truck.update"
   | "truck.delete"
+  | "workspace.update"
 
 export type AuditTargetType =
   | "user"
@@ -97,6 +98,7 @@ export type AuditTargetType =
   | "trip"
   | "driver"
   | "truck"
+  | "workspace"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }

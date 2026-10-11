@@ -141,6 +141,27 @@ export const organization = pgTable("organization", {
   suspendedBy: text("suspended_by").references(() => user.id, {
     onDelete: "set null",
   }),
+
+  // ─── Phase 3 — workspace profile (WS-09, WS-10, WS-14) ───────────────────
+  // Operational / regulatory fields surfaced on /settings/workspace.
+  // businessType controls dispatcher/ops defaults; dotNumber / mcNumber
+  // are the FMCSA-issued identifiers for US carriers. currency + timeZone
+  // + fiscalYearStart set the financial + scheduling defaults used by
+  // later invoice/payroll modules.
+  businessType: text("business_type"), // "broker" | "carrier" | "shipper" | "3pl" | "other"
+  dotNumber: text("dot_number"),
+  mcNumber: text("mc_number"),
+  ein: text("ein"),
+  phone: text("phone"),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+  country: text("country").default("US"),
+  defaultCurrency: text("default_currency").notNull().default("USD"),
+  timeZone: text("time_zone").notNull().default("America/Chicago"),
+  fiscalYearStart: text("fiscal_year_start").notNull().default("01-01"), // MM-DD
 })
 
 export const member = pgTable(

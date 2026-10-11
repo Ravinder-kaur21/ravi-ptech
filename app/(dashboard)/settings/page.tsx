@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowRight, Settings, Users, Building2, CreditCard, Plug } from "lucide-react"
+import { ArrowRight, Settings, Users, Building2, CreditCard, Plug, ShieldCheck } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { getSession } from "@/lib/dal"
 import { cn } from "@/lib/utils"
@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   const groups = [
     {
       title: "Workspace",
-      description: "Name, URL, and brand of your TMS.",
+      description: "Name, URL, regulatory IDs, address, and ops defaults.",
       href: "/settings/workspace",
       icon: Building2,
     },
@@ -23,6 +23,12 @@ export default async function SettingsPage() {
       description: "Invite dispatchers, drivers, and accountants.",
       href: "/settings/team",
       icon: Users,
+    },
+    {
+      title: "Roles & permissions",
+      description: "Predefined roles and the effective permission matrix.",
+      href: "/settings/roles",
+      icon: ShieldCheck,
     },
     {
       title: "Billing",
