@@ -54,8 +54,15 @@ export default function VerifySignupPage() {
         return
       }
 
-      // Get the signup data (name + password)
+      // Get the signup data (name + password) and any ?next= forwarded
+      // from the signup page. If the user came in via an invite link,
+      // signup_next points back at /invite/[id] and we honor it after
+      // the account exists instead of dropping them on /onboarding.
       const signupData = localStorage.getItem("signup_data")
+      const signupNext = localStorage.getItem("signup_next")
+      localStorage.removeItem("signup_data")
+      localStorage.removeItem("signup_next")
+
       if (signupData) {
         const { name, password } = JSON.parse(signupData)
 
@@ -67,20 +74,19 @@ export default function VerifySignupPage() {
           name,
         })
 
-        // Clear stored data
-        localStorage.removeItem("signup_data")
-
         if (signUpResult.error) {
           setError(signUpResult.error.message || "Failed to create account")
           setLoading(false)
           return
         }
 
-        // Redirect to onboarding
-        router.push("/onboarding")
+        // Honor the deep link if present and safe (same-origin path).
+        // Falls back to /onboarding when no ?next= was forwarded.
+        const destination =
+          signupNext && signupNext.startsWith("/") ? signupNext : "/onboarding"
+        console.log(`[SIGNUP-VERIFY] → ${destination}`)
+        router.push(destination)
       } else {
-        // No signup data found, redirect to login
-        localStorage.removeItem("signup_data")
         router.push("/login")
       }
     } catch (err) {

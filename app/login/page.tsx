@@ -2,8 +2,18 @@
 
 import { LoginForm } from "@/components/login-form"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
+  // Honor ?next= through to the signup page so a recipient who clicks
+  // "Create account" from an invite link is routed back to the invite
+  // after creating the account (instead of being dropped on /onboarding).
+  const next = searchParams.get("next") ?? ""
+  const signupHref = next
+    ? `/signup?next=${encodeURIComponent(next)}`
+    : "/signup"
+
   return (
     <div className="min-h-screen bg-brand-cream flex flex-col">
       {/* Top bar */}
@@ -19,7 +29,7 @@ export default function LoginPage() {
               WELCOME BACK
             </span>
             <Link
-              href="/signup"
+              href={signupHref}
               className="font-geist text-sm font-medium text-[#4a4e57] hover:text-brand-ink transition-colors"
             >
               Create account

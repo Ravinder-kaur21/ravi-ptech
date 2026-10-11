@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,12 @@ import { Loader2, Truck, ArrowRight } from "lucide-react"
 
 export default function SignupPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Capture ?next= from URL so an invite-link recipient who clicks
+  // "Create account" can be routed back to /invite/[id] after signup
+  // (instead of being dropped on /onboarding). Also pre-fill the email
+  // State first so the deep-link effect below can reference setEmail.
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
   const [password, setPassword] = useState("")
@@ -19,6 +25,28 @@ export default function SignupPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+
+  // Capture ?next= from URL so an invite-link recipient who clicks
+  // "Create account" can be routed back to /invite/[id] after signup
+  // (instead of being dropped on /onboarding). Also pre-fill the email
+  // when ?email= is present (the invite-acceptance deep link uses
+  // /signup?email=...&next=/invite/[id]).
+  const [nextPath, setNextPath] = useState<string | null>(null)
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const next = searchParams.get("next")
+    if (next && next.startsWith("/")) {
+      console.log("[SIGNUP] post-signup redirect →", next)
+      setNextPath(next)
+    }
+    const prefillEmail = searchParams.get("email")
+    if (prefillEmail && prefillEmail.includes("@")) {
+      console.log("[SIGNUP] pre-filling email from query:", prefillEmail)
+      setEmail((cur) => (cur ? cur : prefillEmail))
+    }
+  }, [searchParams])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,8 +103,19 @@ export default function SignupPage() {
         setLoading(false)
         return
       }
-      localStorage.setItem("signup_data", JSON.stringify({ email, name, password }))
-      console.log("[SIGNUP] ✅ OTP sent")
+      // Forward `next` so /signup/verify can redirect after sign-up.
+      // Stored in localStorage because the OTP-verify step is its own
+      // route and we can't pass state across it cleanly.
+      localStorage.setItem(
+        "signup_data",
+        JSON.stringify({ email, name, password }),
+      )
+      if (nextPath) {
+        localStorage.setItem("signup_next", nextPath)
+      } else {
+        localStorage.removeItem("signup_next")
+      }
+      console.log("[SIGNUP] ✅ OTP sent", { nextPath })
       router.push("/signup/verify")
     } catch (err) {
       console.error("[SIGNUP] Signup error:", err)

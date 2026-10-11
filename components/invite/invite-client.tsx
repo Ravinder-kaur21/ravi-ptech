@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
+import Link from "next/link"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
@@ -198,8 +199,34 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
               <strong>{sessionUser?.email}</strong>.
             </p>
             <p className="mt-2 text-xs text-brand-muted-soft">
-              Sign out and use the original email to accept.
+              Sign out and use the original email to accept, or create a new
+              account with the invited email.
             </p>
+            <div className="mt-6 flex flex-col sm:flex-row gap-2 sm:justify-center">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  console.log("[INVITE] sign out → retry invite as invited email")
+                  await authClient.signOut()
+                  router.replace(
+                    `/login?next=${encodeURIComponent(`/invite/${invitationId}`)}`,
+                  )
+                }}
+                className="h-10 px-5 border-brand-rule hover:bg-brand-cream"
+              >
+                Sign out
+              </Button>
+              <Button
+                render={
+                  <Link
+                    href={`/signup?email=${encodeURIComponent(invitation.email)}&next=${encodeURIComponent(`/invite/${invitationId}`)}`}
+                    className="h-10 px-5 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream inline-flex items-center justify-center gap-2 rounded-full"
+                  />
+                }
+              >
+                Sign up with this email
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="py-4">
