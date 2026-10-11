@@ -220,3 +220,118 @@ export async function sendTransactionalEmail(input: {
     throw err
   }
 }
+
+// ─── Workspace invitation email (Phase 1 — WS-16, WS-18) ────────────────
+
+/**
+ * sendInvitationEmail — workspace invite email.
+ *
+ * Called by Better Auth's `organization({ sendInvitationEmail })` config
+ * callback (registered in lib/auth.ts). Without this callback,
+ * `authClient.organization.inviteMember()` silently inserts a row but
+ * never sends mail — that was the root cause of WS-16/WS-18 being broken.
+ *
+ * Better Auth passes one `data` argument:
+ *   - data.id                       invitation row id (used in accept URL)
+ *   - data.email                    invitee
+ *   - data.role                     "admin" | "dispatcher" | ...
+ *   - data.inviter                  { id, name, email }  (the user who sent it)
+ *   - data.organization             { id, name, slug, ... }
+ *   - data.invitation.expiresAt     Date  (we read it from here)
+ *
+ * Build an accept link `${baseUrl}/invite/${data.id}` and send via
+ * sendTransactionalEmail so the row lands in `email_log` (admin console
+ * can answer "did the user get the invite?" without opening Resend).
+ */
+export async function sendInvitationEmail(data: {
+  id: string
+  email: string
+  role: string
+  inviter: { id: string; name: string; email: string }
+  organization: {
+    id: string
+    name: string
+    slug: string
+    createdAt?: Date
+    logo?: string | null
+    metadata?: unknown
+  }
+  expiresAt: Date
+}) {
+  console.log("[EMAIL] === sendInvitationEmail called ===")
+  console.log("[EMAIL] Params:", {
+    id: data.id,
+    email: data.email,
+    role: data.role,
+    org: data.organization?.name,
+    inviter: data.inviter?.email,
+  })
+
+  const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000"
+  const acceptUrl = `${baseUrl}/invite/${data.id}`
+  const inviterName = data.inviter?.name || data.inviter?.email || "A teammate"
+  const roleLabel = data.role || "member"
+  const orgName = data.organization?.name || "a Muvx workspace"
+  const expiresAtText = new Date(data.expiresAt).toLocaleDateString()
+
+  const subject = `Join ${orgName} on Muvx`
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto;">
+      <div style="background: #16181d; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+        <h1 style="color: #f5f2ec; font-size: 24px; margin: 0;">Muvx</h1>
+      </div>
+      <div style="background: #ffffff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e5e5e5;">
+        <p style="color: #4a4e57; font-size: 16px; margin: 0 0 8px;">
+          <b>${escapeHtml(inviterName)}</b> invited you to join
+        </p>
+        <p style="color: #16181d; font-size: 20px; font-weight: 600; margin: 0 0 24px;">
+          ${escapeHtml(orgName)}
+        </p>
+        <p style="color: #4a4e57; font-size: 14px; margin: 0 0 24px;">
+          as a <b>${escapeHtml(roleLabel)}</b>.
+        </p>
+        <div style="text-align: center; margin: 0 0 24px;">
+          <a href="${acceptUrl}" style="display: inline-block; background: #16181d; color: #f5f2ec; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            Accept invitation
+          </a>
+        </div>
+        <p style="color: #73757a; font-size: 14px; margin: 24px 0 0;">
+          This link expires on <b>${expiresAtText}</b>.
+        </p>
+        <p style="color: #94a3b8; font-size: 12px; margin: 16px 0 0; word-break: break-all;">
+          Or paste this URL:<br/>
+          <code style="background: #f5f2ec; padding: 4px 6px; border-radius: 4px;">${acceptUrl}</code>
+        </p>
+      </div>
+    </div>
+  `
+
+  const text =
+    `${inviterName} invited you to join ${orgName} on Muvx as ${roleLabel}.\n` +
+    `Accept: ${acceptUrl}\n` +
+    `Expires ${expiresAtText}.`
+
+  console.log("[EMAIL] Sending invitation email via sendTransactionalEmail…")
+  return sendTransactionalEmail({
+    to: data.email,
+    subject,
+    html,
+    text,
+    kind: "transactional",
+  })
+}
+
+/**
+ * Escape the few HTML-special chars so an untrusted inviter name or
+ * workspace name can't inject markup. We don't expect either to
+ * contain tags, but defense-in-depth is cheap.
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}

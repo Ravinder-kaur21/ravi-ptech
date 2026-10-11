@@ -48,8 +48,26 @@ export const administrator = ac.newRole({
   ...FULL_TMS,
 })
 
+/**
+ * Bare "member" — no special TMS role. Can see TMS records (loads/trips/
+ * drivers/trucks/invoices) but cannot mutate them. BA's `defaultStatements`
+ * (`update`/`delete` on member/invitation/organization) doesn't include read;
+ * per Better Auth's strict-typed access-control, attempting to grant
+ * `["read"]` on those resources is a type error. We grant read on TMS
+ * resources only; access to the BA member/invitation/organization
+ * resources is intentionally empty (the default-deny policy applies).
+ *
+ * Note: earlier revisions used `ac: ["read"]` which was a typo (`ac`
+ * is not a resource) — that role received zero effective permissions and
+ * every `checkRolePermission` returned false. Documented here so the
+ * mistake doesn't come back.
+ */
 export const member = ac.newRole({
-  ac: ["read"],
+  load: ["read"],
+  trip: ["read"],
+  driver: ["read"],
+  truck: ["read"],
+  invoice: ["read"],
 })
 
 /** Full ops access — loads, trips, fleet, drivers. */

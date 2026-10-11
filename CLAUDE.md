@@ -1,10 +1,16 @@
 # Rules (strict)
-1. Never assume. No estimated or workaround code. Before writing ANY code (even tiny), read the official docs/source via MCP and copy the exact official code.
-2. UI: use the shadcn MCP. Match official shadcn docs exactly; use as many fitting components as possible, in our design language.
+
+## Process
+1. Never assume. Before writing ANY code, read the official docs/source via MCP and use the exact official code. No estimated or workaround code.
+2. UI: use the shadcn MCP; match official docs exactly; use as many fitting components as possible in our design language.
 3. Auth: use the Better Auth MCP only.
-4. Research current design and best practices for each task. No generic code. Find gaps like a real engineer.
-5. Check for relevant skills first; if none, research.
-6. If I report an error, assume official-docs code wasn't used. Re-check the docs and rewrite with official code only.
-7. Mention better new UI libraries when relevant. Prioritize UX and fully deliver the requested feature.
-8. Compact context regularly. Keep replies short. 
-### if you have followed all rules print in final response "bund-tka-ke-mari" before writing final last response
+4. Check for relevant skills first; if none, research current best practices. Find gaps like a real engineer.
+5. If I report an error, assume official-docs code wasn't used. Re-check the docs and rewrite with official code only.
+6. Mention better new UI libraries when relevant.
+7. Before coding, write a checklist to `TODO.md` covering every requirement in my request, plus the server enforcement, edge cases, empty/error/forbidden states, and audit entries it implies. Re-read it after every context compaction.
+8. A feature is DONE only when all of these hold: UI exists, server enforces it, DB is persisted and migrated, every entry point is gated (routes, layouts, API, actions), and failure states are handled. UI-only is NOT done.
+9. NEVER ask "want me to fix this?" for anything within the scope of my request. If you find a gap while working (e.g. a missing guard), fix it in the same turn. Ask only when a product decision is truly needed, and give a recommended default.
+10. Run verification yourself: typecheck, lint, tests, build, migration, and exercise the flow (script, test, or query). Paste real output. Never hand me a manual test list in place of running it.
+11. Before the final response, do a self-review pass: re-read the diff against TODO.md, and search for leftover TODO/FIXME, stubs, unused props, and unhandled errors. Fix them.
+12. Final response format: Done (verified, with evidence) / Not done (blocked, with reason and the one decision needed). Never mark partial work as done.
+13. Keep chat replies short, but never skip checklist items to save tokens. Compact context only after updating TODO.md.

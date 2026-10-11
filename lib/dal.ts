@@ -1,7 +1,7 @@
 import "server-only"
 import { db } from "@/lib/db"
 import { auth } from "@/lib/auth"
-import { eq, and, desc, sql, ne, gte, isNull } from "drizzle-orm"
+import { eq, and, desc, sql, ne, gte, isNull, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import {
   load,
@@ -177,8 +177,14 @@ export class TenantError extends Error {
 }
 
 /**
- * Ensures we have a valid user and active organization.
- * Use this in any Server Action or Route Handler that touches tenant data.
+ * Ensures we have a valid user and active organization, AND that
+ * the user is not currently suspended from this workspace (WS-26).
+ *
+ * Platform admins (`user.role='admin'`) bypass the suspension check
+ * so they can still inspect suspended workspaces.
+ *
+ * Use this in any Server Action or Route Handler that touches
+ * tenant data — it gives the same gate as the dashboard layout.
  */
 export async function requireTenant() {
   const session = await getSession()
@@ -189,9 +195,38 @@ export async function requireTenant() {
   if (!orgId) {
     throw new TenantError("NO_ACTIVE_ORGANIZATION")
   }
+
+  // WS-26 — workspace-scoped suspension gate. Skip for platform admins.
+  const platformRole = (session.user as any).role ?? null
+  if (platformRole !== "admin") {
+    const [row] = await db
+      .select({
+        suspendedAt: member.suspendedAt,
+        suspendedUntil: member.suspendedUntil,
+      })
+      .from(member)
+      .where(
+        and(
+          eq(member.userId, session.user.id),
+          eq(member.organizationId, orgId),
+        ),
+      )
+      .limit(1)
+    if (
+      row?.suspendedAt &&
+      (!row.suspendedUntil ||
+        (row.suspendedUntil as Date) > new Date())
+    ) {
+      console.log(
+        `[DAL] requireTenant: user=${session.user.id} suspended from org=${orgId} → FORBIDDEN`,
+      )
+      throw new TenantError("FORBIDDEN")
+    }
+  }
+
   return {
     userId: session.user.id,
-    userRole: (session.user as any).role ?? null,
+    userRole: platformRole,
     tenantId: orgId,
   }
 }
@@ -1280,4 +1315,155 @@ export async function listOpenAppealsForAdmin() {
     .from(user)
     .where(eq(user.appealStatus, "open"))
     .orderBy(desc(user.appealSubmittedAt))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1 — Workspace team page helpers (WS-16…WS-30)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * listWorkspaceMembers — used by /settings/team.
+ *
+ * Returns the active workspace's members with:
+ *   - profile + role (workspace + platform)
+ *   - banned / platform-suspended status
+ *   - workspace-scoped suspension (WS-26)
+ *   - last-active timestamp
+ *
+ * Powers: WS-22 search, WS-23 status badges, WS-26 suspend UI.
+ */
+export async function listWorkspaceMembers(
+  orgId: string,
+  opts: {
+    search?: string
+    status?: "all" | "active" | "suspended"
+    limit?: number
+    offset?: number
+  } = {},
+) {
+  const limit = Math.min(opts.limit ?? 50, 200)
+  const offset = opts.offset ?? 0
+  const search = opts.search?.trim().toLowerCase()
+  const status = opts.status ?? "all"
+
+  const conditions: any[] = [eq(member.organizationId, orgId)]
+  if (search) {
+    conditions.push(
+      sql`(LOWER(${user.email}) LIKE ${`%${search}%`} OR LOWER(${user.name}) LIKE ${`%${search}%`})`,
+    )
+  }
+  if (status === "active") {
+    conditions.push(
+      sql`(${member.suspendedAt} IS NULL OR ${member.suspendedUntil} <= NOW())`,
+    )
+  }
+  if (status === "suspended") {
+    conditions.push(
+      sql`(${member.suspendedAt} IS NOT NULL AND (${member.suspendedUntil} IS NULL OR ${member.suspendedUntil} > NOW()))`,
+    )
+  }
+  const where = and(...conditions)
+
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select({
+        memberId: member.id,
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+        role: member.role,
+        platformRole: user.role,
+        banned: user.banned,
+        userSuspendedAt: user.suspendedAt,
+        userSuspendedUntil: user.suspendedUntil,
+        memberSuspendedAt: member.suspendedAt,
+        memberSuspendedUntil: member.suspendedUntil,
+        memberSuspendedReason: member.suspendedReason,
+        memberSuspendedBy: member.suspendedBy,
+        joinedAt: member.createdAt,
+        lastActiveAt: sql<Date | null>`(
+          SELECT MAX(${sessionTable.createdAt}) FROM ${sessionTable}
+          WHERE ${sessionTable.userId} = ${user.id}
+        )`,
+      })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(where)
+      .orderBy(desc(member.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(member)
+      .innerJoin(user, eq(user.id, member.userId))
+      .where(where),
+  ])
+  return { members: rows, total: Number(totalRow[0]?.count ?? 0) }
+}
+
+/**
+ * listInvitationsForOrg — workspace-side invitation list with status filter
+ * (WS-19). Distinct from Better Auth's `listInvitations` which doesn't
+ * surface accepted/canceled/rejected cleanly to the UI.
+ */
+export async function listInvitationsForOrg(
+  orgId: string,
+  opts: {
+    status?: "pending" | "accepted" | "rejected" | "canceled" | "all"
+  } = {},
+) {
+  const status = opts.status ?? "all"
+  const conditions: any[] = [eq(invitation.organizationId, orgId)]
+  if (status !== "all") conditions.push(eq(invitation.status, status))
+  const where = and(...conditions)
+  return db
+    .select({
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+      status: invitation.status,
+      expiresAt: invitation.expiresAt,
+      createdAt: invitation.createdAt,
+      inviterEmail: invitation.inviterEmail,
+    })
+    .from(invitation)
+    .where(where)
+    .orderBy(desc(invitation.createdAt))
+}
+
+/**
+ * listOrgRecentAudit — WS-30 "Recent access changes" card.
+ *
+ * Returns audit rows whose action is one of the access-management
+ * actions AND whose scope is this org (either targetType='org'
+ * with targetId=orgId, or metadata.organizationId=orgId).
+ */
+export async function listOrgRecentAudit(
+  orgId: string,
+  opts: { limit?: number } = {},
+) {
+  const limit = Math.min(opts.limit ?? 20, 100)
+  const actions = [
+    "user.invite-to-org",
+    "user.invite-resent",
+    "user.invite-cancelled",
+    "user.set-member-role",
+    "user.remove-from-org",
+    "user.suspend-from-workspace",
+    "user.lift-workspace-suspension",
+    "org.transfer-ownership",
+  ] as const
+  const where = and(
+    inArray(auditLog.action, actions as unknown as string[]),
+    sql`(${auditLog.targetType} = 'org' AND ${auditLog.targetId} = ${orgId}
+       OR ${auditLog.metadata}->>'organizationId' = ${orgId})`,
+  )
+  const rows = await db
+    .select()
+    .from(auditLog)
+    .where(where)
+    .orderBy(desc(auditLog.createdAt))
+    .limit(limit)
+  return { events: rows }
 }

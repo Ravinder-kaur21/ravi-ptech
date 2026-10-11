@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "## Completion contract (overrides brevity)\n7. Before coding, write a checklist to `TODO.md` covering every requirement in my request, plus the server enforcement, edge cases, empty/error/forbidden states, and audit entries it implies. Re-read it after every context compaction.\n8. A feature is DONE only when all of these hold: UI exists, server enforces it, DB is persisted and migrated, every entry point is gated (routes, layouts, API, actions), and failure states are handled. UI-only is NOT done.\n9. NEVER ask \"want me to fix this?\" for anything within the scope of my request. If you find a gap while working (e.g. a missing guard), fix it in the same turn. Ask only when a product decision is truly needed, and give a recommended default.\n10. Run verification yourself: typecheck, lint, tests, build, migration, and exercise the flow (script, test, or query). Paste real output. Never hand me a manual test list in place of running it.\n11. Before the final response, do a self-review pass: re-read the diff against TODO.md, and search for leftover TODO/FIXME, stubs, unused props, and unhandled errors. Fix them.\n12. Final response format: Done (verified, with evidence) / Not done (blocked, with reason and the one decision needed). Never mark partial work as done.\n13. Keep chat replies short, but never skip checklist items to save tokens. Compact context only after updating TODO.md."
+          }
+        ]
+      }
+    ]
+  }
+}

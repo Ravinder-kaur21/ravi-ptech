@@ -49,6 +49,9 @@ export const user = pgTable("user", {
   appealMessage: text("appeal_message"),
   appealSubmittedAt: timestamp("appeal_submitted_at"),
   // "open" | "approved" | "denied" — null when no appeal in flight
+  // TODO phase-2: convert to appealStatusEnum once we move all enum
+  // declarations to the top of the file (currently the enum would have
+  // to be declared after this table, which breaks Drizzle's init order).
   appealStatus: text("appeal_status"),
   // Last admin who resolved the most recent appeal (set null on new appeal)
   appealResolvedBy: text("appeal_resolved_by").references(
@@ -152,10 +155,27 @@ export const member = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     role: text("role").default("member").notNull(),
     createdAt: timestamp("created_at").notNull(),
+    // ─── WS-26: workspace-scoped suspension ─────────────────────────
+    // Independent of platform-level user.suspendedAt. A workspace
+    // owner/admin can suspend a member from this workspace only;
+    // their other workspace memberships and platform-level access are
+    // untouched. When suspendedAt is set AND (suspendedUntil is null
+    // OR suspendedUntil is in the future), the dashboard layout
+    // blocks them on their next /dashboard request.
+    suspendedAt: timestamp("suspended_at"),
+    suspendedUntil: timestamp("suspended_until"),
+    suspendedReason: text("suspended_reason"),
+    suspendedBy: text("suspended_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
+    index("member_suspended_idx").on(
+      table.organizationId,
+      table.suspendedAt
+    ),
   ],
 )
 
@@ -171,13 +191,21 @@ export const invitation = pgTable(
     status: text("status").default("pending").notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    inviterId: text("inviter_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    // Nullable + SET NULL: when an inviter is hard-deleted their sent
+    // invitations survive (audit trail). inviter_email below preserves
+    // the address for forensic review.
+    inviterId: text("inviter_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    inviterEmail: text("inviter_email"),
   },
   (table) => [
     index("invitation_organizationId_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
+    index("invitation_status_idx").on(
+      table.organizationId,
+      table.status
+    ),
   ],
 )
 
@@ -604,6 +632,23 @@ export const auditLog = pgTable(
 // ─────────────────────────────────────────────────────────────────────────────
 // TMS TABLES (Your business data - all with tenantId for multi-tenancy)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Enum for appeal status (Phase 1) — was freeform text, this enforces
+// the documented status set so audit/inbox queries can't drift.
+export const appealStatusEnum = pgEnum("appeal_status", [
+  "open",
+  "approved",
+  "denied",
+])
+
+// Enum for appeal status (Phase 1, defined here for future use — not yet
+// applied to user.appealStatus because Drizzle needs the enum declared
+// before the table that uses it, and user is the very first table).
+// export const appealStatusEnum = pgEnum("appeal_status", [
+//   "open",
+//   "approved",
+//   "denied",
+// ])
 
 // Enum for load status
 export const loadStatusEnum = pgEnum("load_status", [

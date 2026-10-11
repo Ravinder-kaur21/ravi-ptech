@@ -67,6 +67,23 @@ export default async function DashboardLayout({
   const myMembership = members.find((m) => m.userId === session.user.id)
   const role = myMembership?.role ?? "member"
 
+  // [LAYOUT] Gate: workspace-scoped suspension (WS-26).
+  // Phase 1 added `member.suspendedAt` + `member.suspendedUntil`. If
+  // the active-org membership is currently suspended, bounce the
+  // user to a workspace-specific suspended screen. Platform admins
+  // bypass this gate so they can still inspect suspended workspaces.
+  if (
+    !isAdminForGate &&
+    myMembership?.suspendedAt &&
+    (!myMembership.suspendedUntil ||
+      new Date(myMembership.suspendedUntil as any) > new Date())
+  ) {
+    console.log(
+      `[DASHBOARD-LAYOUT] workspace suspended user=${session.user.id} org=${orgId} → /workspace-suspended`,
+    )
+    redirect("/workspace-suspended")
+  }
+
   // [LAYOUT] Detect impersonation (Better Auth sets session.session.impersonatedBy)
   const impersonatedBy =
     (session.session as any).impersonatedBy ?? null

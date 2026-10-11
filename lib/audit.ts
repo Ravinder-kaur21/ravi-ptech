@@ -32,7 +32,11 @@ export type AuditAction =
   | "user.set-role"
   | "user.set-member-role"
   | "user.invite-to-org"
+  | "user.invite-resent"
+  | "user.invite-cancelled"
   | "user.remove-from-org"
+  | "user.suspend-from-workspace"
+  | "user.lift-workspace-suspension"
   | "user.reset-password"
   | "user.force-verify-email"
   | "user.remove"
@@ -62,6 +66,8 @@ export type AuditAction =
 
 export type AuditTargetType =
   | "user"
+  | "member"
+  | "invitation"
   | "org"
   | "appeal"
   | "session"

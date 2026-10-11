@@ -11,7 +11,7 @@ import {
   lastLoginMethod,
   multiSession,
 } from "better-auth/plugins"
-import { sendOtpEmail } from "./email"
+import { sendOtpEmail, sendInvitationEmail } from "./email"
 import {
   ac,
   owner,
@@ -24,6 +24,7 @@ import {
   safety,
 } from "./auth-roles"
 import { anonymizeUserReferences } from "./cascade"
+import { recordAuditEvent } from "./audit"
 
 console.log("[AUTH] Initializing Better Auth...")
 console.log("[AUTH] Database URL exists:", !!process.env.DATABASE_URL)
@@ -55,19 +56,150 @@ export const auth = betterAuth({
       // while still encouraging single-org usage for TMS
       organizationLimit: 3,
       teams: { enabled: false },
-      // Hook fires on every removeMember call from any client. We use it
-      // for observability only — the actual workspace-scoped cascade
-      // (driver detachment, session cleanup, hard-delete-if-last-workspace)
-      // is owned by `app/actions/remove-member.ts` → `lib/cascade.ts`. That
-      // path has proper audit + transaction guarantees; this hook does
-      // not run inside a transaction we control.
-      hooks: {
-        before: {
-          removeMember: async (data: any) => {
-            console.log(
-              `[AUTH] organizationHooks.before.removeMember memberId=${data?.member?.id} orgId=${data?.organization?.id}`
-            )
-          },
+
+      // ─── Invitation email (Phase 1 — WS-16, WS-18) ────────────────
+      // Required: without this callback, `authClient.organization.inviteMember()`
+      // silently inserts a row but NEVER sends email. That was the
+      // root cause of "invitations not working" in production.
+      // Verified against https://better-auth.com/docs/plugins/organization
+      async sendInvitationEmail(data: {
+        id: string
+        email: string
+        role: string
+        organization: {
+          id: string
+          name: string
+          slug: string
+          createdAt: Date
+          logo?: string | null
+          metadata?: any
+        }
+        invitation: {
+          id: string
+          organizationId: string
+          email: string
+          role: string | null
+          status: string
+          expiresAt: Date
+          inviterId: string | null
+          teamId?: string | null
+        }
+        inviter: {
+          id: string
+          organizationId: string
+          userId: string
+          role: string
+          createdAt: Date
+          user: {
+            id: string
+            createdAt: Date
+            updatedAt: Date
+            email: string
+            emailVerified: boolean
+            name: string
+            image?: string | null
+          }
+        }
+      }) {
+        console.log(
+          `[AUTH] organization.sendInvitationEmail id=${data.id} email=${data.email} role=${data.role} org=${data.organization?.name}`,
+        )
+        try {
+          await sendInvitationEmail({
+            id: data.id,
+            email: data.email,
+            role: data.role,
+            inviter: {
+              id: data.inviter.user.id,
+              name: data.inviter.user.name,
+              email: data.inviter.user.email,
+            },
+            organization: {
+              id: data.organization.id,
+              name: data.organization.name,
+              slug: data.organization.slug,
+            },
+            expiresAt: data.invitation.expiresAt,
+          })
+          console.log(`[AUTH] ✅ invitation email sent to ${data.email}`)
+        } catch (err) {
+          console.error(`[AUTH] ❌ invitation email failed:`, err)
+          throw err
+        }
+      },
+
+      // ─── Lifecycle hooks (Phase 1) ────────────────────────────────
+      // `organizationHooks` is the top-level key (NOT `hooks`). Each
+      // hook is a TOP-LEVEL field (NOT nested under before/after).
+      // The earlier `hooks: { before: { removeMember } }` shape was the
+      // deprecated legacy alias and silently fired nothing.
+      //
+      // The destructive workspace cascade lives in `lib/cascade.ts` and
+      // is invoked from `app/actions/remove-member.ts` — NOT from these
+      // hooks — because those hooks run outside a request transaction we
+      // control. These hooks here are observability + audit only.
+      organizationHooks: {
+        beforeRemoveMember: async ({ member, user, organization }) => {
+          console.log(
+            `[AUTH] organizationHooks.beforeRemoveMember memberId=${member?.id} userId=${user?.id} orgId=${organization?.id}`
+          )
+        },
+        afterRemoveMember: async ({ member, user, organization }) => {
+          console.log(
+            `[AUTH] organizationHooks.afterRemoveMember memberId=${member?.id} userId=${user?.id} orgId=${organization?.id}`
+          )
+          // Best-effort audit. Use stable labels because the user/member
+          // rows may already be deleted by the time this fires.
+          await recordAuditEvent({
+            actor: {
+              id: user?.id ?? "(unknown)",
+              email: user?.email ?? "(unknown)",
+            },
+            action: "user.remove-from-org",
+            target: {
+              type: "member",
+              id: member?.id ?? null,
+              label: user?.email ?? null,
+            },
+            metadata: {
+              organizationId: organization?.id,
+              organizationName: organization?.name,
+              via: "ba.organizationHooks.afterRemoveMember",
+            },
+          })
+        },
+        beforeUpdateMemberRole: async ({ member, newRole, user, organization }) => {
+          console.log(
+            `[AUTH] organizationHooks.beforeUpdateMemberRole memberId=${member?.id} ${member?.role}→${newRole} orgId=${organization?.id}`
+          )
+          // Pass through unchanged. We could veto here by throwing an
+          // APIError; Better Auth's last-owner guard already covers
+          // the demote-from-owner path.
+          return { data: { role: newRole } }
+        },
+        afterUpdateMemberRole: async ({ member, previousRole, user, organization }) => {
+          console.log(
+            `[AUTH] organizationHooks.afterUpdateMemberRole memberId=${member?.id} ${previousRole}→${member.role} orgId=${organization?.id}`
+          )
+          await recordAuditEvent({
+            actor: {
+              id: user?.id ?? "(unknown)",
+              email: user?.email ?? "(unknown)",
+            },
+            action: "user.set-member-role",
+            target: {
+              type: "member",
+              id: member?.id ?? null,
+              label: user?.email ?? null,
+            },
+            metadata: {
+              organizationId: organization?.id,
+              organizationName: organization?.name,
+              previousRole,
+              newRole: member.role,
+              via: "ba.organizationHooks.afterUpdateMemberRole",
+            },
+          })
         },
       },
     }),
