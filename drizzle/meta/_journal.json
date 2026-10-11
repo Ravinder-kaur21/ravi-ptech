@@ -8,6 +8,20 @@
       "when": 1791529576594,
       "tag": "0000_loose_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791542758376,
+      "tag": "0001_lazy_impossible_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791542758377,
+      "tag": "0002_admin_states",
+      "breakpoints": true
     }
   ]
 }

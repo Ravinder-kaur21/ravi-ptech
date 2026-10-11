@@ -13,37 +13,54 @@ export default function AuthRedirectPage() {
     const handleRedirect = async () => {
       console.log("[AUTH-REDIRECT] Checking session and organizations...")
 
+      // If the user came from an invite link with ?next=, honor it after
+      // we verify they're signed in. This defends the Google callback path
+      // for invitations.
+      const params =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search)
+          : null
+      const nextParam = params?.get("next")
+
       try {
         // Get current session
         const { data: session } = await authClient.getSession()
 
         if (!session?.user) {
           console.log("[AUTH-REDIRECT] No session, redirecting to login")
-          router.push("/login")
+          router.push(nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : "/login")
           return
         }
 
         console.log("[AUTH-REDIRECT] Session user:", session.user.email)
 
+        // If we have a ?next= (e.g. /invite/[id]), honor it directly.
+        if (nextParam && nextParam.startsWith("/")) {
+          console.log("[AUTH-REDIRECT] honoring ?next= →", nextParam)
+          router.push(nextParam)
+          return
+        }
+
         // Check organizations
         const { data: orgs } = await authClient.organization.list()
 
-        if (!orgs?.organizations || orgs.organizations.length === 0) {
+        // [AUTH-REDIRECT] organization.list() returns a bare array
+        if (!orgs || orgs.length === 0) {
           console.log("[AUTH-REDIRECT] No org, redirecting to onboarding")
           router.push("/onboarding")
-        } else if (orgs.organizations.length === 1) {
+        } else if (orgs.length === 1) {
           console.log(
             "[AUTH-REDIRECT] One org, setting active:",
-            orgs.organizations[0].id
+            orgs[0].id
           )
           await authClient.organization.setActive({
-            organizationId: orgs.organizations[0].id,
+            organizationId: orgs[0].id,
           })
           router.push("/dashboard")
         } else {
           console.log(
             "[AUTH-REDIRECT] Multiple orgs, going to selector:",
-            orgs.organizations.length
+            orgs.length
           )
           router.push("/select-org")
         }

@@ -1,0 +1,1 @@
+ALTER TABLE "load" ADD COLUMN "is_starred" boolean DEFAULT false NOT NULL;

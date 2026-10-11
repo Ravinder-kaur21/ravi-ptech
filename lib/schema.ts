@@ -1,4 +1,14 @@
-import { pgTable, text, timestamp, boolean, uuid, varchar, pgEnum, index } from "drizzle-orm/pg-core"
+import {
+  pgTable,
+  text,
+  timestamp,
+  boolean,
+  uuid,
+  varchar,
+  pgEnum,
+  index,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,11 +28,32 @@ export const user = pgTable("user", {
     .notNull(),
   username: text("username").unique(),
   displayUsername: text("display_username"),
+  // Better Auth admin plugin fields
   role: text("role"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   phone: text("phone"),
+  // ─── Muvx custom admin fields ─────────────────────────────────────
+  // Suspension is independent of ban: suspended users see an appeal
+  // screen on login and can request reinstatement. Banning is permanent
+  // (or until unbanned) and offers no appeal path.
+  suspendedAt: timestamp("suspended_at"),
+  suspendedUntil: timestamp("suspended_until"),
+  suspendedReason: text("suspended_reason"),
+  suspendedBy: text("suspended_by").references((): AnyPgColumn => user.id, {
+    onDelete: "set null",
+  }),
+  // The latest appeal submitted by the user; cleared on lift/ban resolution.
+  appealMessage: text("appeal_message"),
+  appealSubmittedAt: timestamp("appeal_submitted_at"),
+  // "open" | "approved" | "denied" — null when no appeal in flight
+  appealStatus: text("appeal_status"),
+  // Last admin who resolved the most recent appeal (set null on new appeal)
+  appealResolvedBy: text("appeal_resolved_by").references(
+    (): AnyPgColumn => user.id,
+    { onDelete: "set null" }
+  ),
 })
 
 export const session = pgTable(
@@ -40,7 +71,10 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    activeOrganizationId: text("active_organization_id"),
+    activeOrganizationId: text("active_organization_id").references(
+      () => organization.id,
+      { onDelete: "set null" }
+    ),
     impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
@@ -267,6 +301,9 @@ export const load = pgTable("load", {
   // Rate confirmation
   rateConfirmNumber: varchar("rate_confirm_number", { length: 50 }),
   rateConfirmed: boolean("rate_confirmed").default(false),
+
+  // Pinned (sidebar quick-access)
+  isStarred: boolean("is_starred").notNull().default(false),
 
   // Timestamps
   pickupDate: timestamp("pickup_date"),

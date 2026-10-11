@@ -44,9 +44,11 @@ export function QueryProvider({ children }: { children: ReactNode }) {
 
           // Get active org
           if (session.session.activeOrganizationId) {
-            const { data: org } = await authClient.organization.getOrganization(
+            const { data: org } = await authClient.organization.getFullOrganization(
               {
-                organizationId: session.session.activeOrganizationId,
+                query: {
+                  organizationId: session.session.activeOrganizationId,
+                },
               }
             )
             if (mounted && org) {

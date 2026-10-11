@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
@@ -14,8 +14,21 @@ import { toast } from "sonner"
 export function LoginForm({
   className,
   ...props
-}: React.ComponentProps<"form">) {
+}: React.ComponentProps<"div">) {
   const router = useRouter()
+  // Capture ?next= so an invite link can drop the user at /login and bounce
+  // them straight back to /invite/[id] after sign-in. Falls back to the
+  // existing router-based redirects.
+  const [nextPath, setNextPath] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const next = params.get("next")
+    if (next && next.startsWith("/")) {
+      console.log("[LOGIN] post-login redirect →", next)
+      setNextPath(next)
+    }
+  }, [])
   const [step, setStep] = useState<"email" | "otp">("email")
   const [email, setEmail] = useState("")
   const [otp, setOtp] = useState("")
@@ -68,11 +81,38 @@ export function LoginForm({
         return
       }
       console.log("[LOGIN] ✅ OTP verified")
+      // [LOGIN] Check suspension status before routing anywhere. If the
+      // account is currently suspended, bounce to /suspended so the user
+      // sees the reason + appeal form instead of the normal flow.
+      try {
+        const statusRes = await fetch("/api/me/status")
+        if (statusRes.ok) {
+          const status = await statusRes.json()
+          console.log("[LOGIN] status:", status)
+          if (status.suspended) {
+            console.log("[LOGIN] account suspended → /suspended")
+            router.push("/suspended")
+            return
+          }
+        }
+      } catch (err) {
+        console.warn("[LOGIN] status check failed:", err)
+      }
+
+      // If the user came in from an invite link, jump straight back to the
+      // /invite/[id] page — the invitation endpoint will load the org from
+      // its own state and route appropriately.
+      if (nextPath) {
+        console.log("[LOGIN] honoring ?next= →", nextPath)
+        router.push(nextPath)
+        return
+      }
       const { data: orgs } = await authClient.organization.list()
-      if (!orgs?.organizations || orgs.organizations.length === 0) {
+      // [LOGIN] organization.list() returns a bare array, not { organizations }
+      if (!orgs || orgs.length === 0) {
         router.push("/onboarding")
-      } else if (orgs.organizations.length === 1) {
-        await authClient.organization.setActive({ organizationId: orgs.organizations[0].id })
+      } else if (orgs.length === 1) {
+        await authClient.organization.setActive({ organizationId: orgs[0].id })
         router.push("/dashboard")
       } else {
         router.push("/select-org")
@@ -120,33 +160,33 @@ export function LoginForm({
     <div className={`w-full max-w-[480px] ${className}`} {...props}>
       {/* Eyebrow */}
       <div className="mb-6 flex items-center gap-2.5">
-        <span className="size-[7px] shrink-0 rounded-full bg-[#d9622b]" />
-        <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em] text-[#16181d]">
+        <span className="size-[7px] shrink-0 rounded-full bg-brand-accent" />
+        <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em] text-brand-ink">
           {step === "email" ? "WELCOME BACK" : "CHECK YOUR EMAIL"}
         </span>
-        <span className="font-geist-mono text-[11px] tracking-[0.04em] text-[#8a8b8f]">
+        <span className="font-geist-mono text-[11px] tracking-[0.04em] text-brand-muted-soft">
           · {step === "email" ? "SIGN IN TO MUVX" : "WE SENT YOU A CODE"}
         </span>
       </div>
 
       {/* Headline */}
-      <h1 className="font-serif text-[clamp(40px,5vw,56px)] leading-[0.96] tracking-[-0.04em] text-[#16181d] mb-2">
+      <h1 className="font-serif text-[clamp(40px,5vw,56px)] leading-[0.96] tracking-[-0.04em] text-brand-ink mb-2">
         {step === "email" ? (
-          <>Sign in to <span className="italic text-[#d9622b]">Muvx</span>.</>
+          <>Sign in to <span className="italic text-brand-accent">Muvx</span>.</>
         ) : (
-          <>Enter your <span className="italic text-[#d9622b]">code</span>.</>
+          <>Enter your <span className="italic text-brand-accent">code</span>.</>
         )}
       </h1>
       <p className="text-[#4a4e57] font-geist mb-8">
         {step === "email"
           ? "We'll email you a code — no password to remember."
-          : <>Code sent to <strong className="text-[#16181d]">{email}</strong></>}
+          : <>Code sent to <strong className="text-brand-ink">{email}</strong></>}
       </p>
 
-      <Card className="border-[#dcd5c9] bg-[#fffefb] shadow-[0_10px_30px_rgba(58,46,30,0.06)]">
+      <Card className="border-brand-rule bg-[#fffefb] shadow-[0_10px_30px_rgba(58,46,30,0.06)]">
         <div className="p-7">
           {error && (
-            <div className="mb-5 p-3 text-sm text-[#d9622b] bg-[#d9622b]/[0.08] border border-[#d9622b]/30 rounded-xl">
+            <div className="mb-5 p-3 text-sm text-brand-accent bg-brand-accent/[0.08] border border-brand-accent/30 rounded-xl">
               {error}
             </div>
           )}
@@ -156,7 +196,7 @@ export function LoginForm({
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-12 border-[#dcd5c9] hover:bg-[#fbf8f3] bg-[#fffdf9] font-geist"
+                className="w-full h-12 border-brand-rule hover:bg-[#fbf8f3] bg-brand-card font-geist"
                 onClick={handleGoogleLogin}
                 disabled={googleLoading || loading}
               >
@@ -174,16 +214,16 @@ export function LoginForm({
               </Button>
 
               <div className="relative my-6 flex items-center">
-                <div className="flex-1 border-t border-[#dcd5c9]" />
-                <span className="px-3 text-xs font-geist-mono tracking-[0.04em] text-[#8a8b8f] uppercase">
+                <div className="flex-1 border-t border-brand-rule" />
+                <span className="px-3 text-xs font-geist-mono tracking-[0.04em] text-brand-muted-soft uppercase">
                   or
                 </span>
-                <div className="flex-1 border-t border-[#dcd5c9]" />
+                <div className="flex-1 border-t border-brand-rule" />
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                  <Label htmlFor="email" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                     Work email
                   </Label>
                   <Input
@@ -192,14 +232,14 @@ export function LoginForm({
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                    className="h-12 border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                     required
                   />
                 </div>
 
                 <Button
                   type="button"
-                  className="w-full h-12 rounded-full bg-[#16181d] hover:bg-[#2a2d35] font-geist text-[#f5f2ec]"
+                  className="w-full h-12 rounded-full bg-brand-ink hover:bg-brand-ink-soft font-geist text-brand-cream"
                   onClick={handleSendOTP}
                   disabled={loading || !email}
                 >
@@ -217,7 +257,7 @@ export function LoginForm({
           ) : (
             <div className="space-y-5">
               <div className="space-y-1.5">
-                <Label htmlFor="otp" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                <Label htmlFor="otp" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                   Verification code
                 </Label>
                 <Input
@@ -229,7 +269,7 @@ export function LoginForm({
                   placeholder="000000"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                  className="h-14 text-center text-2xl tracking-[0.5em] font-mono border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                  className="h-14 text-center text-2xl tracking-[0.5em] font-mono border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                   autoFocus
                   required
                 />
@@ -237,7 +277,7 @@ export function LoginForm({
 
               <Button
                 type="button"
-                className="w-full h-12 rounded-full bg-[#16181d] hover:bg-[#2a2d35] font-geist text-[#f5f2ec]"
+                className="w-full h-12 rounded-full bg-brand-ink hover:bg-brand-ink-soft font-geist text-brand-cream"
                 onClick={handleVerifyOTP}
                 disabled={loading || otp.length !== 6}
               >
@@ -255,16 +295,16 @@ export function LoginForm({
                 <button
                   type="button"
                   onClick={() => { setStep("email"); setOtp("") }}
-                  className="text-[#8a8b8f] hover:text-[#16181d]"
+                  className="text-brand-muted-soft hover:text-brand-ink"
                 >
                   Use different email
                 </button>
-                <span className="text-[#dcd5c9]">·</span>
+                <span className="text-brand-rule">·</span>
                 <button
                   type="button"
                   onClick={handleResendOTP}
                   disabled={resending}
-                  className="text-[#8a8b8f] hover:text-[#16181d] disabled:opacity-50"
+                  className="text-brand-muted-soft hover:text-brand-ink disabled:opacity-50"
                 >
                   {resending ? "Sending..." : "Resend code"}
                 </button>
@@ -277,7 +317,7 @@ export function LoginForm({
       {step === "email" && (
         <p className="text-center text-sm text-[#4a4e57] font-geist mt-6">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-[#16181d] font-medium hover:underline">
+          <Link href="/signup" className="text-brand-ink font-medium hover:underline">
             Create one
           </Link>
         </p>

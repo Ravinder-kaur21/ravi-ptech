@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
@@ -16,6 +16,7 @@ import {
   type FreightType,
   type TeamRole,
   type TeamInvite,
+  type Goal,
 } from "@/lib/stores/onboarding-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,17 +47,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import {
-  btnPrimary,
-  btnSecondary,
-  inputBase,
-  fieldLabel,
-  fieldError,
-  errorBanner,
-  displayHeading,
-  italicAccent,
-  eyebrowStop,
-} from "@/lib/auth-theme"
+// Brand class strings are defined in app/globals.css under @layer components:
+// .btn-primary · .btn-secondary · .input-base · .field-label · .field-error
+// · .error-banner · .display-heading · .italic-accent · .eyebrow
 
 // ─── Options ───
 const RESERVED_SLUGS = [
@@ -150,7 +143,8 @@ export default function OnboardingPage() {
       console.log("[ONBOARDING] Checking existing orgs...")
       try {
         const { data: orgs } = await authClient.organization.list()
-        const list = orgs?.organizations ?? []
+        // [ONBOARDING] organization.list() returns a bare array, not { organizations }
+        const list = orgs ?? []
 
         if (list.length > 0) {
           const completed = list.find((o: any) => {
@@ -193,35 +187,68 @@ export default function OnboardingPage() {
   }, [router, setField])
 
   // ─── Slug check ───
+  // Better Auth `POST /organization/check-slug` returns { status: true } when
+  // the slug is AVAILABLE; it throws ORGANIZATION_SLUG_ALREADY_TAKEN when
+  // the slug is taken (verified in node_modules/better-auth/.../crud-org.mjs).
   const slugIsReserved = RESERVED_SLUGS.includes(draft.slug)
   const slugIsValid = draft.slug.length >= 2 && /^[a-z0-9-]+$/.test(draft.slug) && !slugIsReserved
 
-  const { data: slugCheck, isFetching: checkingSlug } = useQuery({
+  const {
+    data: slugCheck,
+    isFetching: checkingSlug,
+    isError: slugCheckFailed,
+    error: slugCheckError,
+  } = useQuery({
     queryKey: ["check-slug", draft.slug],
     queryFn: async () => {
+      console.log("[ONBOARDING] checkSlug →", draft.slug)
       const r = await authClient.organization.checkSlug({ slug: draft.slug })
+      console.log("[ONBOARDING] checkSlug response:", JSON.stringify(r))
+      if (r.error) {
+        // Surface as a thrown error so React Query marks the query failed
+        // AND we keep the error.code for the UI to inspect.
+        throw new Error(r.error.code || r.error.message || "SLUG_CHECK_FAILED")
+      }
       return r.data
     },
     enabled: slugIsValid,
     staleTime: 5 * 1000,
     retry: false,
   })
-  const slugAvailable = slugCheck ? !slugCheck.exists : null
+  // `status: true` => available. `status: false` (or query error) => not available.
+  const slugAvailable = slugIsValid
+    ? slugCheck
+      ? slugCheck.status === true
+      : slugCheckFailed
+        ? false
+        : null
+    : null
+  const slugTaken = slugCheckFailed || slugCheck?.status === false
 
   // ─── Auto-generate slug from company name ───
+  // Only run on step 0 while user hasn't manually edited the slug. The setField
+  // call below updates the store synchronously, which would re-trigger this
+  // effect and cause an infinite loop — guard against that with a ref.
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
+  const lastGeneratedFor = useRef<string>("")
   useEffect(() => {
-    if (!slugManuallyEdited && draft.companyName && currentStep === 0) {
-      const gen = draft.companyName
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "")
-        .substring(0, 50)
+    if (slugManuallyEdited || currentStep !== 0) return
+    const name = draft.companyName.trim()
+    if (!name) return
+    if (lastGeneratedFor.current === name) return
+    const gen = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 50)
+    lastGeneratedFor.current = name
+    if (gen && gen !== draft.slug) {
+      console.log("[ONBOARDING] auto-generating slug:", gen)
       setField("slug", gen)
     }
-  }, [draft.companyName, slugManuallyEdited, currentStep, setField])
+  }, [draft.companyName, slugManuallyEdited, currentStep, setField, draft.slug])
 
   // ─── Final mutation: create org + invite team ───
   const submitMutation = useMutation({
@@ -250,13 +277,30 @@ export default function OnboardingPage() {
       })
 
       if (result.error) {
-        if (result.error.code === "ORGANIZATION_ALREADY_EXISTS") {
-          throw new Error("This URL is already taken. Please go back and choose another.")
+        console.error("[ONBOARDING] create org error:", result.error)
+        switch (result.error.code) {
+          case "ORGANIZATION_ALREADY_EXISTS":
+          case "ORGANIZATION_SLUG_ALREADY_TAKEN":
+            throw new Error("This URL is already taken. Please go back and choose another.")
+          case "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS":
+            throw new Error("You've reached the maximum number of workspaces. Please contact support.")
+          case "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION":
+            throw new Error("You're not allowed to create a new workspace. Contact your administrator.")
+          case "SLUG_INVALID":
+          case "INVALID_SLUG":
+            throw new Error("That URL isn't valid. Use lowercase letters, numbers, and hyphens only.")
+          case "USER_NOT_FOUND":
+            throw new Error("Your session expired. Please sign in again.")
+          default:
+            throw new Error(result.error.message || "Failed to create organization")
         }
-        if (result.error.code === "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS") {
-          throw new Error("Maximum organizations reached. Please contact support.")
-        }
-        throw new Error(result.error.message || "Failed to create organization")
+      }
+
+      // [ONBOARDING] organization.create() returns the org object directly,
+      // not wrapped in { organization }
+      const createdOrg = result.data
+      if (!createdOrg?.id) {
+        throw new Error("Organization was created but no id was returned")
       }
 
       // Send team invitations
@@ -264,14 +308,14 @@ export default function OnboardingPage() {
         (inv) => inv.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inv.email)
       )
 
-      if (validInvites.length > 0 && result.data?.organization?.id) {
+      if (validInvites.length > 0) {
         console.log(`[ONBOARDING] Sending ${validInvites.length} invites...`)
         for (const invite of validInvites) {
           try {
             await authClient.organization.inviteMember({
               email: invite.email,
               role: invite.role,
-              organizationId: result.data.organization.id,
+              organizationId: createdOrg.id,
             })
             console.log(`[ONBOARDING] ✅ Invited ${invite.email} as ${invite.role}`)
           } catch (err) {
@@ -281,17 +325,17 @@ export default function OnboardingPage() {
         }
       }
 
-      return result.data
+      return createdOrg
     },
-    onSuccess: async (data) => {
-      if (data?.organization?.id) {
-        await authClient.organization.setActive({ organizationId: data.organization.id })
+    onSuccess: async (org) => {
+      if (org?.id) {
+        await authClient.organization.setActive({ organizationId: org.id })
         setActiveOrganization({
-          id: data.organization.id,
-          name: data.organization.name,
-          slug: data.organization.slug,
-          logo: data.organization.logo,
-          metadata: data.organization.metadata,
+          id: org.id,
+          name: org.name,
+          slug: org.slug,
+          logo: org.logo,
+          metadata: org.metadata as Record<string, any> | null,
         })
         console.log("[ONBOARDING] ✅ Setup complete")
         setDone(true)
@@ -322,8 +366,14 @@ export default function OnboardingPage() {
         setError("This URL is reserved. Please choose another.")
         return
       }
-      if (slugAvailable === false) {
+      if (slugTaken || slugAvailable === false) {
         setError("This URL is already taken. Please choose another.")
+        return
+      }
+      // If a check is still pending, force the user to wait — guards against
+      // racing the create-org call before we've confirmed availability.
+      if (slugIsValid && checkingSlug) {
+        setError("Checking URL availability, please wait a moment.")
         return
       }
     }
@@ -440,7 +490,7 @@ export default function OnboardingPage() {
         <div className="mt-10 flex-1">
           {/* Eyebrow + headline */}
           <div className="mb-8">
-            <div className={eyebrowStop}>
+            <div className="flex items-center gap-2.5">
               <span className="size-[7px] shrink-0 rounded-full bg-[#d9622b]" />
               <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em]" style={{ color: "#16181d" }}>
                 {stepInfo.stop}
@@ -449,16 +499,16 @@ export default function OnboardingPage() {
                 · {stepInfo.subtitle}
               </span>
             </div>
-            <h1 className={cn(displayHeading, "mt-5")}>
+            <h1 className={cn("display-heading", "mt-5")}>
               <span className="block">{stepInfo.title[0]}</span>
-              <span className={cn("block", italicAccent)}>
+              <span className={cn("block", "italic-accent")}>
                 {stepInfo.title[1]}
               </span>
             </h1>
           </div>
 
           {error && (
-            <div className={cn(errorBanner, "mb-6")} role="alert">
+            <div className={cn("error-banner", "mb-6")} role="alert">
               {error}
             </div>
           )}
@@ -549,7 +599,7 @@ export default function OnboardingPage() {
               type="button"
               onClick={handleNext}
               disabled={!isStepValid(currentStep) || checkingSlug}
-              className={cn(btnPrimary, "max-w-[200px]")}
+              className={cn("btn-primary", "max-w-[200px]")}
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -558,7 +608,7 @@ export default function OnboardingPage() {
               type="button"
               onClick={handleSubmit}
               disabled={!isStepValid(currentStep) || submitMutation.isPending}
-              className={cn(btnPrimary, "max-w-[260px]")}
+              className={cn("btn-primary", "max-w-[260px]")}
             >
               {submitMutation.isPending ? (
                 <>
@@ -615,19 +665,19 @@ function StepCompany({
   return (
     <div className="space-y-5">
       <div>
-        <label htmlFor="companyName" className={fieldLabel}>Company name</label>
+        <label htmlFor="companyName" className="field-label">Company name</label>
         <input
           id="companyName"
           autoFocus
           value={companyName}
           onChange={(e) => onCompanyNameChange(e.target.value)}
           placeholder="ABC Logistics"
-          className={inputBase}
+          className="input-base"
         />
       </div>
 
       <div>
-        <label htmlFor="slug" className={fieldLabel}>Company URL</label>
+        <label htmlFor="slug" className="field-label">Company URL</label>
         <div className="flex items-center rounded-lg border border-[#d1ccc5] bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#d9622b]/20 focus-within:border-[#d9622b]">
           <span className="px-3 text-sm text-[#8a8b8f] font-geist-mono tracking-[0.04em] bg-[#f5f2ec] border-r border-[#e4ddd3] h-11 flex items-center">
             muvx.com/
@@ -665,7 +715,7 @@ function StepCompany({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="dotNumber" className={fieldLabel}>
+          <label htmlFor="dotNumber" className="field-label">
             DOT number <span className="text-[#a8a29a] normal-case tracking-normal">— Optional</span>
           </label>
           <input
@@ -675,11 +725,11 @@ function StepCompany({
             onChange={(e) => onDotChange(e.target.value)}
             placeholder="1234567"
             maxLength={10}
-            className={cn(inputBase, "font-mono")}
+            className={cn("input-base", "font-mono")}
           />
         </div>
         <div>
-          <label htmlFor="mcNumber" className={fieldLabel}>
+          <label htmlFor="mcNumber" className="field-label">
             MC number <span className="text-[#a8a29a] normal-case tracking-normal">— Optional</span>
           </label>
           <input
@@ -689,7 +739,7 @@ function StepCompany({
             onChange={(e) => onMcChange(e.target.value)}
             placeholder="654321"
             maxLength={10}
-            className={cn(inputBase, "font-mono")}
+            className={cn("input-base", "font-mono")}
           />
         </div>
       </div>
@@ -766,7 +816,7 @@ function StepOperation({
     <div className="space-y-5">
       {showFleetSize && (
         <div>
-          <label htmlFor="fleet-size" className={fieldLabel}>Fleet size</label>
+          <label htmlFor="fleet-size" className="field-label">Fleet size</label>
           <Select value={fleetSize} onValueChange={(v) => onFleetSizeChange(v as FleetSize)}>
             <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
               <SelectValue placeholder="Select…" />
@@ -781,7 +831,7 @@ function StepOperation({
       )}
 
       <div>
-        <label htmlFor="team-size" className={fieldLabel}>Team size</label>
+        <label htmlFor="team-size" className="field-label">Team size</label>
         <Select value={teamSize} onValueChange={(v) => onTeamSizeChange(v as TeamSize)}>
           <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
             <SelectValue placeholder="Select…" />
@@ -795,7 +845,7 @@ function StepOperation({
       </div>
 
       <div>
-        <label htmlFor="scope" className={fieldLabel}>Geographic scope</label>
+        <label htmlFor="scope" className="field-label">Geographic scope</label>
         <Select value={geographicScope} onValueChange={(v) => onScopeChange(v as GeographicScope)}>
           <SelectTrigger className="h-11 border-[#d1ccc5] focus:border-[#d9622b] focus:ring-2 focus:ring-[#d9622b]/20">
             <SelectValue placeholder="Select…" />
@@ -826,7 +876,7 @@ function StepCurrent({
   return (
     <div className="space-y-6">
       <div>
-        <label htmlFor="currentTool" className={fieldLabel}>
+        <label htmlFor="currentTool" className="field-label">
           How do you manage freight today?
         </label>
         <Select value={currentTool} onValueChange={(v) => onToolChange(v as CurrentTool)}>
@@ -842,7 +892,7 @@ function StepCurrent({
       </div>
 
       <div>
-        <label className={fieldLabel}>
+        <label className="field-label">
           What kinds of freight do you move?
           <span className="text-[#a8a29a] normal-case tracking-normal ml-2">Pick all that apply</span>
         </label>
@@ -973,7 +1023,7 @@ function StepGoals({
   selected, onToggle,
 }: {
   selected: readonly string[]
-  onToggle: (g: string) => void
+  onToggle: (g: Goal) => void
 }) {
   return (
     <div className="space-y-3">

@@ -1,107 +1,123 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-
 @custom-variant dark (&:is(.dark *));
 
+/* ─── Muvx TMS — design tokens ───────────────────────────────────
+   Single source of truth for the entire product.
+   Cream #f5f2ec, ink #16181d, burnt-orange #d9622b, success #5e8c6a.
+   Mapped into shadcn's standard token names so the shadcn blocks
+   (`--background`, `--primary`, `--sidebar-*`, …) inherit Muvx
+   colors without us overriding component classes.
+   ──────────────────────────────────────────────────────────────── */
+
 :root {
-  /* JustBecause Network - Skills-Based Volunteer Platform Theme */
-  --background: oklch(0.985 0.002 247);
-  --foreground: oklch(0.205 0.015 247);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0.015 247);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0.015 247);
+  /* Surfaces */
+  --background: oklch(0.962 0.010 80);       /* cream #f5f2ec — page bg */
+  --foreground: oklch(0.180 0.010 250);      /* ink #16181d — primary text */
+  --card: oklch(0.987 0.008 80);             /* #fffdf9 — cards/inputs */
+  --card-foreground: oklch(0.180 0.010 250);
+  --popover: oklch(0.987 0.008 80);
+  --popover-foreground: oklch(0.180 0.010 250);
 
-  /* Teal Primary */
-  --primary: oklch(0.55 0.15 195);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Brand action */
+  --primary: oklch(0.620 0.180 45);          /* burnt orange #d9622b */
+  --primary-foreground: oklch(0.962 0.010 80); /* cream on orange */
 
-  /* Coral Secondary */
-  --secondary: oklch(0.7 0.18 45);
-  --secondary-foreground: oklch(0.985 0 0);
+  /* Secondary = warm hairlines, used for subtle borders/fills */
+  --secondary: oklch(0.900 0.015 80);        /* #e4ddd3 */
+  --secondary-foreground: oklch(0.180 0.010 250);
 
-  --muted: oklch(0.96 0.005 247);
-  --muted-foreground: oklch(0.45 0.015 247);
-  --accent: oklch(0.94 0.03 195);
-  --accent-foreground: oklch(0.35 0.1 195);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0.01 247);
-  --input: oklch(0.92 0.01 247);
-  --ring: oklch(0.55 0.15 195);
+  /* Muted = the soft page fill behind cards (slightly darker than bg) */
+  --muted: oklch(0.945 0.015 80);            /* #f7f3ec */
+  --muted-foreground: oklch(0.500 0.005 250); /* #73757a */
 
-  /* Chart colors for impact metrics */
-  --chart-1: oklch(0.55 0.15 195);
-  --chart-2: oklch(0.7 0.18 45);
-  --chart-3: oklch(0.65 0.16 160);
-  --chart-4: oklch(0.75 0.14 85);
-  --chart-5: oklch(0.6 0.2 300);
+  /* Accent = orange-tint highlight (badges, hover states) */
+  --accent: oklch(0.953 0.030 50);            /* #fff0e6 */
+  --accent-foreground: oklch(0.180 0.010 250);
 
-  --radius: 0.75rem;
+  --destructive: oklch(0.550 0.220 27);
+  --destructive-foreground: oklch(0.962 0.010 80);
 
-  --sidebar: oklch(0.98 0.002 247);
-  --sidebar-foreground: oklch(0.205 0.015 247);
-  --sidebar-primary: oklch(0.55 0.15 195);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.03 195);
-  --sidebar-accent-foreground: oklch(0.35 0.1 195);
-  --sidebar-border: oklch(0.9 0.01 247);
-  --sidebar-ring: oklch(0.55 0.15 195);
+  --border: oklch(0.900 0.015 80);           /* #e4ddd3 */
+  --input: oklch(0.900 0.015 80);
+  --ring: oklch(0.620 0.180 45);              /* orange focus ring */
 
-  /* Custom Brand Colors */
-  --teal: oklch(0.55 0.15 195);
-  --teal-light: oklch(0.92 0.05 195);
-  --coral: oklch(0.7 0.18 45);
-  --coral-light: oklch(0.92 0.08 45);
-  --success: oklch(0.6 0.18 145);
-  --success-light: oklch(0.92 0.05 145);
+  /* Chart series — orange primary, sage success, warm grays */
+  --chart-1: oklch(0.620 0.180 45);           /* orange */
+  --chart-2: oklch(0.595 0.080 150);          /* success #5e8c6a */
+  --chart-3: oklch(0.500 0.005 250);          /* mid gray */
+  --chart-4: oklch(0.700 0.100 60);           /* warm tan */
+  --chart-5: oklch(0.400 0.020 280);          /* muted purple */
+
+  --radius: 0.625rem;                        /* 10px — Muvx's signature radius */
+
+  /* Sidebar tokens — slightly different from page to give hierarchy */
+  --sidebar: oklch(0.987 0.008 80);
+  --sidebar-foreground: oklch(0.180 0.010 250);
+  --sidebar-primary: oklch(0.620 0.180 45);
+  --sidebar-primary-foreground: oklch(0.962 0.010 80);
+  --sidebar-accent: oklch(0.953 0.030 50);
+  --sidebar-accent-foreground: oklch(0.180 0.010 250);
+  --sidebar-border: oklch(0.900 0.015 80);
+  --sidebar-ring: oklch(0.620 0.180 45);
+
+  /* ── Brand-named aliases ──────────────────────────────────────
+     Use these for brand-specific surfaces the shadcn standard
+     tokens don't cover. Available as `bg-brand-cream`,
+     `text-brand-ink`, `border-brand-rule`, etc. */
+  --brand-cream: oklch(0.962 0.010 80);
+  --brand-cream-soft: oklch(0.945 0.015 80);
+  --brand-card: oklch(0.987 0.008 80);
+  --brand-ink: oklch(0.180 0.010 250);
+  --brand-ink-soft: oklch(0.220 0.010 250);
+  --brand-ink-hover: oklch(0.250 0.010 250); /* #2a2d35 — darkening hover state */
+  --brand-accent: oklch(0.620 0.180 45);
+  --brand-accent-hover: oklch(0.595 0.200 40);
+  --brand-accent-tint: oklch(0.953 0.030 50);
+  --brand-rule: oklch(0.900 0.015 80);
+  --brand-rule-soft: oklch(0.925 0.012 80);
+  --brand-muted: oklch(0.500 0.005 250);
+  --brand-muted-soft: oklch(0.580 0.005 250);
+  --brand-success: oklch(0.595 0.080 150);
+  --brand-on-accent: oklch(0.962 0.010 80);
 }
 
 .dark {
-  --background: oklch(0.145 0.015 247);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0.015 247);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0.015 247);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.65 0.15 195);
-  --primary-foreground: oklch(0.145 0.015 247);
-  --secondary: oklch(0.75 0.18 45);
-  --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.25 0.015 247);
-  --muted-foreground: oklch(0.65 0.01 247);
-  --accent: oklch(0.3 0.05 195);
-  --accent-foreground: oklch(0.85 0.1 195);
-  --destructive: oklch(0.5 0.2 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.28 0.015 247);
-  --input: oklch(0.28 0.015 247);
-  --ring: oklch(0.65 0.15 195);
-  --chart-1: oklch(0.65 0.15 195);
-  --chart-2: oklch(0.75 0.18 45);
-  --chart-3: oklch(0.7 0.16 160);
-  --chart-4: oklch(0.8 0.14 85);
-  --chart-5: oklch(0.65 0.2 300);
-  --sidebar: oklch(0.18 0.015 247);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.65 0.15 195);
-  --sidebar-primary-foreground: oklch(0.145 0.015 247);
-  --sidebar-accent: oklch(0.3 0.05 195);
-  --sidebar-accent-foreground: oklch(0.85 0.1 195);
-  --sidebar-border: oklch(0.28 0.015 247);
-  --sidebar-ring: oklch(0.65 0.15 195);
-  --teal: oklch(0.65 0.15 195);
-  --teal-light: oklch(0.25 0.05 195);
-  --coral: oklch(0.75 0.18 45);
-  --coral-light: oklch(0.28 0.08 45);
-  --success: oklch(0.65 0.18 145);
-  --success-light: oklch(0.25 0.05 145);
+  --background: oklch(0.180 0.010 250);
+  --foreground: oklch(0.962 0.010 80);
+  --card: oklch(0.220 0.010 250);
+  --card-foreground: oklch(0.962 0.010 80);
+  --popover: oklch(0.220 0.010 250);
+  --popover-foreground: oklch(0.962 0.010 80);
+  --primary: oklch(0.665 0.180 45);
+  --primary-foreground: oklch(0.180 0.010 250);
+  --secondary: oklch(0.280 0.010 250);
+  --secondary-foreground: oklch(0.962 0.010 80);
+  --muted: oklch(0.250 0.010 250);
+  --muted-foreground: oklch(0.680 0.005 250);
+  --accent: oklch(0.300 0.040 50);
+  --accent-foreground: oklch(0.962 0.010 80);
+  --destructive: oklch(0.500 0.200 27);
+  --destructive-foreground: oklch(0.962 0.010 80);
+  --border: oklch(0.280 0.010 250);
+  --input: oklch(0.280 0.010 250);
+  --ring: oklch(0.665 0.180 45);
+  --sidebar: oklch(0.220 0.010 250);
+  --sidebar-foreground: oklch(0.962 0.010 80);
+  --sidebar-primary: oklch(0.665 0.180 45);
+  --sidebar-primary-foreground: oklch(0.180 0.010 250);
+  --sidebar-accent: oklch(0.300 0.040 50);
+  --sidebar-accent-foreground: oklch(0.962 0.010 80);
+  --sidebar-border: oklch(0.280 0.010 250);
+  --sidebar-ring: oklch(0.665 0.180 45);
 }
 
 @theme inline {
   --font-sans: "Plus Jakarta Sans", "Geist", "Geist Fallback", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
+  --font-serif: "Instrument Serif", "Source Serif 4", "Source Serif Pro", ui-serif, Georgia, serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -138,85 +154,52 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --color-teal: var(--teal);
-  --color-teal-light: var(--teal-light);
-  --color-coral: var(--coral);
-  --color-coral-light: var(--coral-light);
-  --color-success: var(--success);
-  --color-success-light: var(--success-light);
+
+  /* Brand color utilities — use `bg-brand-cream`, `text-brand-ink`, etc. */
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-cream-soft: var(--brand-cream-soft);
+  --color-brand-card: var(--brand-card);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-soft: var(--brand-ink-soft);
+  --color-brand-ink-hover: var(--brand-ink-hover);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-accent-hover: var(--brand-accent-hover);
+  --color-brand-accent-tint: var(--brand-accent-tint);
+  --color-brand-rule: var(--brand-rule);
+  --color-brand-rule-soft: var(--brand-rule-soft);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-muted-soft: var(--brand-muted-soft);
+  --color-brand-success: var(--brand-success);
+  --color-brand-on-accent: var(--brand-on-accent);
+
   --animate-marquee: marquee var(--duration) infinite linear;
   --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
   @keyframes marquee {
-  from {
-    transform: translateX(0);
-    }
-  to {
-    transform: translateX(calc(-100% - var(--gap)));
-    }
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-100% - var(--gap))); }
   }
   @keyframes marquee-vertical {
-  from {
-    transform: translateY(0);
-    }
-  to {
-    transform: translateY(calc(-100% - var(--gap)));
-    }
+    from { transform: translateY(0); }
+    to { transform: translateY(calc(-100% - var(--gap))); }
   }
   --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
   --animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
   --animate-shiny-text: shiny-text 8s infinite;
   --animate-gradient: gradient 8s linear infinite;
   --animate-ripple: ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite;
-  --animate-pulse: pulse var(--duration) ease-out infinite
-;
-  @keyframes shimmer-slide {
-  to {
-    transform: translate(calc(100cqw - 100%), 0);
-    }
-  }
+  --animate-pulse: pulse var(--duration) ease-out infinite;
+  @keyframes shimmer-slide { to { transform: translate(calc(100cqw - 100%), 0); } }
   @keyframes spin-around {
-  0% {
-    transform: translateZ(0) rotate(0);
-    }
-  15%, 35% {
-    transform: translateZ(0) rotate(90deg);
-    }
-  65%, 85% {
-    transform: translateZ(0) rotate(270deg);
-    }
-  100% {
-    transform: translateZ(0) rotate(360deg);
-    }
+    0% { transform: translateZ(0) rotate(0); }
+    15%, 35% { transform: translateZ(0) rotate(90deg); }
+    65%, 85% { transform: translateZ(0) rotate(270deg); }
+    100% { transform: translateZ(0) rotate(360deg); }
   }
-  @keyframes shiny-text {
-  0%, 90%, 100% {
-    background-position: calc(-100% - var(--shiny-width)) 0;
-    }
-  30%, 60% {
-    background-position: calc(100% + var(--shiny-width)) 0;
-    }
-  }
-  @keyframes gradient {
-  to {
-    background-position: var(--bg-size, 300%) 0;
-    }
-  }
-  @keyframes ripple {
-  0%, 100% {
-    transform: translate(-50%, -50%) scale(1);
-    }
-  50% {
-    transform: translate(-50%, -50%) scale(0.9);
-    }
-  }
-  @keyframes pulse {
-  0%, 100% {
-    boxShadow: 0 0 0 0 var(--pulse-color);
-    }
-  50% {
-    boxShadow: 0 0 0 8px var(--pulse-color);
-    }
-  }}
+  @keyframes shiny-text { 0%, 90%, 100% { background-position: calc(-100% - var(--shiny-width)) 0; } 30%, 60% { background-position: calc(100% + var(--shiny-width)) 0; } }
+  @keyframes gradient { to { background-position: var(--bg-size, 300%) 0; } }
+  @keyframes ripple { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(0.9); } }
+  @keyframes pulse { 0%, 100% { boxShadow: 0 0 0 0 var(--pulse-color); } 50% { boxShadow: 0 0 0 8px var(--pulse-color); } }
+}
 
 @layer base {
   * {
@@ -227,7 +210,53 @@
   }
 }
 
-/* Hide scrollbar for horizontal scroll containers */
+/* ─── Muvx brand component classes ─────────────────────────────
+   Reusable across auth, onboarding, landing, and dashboard.
+   Defined as @layer components so they layer correctly and can be
+   overridden by shadcn utilities via cn().
+   ──────────────────────────────────────────────────────────────── */
+
+@layer components {
+  .display-heading {
+    @apply font-serif text-[clamp(32px,4.4vw,46px)] font-normal leading-[1.04] tracking-[-0.03em] text-brand-ink;
+  }
+  .italic-accent {
+    @apply italic text-brand-accent;
+  }
+  .field-label {
+    @apply mb-1.5 block font-mono text-[11px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft;
+  }
+  .field-error {
+    @apply mt-1.5 text-[12.5px] text-destructive;
+  }
+  .error-banner {
+    @apply rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-[13.5px] text-destructive;
+  }
+  .input-base {
+    @apply h-11 w-full rounded-lg border border-brand-rule bg-brand-card px-3 text-[15px] text-brand-ink placeholder:text-brand-muted-soft/70 transition-colors focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/20;
+  }
+  .input-with-icon {
+    @apply h-11 w-full rounded-lg border border-brand-rule bg-brand-card pl-10 pr-3 text-[15px] text-brand-ink placeholder:text-brand-muted-soft/70 transition-colors focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/20;
+  }
+  .btn-primary {
+    @apply inline-flex h-11 w-full items-center justify-center rounded-full bg-brand-ink px-7 font-sans text-[15px] font-medium text-brand-cream transition-colors hover:bg-brand-ink-hover disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex h-11 w-full items-center justify-center rounded-full border border-brand-ink/20 px-7 font-sans text-[15px] font-medium text-brand-ink transition-colors hover:bg-brand-cream-soft disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-accent {
+    @apply inline-flex h-11 w-full items-center justify-center rounded-full bg-brand-accent px-7 font-sans text-[15px] font-medium text-brand-on-accent transition-colors hover:bg-brand-accent-hover disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .card-elevated {
+    @apply rounded-2xl border border-brand-rule bg-brand-card;
+    box-shadow: 0 10px 30px rgba(58, 46, 30, 0.06);
+  }
+  .eyebrow {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft;
+  }
+}
+
+/* ─── Utility: hide scrollbars on horizontal scroll containers ── */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -236,45 +265,20 @@
   display: none;
 }
 
-/* Custom animations */
+/* ─── Custom animations ──────────────────────────────────────── */
 @keyframes counter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
-
 @keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-.animate-counter {
-  animation: counter 0.5s ease-out forwards;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-.animate-spin-slow {
-  animation: spin-slow 4s linear infinite;
-}
+.animate-counter { animation: counter 0.5s ease-out forwards; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-spin-slow { animation: spin-slow 4s linear infinite; }

@@ -65,7 +65,7 @@ export default function SignupPage() {
     try {
       const result = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/onboarding",
+        callbackURL: "/auth-redirect",
       })
       if (result.error) {
         console.error("[SIGNUP] Google signup error:", result.error)
@@ -80,22 +80,22 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f2ec] flex flex-col">
+    <div className="min-h-screen bg-brand-cream flex flex-col">
       {/* Top bar */}
       <header className="w-full bg-[#fbf8f3]">
         <div className="mx-auto flex max-w-[1440px] items-center gap-10 px-6 py-[22px] md:px-16">
           <Link href="/" className="flex items-center">
-            <span className="font-serif text-[30px] font-medium leading-none tracking-[-0.015em] text-[#16181d]">
+            <span className="font-serif text-[30px] font-medium leading-none tracking-[-0.015em] text-brand-ink">
               Muvx<span className="text-[#e8602b]">TMS</span>
             </span>
           </Link>
           <div className="ml-auto flex items-center gap-6">
-            <span className="hidden sm:block font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f]">
+            <span className="hidden sm:block font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft">
               GET EARLY ACCESS
             </span>
             <Link
               href="/login"
-              className="font-geist text-sm font-medium text-[#4a4e57] hover:text-[#16181d] transition-colors"
+              className="font-geist text-sm font-medium text-[#4a4e57] hover:text-brand-ink transition-colors"
             >
               Sign in
             </Link>
@@ -107,27 +107,27 @@ export default function SignupPage() {
         <div className="w-full max-w-[480px]">
           {/* Eyebrow */}
           <div className="mb-6 flex items-center gap-2.5">
-            <span className="size-[7px] shrink-0 rounded-full bg-[#d9622b]" />
-            <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em] text-[#16181d]">
+            <span className="size-[7px] shrink-0 rounded-full bg-brand-accent" />
+            <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em] text-brand-ink">
               CREATE ACCOUNT
             </span>
-            <span className="font-geist-mono text-[11px] tracking-[0.04em] text-[#8a8b8f]">
+            <span className="font-geist-mono text-[11px] tracking-[0.04em] text-brand-muted-soft">
               · NO CREDIT CARD REQUIRED
             </span>
           </div>
 
           {/* Headline */}
-          <h1 className="font-serif text-[clamp(40px,5vw,56px)] leading-[0.96] tracking-[-0.04em] text-[#16181d] mb-2">
-            Start moving <span className="italic text-[#d9622b]">freight</span> in minutes.
+          <h1 className="font-serif text-[clamp(40px,5vw,56px)] leading-[0.96] tracking-[-0.04em] text-brand-ink mb-2">
+            Start moving <span className="italic text-brand-accent">freight</span> in minutes.
           </h1>
           <p className="text-[#4a4e57] font-geist mb-8">
             Dispatch, drivers, documents, and dollars — all in one TMS.
           </p>
 
-          <Card className="border-[#dcd5c9] bg-[#fffefb] shadow-[0_10px_30px_rgba(58,46,30,0.06)]">
+          <Card className="border-brand-rule bg-[#fffefb] shadow-[0_10px_30px_rgba(58,46,30,0.06)]">
             <div className="p-7">
               {error && (
-                <div className="mb-5 p-3 text-sm text-[#d9622b] bg-[#d9622b]/[0.08] border border-[#d9622b]/30 rounded-xl">
+                <div className="mb-5 p-3 text-sm text-brand-accent bg-brand-accent/[0.08] border border-brand-accent/30 rounded-xl">
                   {error}
                 </div>
               )}
@@ -136,7 +136,7 @@ export default function SignupPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-12 border-[#dcd5c9] hover:bg-[#fbf8f3] bg-[#fffdf9] font-geist"
+                className="w-full h-12 border-brand-rule hover:bg-[#fbf8f3] bg-brand-card font-geist"
                 onClick={handleGoogleSignup}
                 disabled={googleLoading || loading}
               >
@@ -154,16 +154,16 @@ export default function SignupPage() {
               </Button>
 
               <div className="relative my-6 flex items-center">
-                <div className="flex-1 border-t border-[#dcd5c9]" />
-                <span className="px-3 text-xs font-geist-mono tracking-[0.04em] text-[#8a8b8f] uppercase">
+                <div className="flex-1 border-t border-brand-rule" />
+                <span className="px-3 text-xs font-geist-mono tracking-[0.04em] text-brand-muted-soft uppercase">
                   or
                 </span>
-                <div className="flex-1 border-t border-[#dcd5c9]" />
+                <div className="flex-1 border-t border-brand-rule" />
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                  <Label htmlFor="name" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                     Full name
                   </Label>
                   <Input
@@ -172,13 +172,13 @@ export default function SignupPage() {
                     placeholder="John Doe"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="h-12 border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                    className="h-12 border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                  <Label htmlFor="email" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                     Work email
                   </Label>
                   <Input
@@ -187,13 +187,13 @@ export default function SignupPage() {
                     placeholder="you@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                    className="h-12 border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="password" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                  <Label htmlFor="password" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                     Password
                   </Label>
                   <Input
@@ -202,14 +202,14 @@ export default function SignupPage() {
                     placeholder="At least 8 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="h-12 border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                    className="h-12 border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                     required
                     minLength={8}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="confirmPassword" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-[#8a8b8f] uppercase">
+                  <Label htmlFor="confirmPassword" className="font-geist-mono text-[10px] font-medium tracking-[0.04em] text-brand-muted-soft uppercase">
                     Confirm password
                   </Label>
                   <Input
@@ -218,7 +218,7 @@ export default function SignupPage() {
                     placeholder="Re-enter password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="h-12 border-[#dcd5c9] focus-visible:ring-[#16181d]/10 focus-visible:border-[#16181d] bg-[#fffdf9]"
+                    className="h-12 border-brand-rule focus-visible:ring-brand-ink/10 focus-visible:border-brand-ink bg-brand-card"
                     required
                     minLength={8}
                   />
@@ -226,7 +226,7 @@ export default function SignupPage() {
 
                 <Button
                   type="submit"
-                  className="w-full h-12 rounded-full bg-[#16181d] hover:bg-[#2a2d35] font-geist text-[#f5f2ec] mt-2"
+                  className="w-full h-12 rounded-full bg-brand-ink hover:bg-brand-ink-soft font-geist text-brand-cream mt-2"
                   disabled={loading}
                 >
                   {loading ? (
@@ -245,11 +245,11 @@ export default function SignupPage() {
             </div>
           </Card>
 
-          <p className="text-center text-xs text-[#8a8b8f] mt-6 font-geist leading-relaxed">
+          <p className="text-center text-xs text-brand-muted-soft mt-6 font-geist leading-relaxed">
             By creating an account, you agree to our{" "}
-            <Link href="/terms" className="text-[#16181d] hover:underline">Terms</Link>
+            <Link href="/terms" className="text-brand-ink hover:underline">Terms</Link>
             {" "}and{" "}
-            <Link href="/privacy" className="text-[#16181d] hover:underline">Privacy Policy</Link>.
+            <Link href="/privacy" className="text-brand-ink hover:underline">Privacy Policy</Link>.
           </p>
         </div>
       </main>

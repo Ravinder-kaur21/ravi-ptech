@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { getSession } from "@/lib/auth-server"
+import { getSession } from "@/lib/dal"
 
 // Routes that require authentication AND an active organization
 const protectedRoutes = [
@@ -16,7 +16,12 @@ const protectedRoutes = [
   "/expense-review",
   "/carrier-pay",
   "/settings",
+  "/notifications",
 ]
+
+// Admin console — requires authentication only (the (admin) layout enforces
+// the superadmin check via SUPERADMIN_EMAILS). Org membership is irrelevant.
+const adminRoutes = ["/admin"]
 
 // Routes that require authentication but NOT an organization (onboarding/redirect)
 const authOnlyRoutes = ["/onboarding", "/select-org", "/auth-redirect"]
@@ -29,6 +34,9 @@ export async function proxy(request: NextRequest) {
   console.log(`[PROXY] ${request.method} ${pathname}`)
 
   const isProtectedRoute = protectedRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  )
+  const isAdminRoute = adminRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   )
   const isAuthOnlyRoute = authOnlyRoutes.some(
@@ -61,13 +69,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", request.url))
   }
 
-  // Case 3: Authenticated user with org trying to access auth-only routes
+  // Case 3: Admin route — requires auth, but org membership irrelevant
+  if (isAdminRoute && !isAuthenticated) {
+    console.log(`[PROXY] Admin route blocked for unauthenticated user`)
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("redirect", pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // Case 4: Authenticated user with org trying to access auth-only routes
   if (isAuthOnlyRoute && isAuthenticated && hasOrg) {
     console.log(`[PROXY] Auth user with org, redirecting to /dashboard`)
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
-  // Case 4: Authenticated user with org trying to access public routes
+  // Case 5: Authenticated user with org trying to access public routes
   if (isPublicRoute && isAuthenticated && hasOrg) {
     console.log(`[PROXY] Auth user with org, redirecting to /dashboard`)
     return NextResponse.redirect(new URL("/dashboard", request.url))

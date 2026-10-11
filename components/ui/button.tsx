@@ -43,12 +43,20 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  render,
+  nativeButton,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      // Base UI assumes a native <button> and warns when `render` produces
+      // anything else. Defaulting to false whenever a custom element is
+      // rendered keeps the a11y semantics honest: a link that looks like a
+      // button should stay a link (middle-click, open-in-new-tab).
+      nativeButton={nativeButton ?? (render ? false : undefined)}
+      render={render}
       {...props}
     />
   )

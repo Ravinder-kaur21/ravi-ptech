@@ -23,7 +23,8 @@ export default function SelectOrgPage() {
     const fetchOrgs = async () => {
       try {
         const { data } = await authClient.organization.list()
-        setOrgs(data?.organizations ?? [])
+        // [SELECT-ORG] organization.list() returns a bare array
+        setOrgs(data ?? [])
       } catch (err) {
         console.error("Failed to fetch orgs:", err)
       }

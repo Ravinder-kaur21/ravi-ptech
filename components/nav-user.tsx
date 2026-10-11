@@ -1,5 +1,17 @@
 "use client"
 
+import * as React from "react"
+import Link from "next/link"
+import {
+  ChevronsUpDown,
+  CreditCard,
+  Eye,
+  LogOut,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  UserCog,
+} from "lucide-react"
 import {
   Avatar,
   AvatarFallback,
@@ -20,88 +32,203 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { authClient } from "@/lib/auth-client"
+import { useAuthStore } from "@/lib/stores/auth-store"
+import { toast } from "sonner"
 
+type NavUserProps = {
+  user: {
+    userId: string
+    userName: string
+    userEmail: string
+    userImage: string | null
+    userRole: string
+  }
+  /** When true, shows an "Admin console" item in the dropdown. */
+  isAdmin?: boolean
+  /** When true, shows a "Stop impersonating" item at the top of the dropdown. */
+  isImpersonating?: boolean
+}
+
+/**
+ * Footer identity card for the sidebar. Mirrors the sidebar-07 footer
+ * pattern: avatar + name/email trigger a dropdown with profile, settings,
+ * billing, switch workspace, and sign out. Adapted to the Muvx brand.
+ *
+ * When `isSuperadmin` is true, the dropdown gains an "Admin console" item.
+ * When `isImpersonating` is true, an amber "Stop impersonating" item appears
+ * at the top so superadmins can exit quickly from anywhere in the app.
+ */
 export function NavUser({
   user,
-}: {
-  user: {
-    name: string
-    email: string
-    avatar: string
-  }
-}) {
+  isAdmin = false,
+  isImpersonating = false,
+}: NavUserProps) {
+  const reset = useAuthStore((s) => s.reset)
   const { isMobile } = useSidebar()
+
+  const initials = user.userName
+    .split(" ")
+    .map((p) => p.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+
+  const handleStopImpersonating = async () => {
+    console.log("[NAV-USER] stopping impersonation")
+    try {
+      await authClient.admin.stopImpersonating()
+      console.log("[NAV-USER] ✅ impersonation stopped")
+      toast.success("Returned to your admin session")
+      window.location.href = "/admin"
+    } catch (err) {
+      console.error("[NAV-USER] stopImpersonating failed:", err)
+      toast.error("Failed to stop impersonating")
+    }
+  }
+
+  const handleSignOut = async () => {
+    console.log("[NAV-USER] signing out")
+    try {
+      await authClient.signOut()
+    } catch (err) {
+      console.error("[NAV-USER] signOut error:", err)
+    }
+    reset()
+    // Hard navigate so the auth-cookie / session-cached UI is fully reset.
+    console.log("[NAV-USER] redirecting to /login")
+    window.location.href = "/login"
+  }
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
+              <SidebarMenuButton
+                size="lg"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border border-sidebar-border"
+              />
             }
           >
-            <Avatar>
-              <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback>CN</AvatarFallback>
+            <Avatar className="h-8 w-8 rounded-md">
+              <AvatarImage src={user.userImage ?? undefined} alt={user.userName} />
+              <AvatarFallback className="rounded-md bg-brand-accent text-brand-cream text-[11px] font-semibold">
+                {initials || "U"}
+              </AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-xs">{user.email}</span>
+            <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+              <span className="truncate font-semibold text-brand-ink text-[13px]">
+                {user.userName}
+              </span>
+              <span className="truncate font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+                {user.userRole}
+              </span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-4" />
+            <ChevronsUpDown className="ml-auto size-4 text-brand-muted-soft" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56 rounded-lg"
+            className="w-56 rounded-lg border-brand-rule bg-brand-card p-1"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
+            {/* Stop impersonating — amber, only while impersonating */}
+            {isImpersonating && (
+              <>
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    onClick={handleStopImpersonating}
+                    className="rounded-md cursor-pointer text-amber-900 focus:text-amber-950 bg-amber-50 focus:bg-amber-100"
+                  >
+                    <Eye className="mr-2 size-4" />
+                    Stop impersonating
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator className="bg-brand-rule" />
+              </>
+            )}
+
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar>
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>CN</AvatarFallback>
-                  </Avatar>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user.name}</span>
-                    <span className="truncate text-xs">{user.email}</span>
-                  </div>
+              <DropdownMenuLabel className="px-2 py-1.5">
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-medium text-brand-ink">
+                    {user.userName}
+                  </span>
+                  <span className="text-[11px] text-brand-muted-soft">
+                    {user.userEmail}
+                  </span>
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-brand-rule" />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
+              <DropdownMenuItem
+                render={
+                  <Link
+                    href="/settings/profile"
+                    className="rounded-md cursor-pointer"
+                  />
+                }
+              >
+                <UserCog className="mr-2 size-4 text-brand-muted-soft" />
+                Profile
               </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon
-                />
-                Account
+              <DropdownMenuItem
+                render={
+                  <Link href="/settings" className="rounded-md cursor-pointer" />
+                }
+              >
+                <Settings className="mr-2 size-4 text-brand-muted-soft" />
+                Settings
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
+              <DropdownMenuItem
+                render={
+                  <Link
+                    href="/settings/billing"
+                    className="rounded-md cursor-pointer"
+                  />
+                }
+              >
+                <CreditCard className="mr-2 size-4 text-brand-muted-soft" />
                 Billing
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon
-                />
-                Notifications
-              </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOutIcon
-              />
-              Log out
+
+            {/* Admin console — only for admins */}
+            {isAdmin && (
+              <>
+                <DropdownMenuSeparator className="bg-brand-rule" />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    render={
+                      <Link href="/admin" className="rounded-md cursor-pointer" />
+                    }
+                  >
+                    <ShieldCheck className="mr-2 size-4 text-brand-accent" />
+                    Admin console
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            )}
+
+            <DropdownMenuSeparator className="bg-brand-rule" />
+            <DropdownMenuItem
+              render={
+                <Link href="/select-org" className="rounded-md cursor-pointer" />
+              }
+            >
+              <Sparkles className="mr-2 size-4 text-brand-accent" />
+              Switch workspace
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-brand-rule" />
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              className="rounded-md cursor-pointer text-brand-accent focus:text-brand-accent"
+            >
+              <LogOut className="mr-2 size-4" />
+              Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

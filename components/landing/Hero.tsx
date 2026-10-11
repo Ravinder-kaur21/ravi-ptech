@@ -145,9 +145,9 @@ export default function Hero() {
            * ────────────────────────────────────────────────────────────── */}
           <div className="relative z-20 max-w-[760px] pt-1 lg:pt-[20px]">
             <h1 className="max-w-[760px] font-serif font-normal text-[clamp(56px,7.2vw,104px)] leading-[0.92] tracking-[-0.045em] text-[#16181d]">
-              <span className="block">The TMS built for</span>
+              <span className="block ">The TMS built for</span>
 
-              <span className="block italic text-[#d9622b]">the way your fleet moves.</span>
+              <span className="block italic font-serif text-[#d9622b]">the way your fleet moves.</span>
             </h1>
 
             <p className="mt-8 max-w-[560px] font-geist text-[18px] leading-7 text-[#4a4e57] md:text-[20px] md:leading-[30px]">
