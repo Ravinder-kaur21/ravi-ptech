@@ -251,6 +251,11 @@
     @apply rounded-2xl border border-brand-rule bg-brand-card;
     box-shadow: 0 10px 30px rgba(58, 46, 30, 0.06);
   }
+
+  .btn-mostly-used-in-app-im-not-confiremed-how-that-used-so-this-class-made {
+    @apply h-9 px-4 inline-flex items-center justify-center rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm transition-colors
+  }
+
   .eyebrow {
     @apply font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft;
   }
