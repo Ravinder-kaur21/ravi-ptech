@@ -1,7 +1,7 @@
 import "server-only"
 import { headers } from "next/headers"
 import { db } from "@/lib/db"
-import { eq, and } from "drizzle-orm"
+import { eq, and, gt } from "drizzle-orm"
 import { member, organization, invitation } from "@/lib/schema"
 import { auth } from "@/lib/auth"
 import { getSession } from "@/lib/dal"
@@ -38,7 +38,13 @@ async function getPendingInviteDestination(email: string): Promise<Destination |
   const rows = await db
     .select({ id: invitation.id })
     .from(invitation)
-    .where(and(eq(invitation.email, email.toLowerCase()), eq(invitation.status, "pending")))
+    .where(
+      and(
+        eq(invitation.email, email.toLowerCase()),
+        eq(invitation.status, "pending"),
+        gt(invitation.expiresAt, new Date()),
+      ),
+    )
     .limit(1)
   return rows[0]?.id ? `/invite/${rows[0].id}` : null
 }

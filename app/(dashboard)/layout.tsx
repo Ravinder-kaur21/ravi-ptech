@@ -92,9 +92,10 @@ export default async function DashboardLayout({
   // bypass this gate so they can still inspect suspended workspaces.
   if (
     !isAdminForGate &&
-    myMembership?.suspendedAt &&
-    (!myMembership.suspendedUntil ||
-      new Date(myMembership.suspendedUntil as any) > new Date())
+    (org.suspended ||
+      (myMembership?.suspendedAt &&
+        (!myMembership.suspendedUntil ||
+          new Date(myMembership.suspendedUntil as any) > new Date())))
   ) {
     console.log(
       `[DASHBOARD-LAYOUT] workspace suspended user=${session.user.id} org=${orgId} → /workspace-suspended`,

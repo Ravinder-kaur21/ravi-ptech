@@ -45,6 +45,8 @@ export async function proxy(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   )
+  const isCreatingAdditionalWorkspace =
+    pathname === "/onboarding" && request.nextUrl.searchParams.get("create") === "1"
 
   // Get session
   const session = await getSession()
@@ -65,8 +67,10 @@ export async function proxy(request: NextRequest) {
 
   // Case 2: Authenticated user without org trying to access protected routes
   if (isProtectedRoute && isAuthenticated && !hasOrg) {
-    console.log(`[PROXY] Auth user without org, redirecting to /onboarding`)
-    return NextResponse.redirect(new URL("/onboarding", request.url))
+    // Resolve pending invitations, other memberships, and stale active-org
+    // state before deciding that this user needs onboarding.
+    console.log(`[PROXY] Auth user without active org, redirecting to /auth-redirect`)
+    return NextResponse.redirect(new URL("/auth-redirect", request.url))
   }
 
   // Case 3: Admin route — requires auth, but org membership irrelevant
@@ -78,15 +82,15 @@ export async function proxy(request: NextRequest) {
   }
 
   // Case 4: Authenticated user with org trying to access auth-only routes
-  if (isAuthOnlyRoute && isAuthenticated && hasOrg) {
+  if (isAuthOnlyRoute && isAuthenticated && hasOrg && !isCreatingAdditionalWorkspace) {
     console.log(`[PROXY] Auth user with org, redirecting to /dashboard`)
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   // Case 5: Authenticated user with org trying to access public routes
-  if (isPublicRoute && isAuthenticated && hasOrg) {
-    console.log(`[PROXY] Auth user with org, redirecting to /dashboard`)
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+  if (isPublicRoute && isAuthenticated) {
+    console.log(`[PROXY] Auth user on public route, redirecting to /auth-redirect`)
+    return NextResponse.redirect(new URL("/auth-redirect", request.url))
   }
 
   return NextResponse.next()

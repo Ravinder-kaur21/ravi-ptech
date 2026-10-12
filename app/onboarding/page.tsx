@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
@@ -124,6 +124,8 @@ const STEPS = [
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isCreatingAdditionalWorkspace = searchParams.get("create") === "1"
   const setActiveOrganization = useAuthStore((s) => s.setActiveOrganization)
 
   const {
@@ -142,6 +144,10 @@ export default function OnboardingPage() {
     const check = async () => {
       console.log("[ONBOARDING] Checking existing orgs...")
       try {
+        if (isCreatingAdditionalWorkspace) {
+          console.log("[ONBOARDING] creating an additional workspace")
+          return
+        }
         // Invite recipients may have a user account but no membership yet.
         // Resolve the pending invite before showing workspace creation.
         const routingRes = await fetch("/api/me/routing", { cache: "no-store" })
@@ -158,35 +164,14 @@ export default function OnboardingPage() {
         const list = orgs ?? []
 
         if (list.length > 0) {
-          const completed = list.find((o: any) => {
-            // metadata is already an object (record<string, any>) from Better Auth
-            const meta = (o.metadata as any) ?? {}
-            return meta?.onboardingCompleted === true
-          })
-
-          if (completed) {
-            console.log("[ONBOARDING] Already completed, going to dashboard")
-            await authClient.organization.setActive({ organizationId: completed.id })
-            router.push("/dashboard")
-            return
-          }
-
-          // Pre-fill from existing
+          // Membership means the account already belongs to a workspace.
+          // The workspace owner's onboarding metadata must never decide
+          // whether an invited teammate gets asked to create another one.
           const existing = list[0] as any
-          console.log("[ONBOARDING] Pre-filling from existing org:", existing.slug)
-          setField("companyName", existing.name)
-          setField("slug", existing.slug)
-          // metadata is already an object
-          const meta = (existing.metadata as any) ?? {}
-          if (meta.dotNumber) setField("dotNumber", meta.dotNumber)
-          if (meta.mcNumber) setField("mcNumber", meta.mcNumber)
-          if (meta.businessType) setField("businessType", meta.businessType)
-          if (meta.fleetSize) setField("fleetSize", meta.fleetSize)
-          if (meta.teamSize) setField("teamSize", meta.teamSize)
-          if (meta.geographicScope) setField("geographicScope", meta.geographicScope)
-          if (meta.currentTool) setField("currentTool", meta.currentTool)
-          if (meta.freightTypes) setField("freightTypes", meta.freightTypes)
-          if (meta.primaryGoals) setField("primaryGoals", meta.primaryGoals)
+          console.log("[ONBOARDING] existing workspace membership → dashboard")
+          await authClient.organization.setActive({ organizationId: existing.id })
+          router.replace("/dashboard")
+          return
         }
       } catch (err) {
         console.error("[ONBOARDING] check existing failed:", err)
@@ -195,7 +180,7 @@ export default function OnboardingPage() {
       }
     }
     check()
-  }, [router, setField])
+  }, [isCreatingAdditionalWorkspace, router, setField])
 
   // ─── Slug check ───
   // Better Auth `POST /organization/check-slug` returns { status: true } when

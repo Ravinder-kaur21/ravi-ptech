@@ -214,7 +214,7 @@ export function AppSidebar({
                 <DropdownMenuItem
                   render={
                     <Link
-                      href="/onboarding"
+                      href="/onboarding?create=1"
                       className="rounded-md cursor-pointer text-brand-accent"
                     />
                   }

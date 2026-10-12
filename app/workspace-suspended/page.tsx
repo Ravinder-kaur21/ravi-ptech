@@ -47,6 +47,8 @@ export default async function WorkspaceSuspendedPage() {
       suspendedReason: member.suspendedReason,
       orgName: organization.name,
       orgSlug: organization.slug,
+      organizationSuspended: organization.suspended,
+      organizationSuspendedReason: organization.suspendedReason,
     })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
@@ -57,11 +59,12 @@ export default async function WorkspaceSuspendedPage() {
 
   const row = rows[0]
   const now = new Date()
-  const stillSuspended =
+  const memberSuspended =
     row &&
     row.suspendedAt !== null &&
     (row.suspendedUntil === null ||
       (row.suspendedUntil as Date) > now)
+  const stillSuspended = row?.organizationSuspended || memberSuspended
 
   // If they're no longer suspended (or never were), bounce to dashboard.
   if (!stillSuspended) {
@@ -110,16 +113,18 @@ export default async function WorkspaceSuspendedPage() {
             Reason
           </h2>
           <p className="mt-2 text-[15px] leading-relaxed text-brand-ink">
-            {row?.suspendedReason ?? "No reason provided."}
+            {row?.organizationSuspended
+              ? row.organizationSuspendedReason ?? "No reason provided."
+              : row?.suspendedReason ?? "No reason provided."}
           </p>
-          {liftedAt && (
+          {!row?.organizationSuspended && liftedAt && (
             <p className="mt-4 text-[12px] text-brand-muted-soft">
               Suspension lifts automatically on{" "}
               <strong className="text-brand-ink">{liftedAt}</strong> if no
               earlier action is taken.
             </p>
           )}
-          {!liftedAt && (
+          {!row?.organizationSuspended && !liftedAt && (
             <p className="mt-4 text-[12px] text-brand-muted-soft">
               This suspension has no automatic end date.
             </p>

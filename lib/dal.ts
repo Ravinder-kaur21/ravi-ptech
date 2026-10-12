@@ -201,10 +201,13 @@ export async function requireTenant() {
   if (platformRole !== "admin") {
     const [row] = await db
       .select({
+        membershipId: member.id,
         suspendedAt: member.suspendedAt,
         suspendedUntil: member.suspendedUntil,
+        organizationSuspended: organization.suspended,
       })
       .from(member)
+      .innerJoin(organization, eq(organization.id, member.organizationId))
       .where(
         and(
           eq(member.userId, session.user.id),
@@ -212,7 +215,14 @@ export async function requireTenant() {
         ),
       )
       .limit(1)
+    if (!row) {
+      console.log(
+        `[DAL] requireTenant: user=${session.user.id} is not a member of org=${orgId} → FORBIDDEN`,
+      )
+      throw new TenantError("FORBIDDEN")
+    }
     if (
+      row.organizationSuspended ||
       row?.suspendedAt &&
       (!row.suspendedUntil ||
         (row.suspendedUntil as Date) > new Date())
