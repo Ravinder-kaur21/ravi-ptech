@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { authClient } from "@/lib/auth-client"
 
 export default function AuthRedirectPage() {
   const router = useRouter()
@@ -23,6 +24,8 @@ export default function AuthRedirectPage() {
           destination: string
           isPlatformAdmin: boolean
           email: string | null
+          activeOrgId: string | null
+          orgs: { id: string }[]
         }
         if (!d.email) {
           console.log("[AUTH-REDIRECT] no session, → /login")
@@ -30,6 +33,16 @@ export default function AuthRedirectPage() {
             nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : "/login"
           )
           return
+        }
+        // A valid session can have a workspace membership but no active
+        // workspace after suspension, logout/login, or a stale session. Set
+        // the sole available workspace in the browser before opening the
+        // dashboard; Better Auth persists this on the session cookie.
+        if (!d.activeOrgId && d.orgs.length === 1) {
+          const { error } = await authClient.organization.setActive({
+            organizationId: d.orgs[0].id,
+          })
+          if (error) throw new Error(error.message || "Could not select workspace")
         }
         // Honor ?next= if it's one of our known destinations
         if (

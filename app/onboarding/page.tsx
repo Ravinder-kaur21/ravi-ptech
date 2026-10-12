@@ -142,6 +142,17 @@ export default function OnboardingPage() {
     const check = async () => {
       console.log("[ONBOARDING] Checking existing orgs...")
       try {
+        // Invite recipients may have a user account but no membership yet.
+        // Resolve the pending invite before showing workspace creation.
+        const routingRes = await fetch("/api/me/routing", { cache: "no-store" })
+        if (routingRes.ok) {
+          const routing = (await routingRes.json()) as { destination?: string }
+          if (routing.destination?.startsWith("/invite/")) {
+            console.log("[ONBOARDING] pending invite →", routing.destination)
+            router.replace(routing.destination)
+            return
+          }
+        }
         const { data: orgs } = await authClient.organization.list()
         // [ONBOARDING] organization.list() returns a bare array, not { organizations }
         const list = orgs ?? []

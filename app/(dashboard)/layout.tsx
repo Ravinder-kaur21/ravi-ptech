@@ -39,8 +39,19 @@ export default async function DashboardLayout({
   // [LAYOUT] Gate: must have an active organization
   const orgId = session.session.activeOrganizationId
   if (!orgId) {
-    console.log("[DASHBOARD-LAYOUT] no active org → /onboarding")
-    redirect("/onboarding")
+    // Sessions can lose their active-org cookie after logout/login or an
+    // invitation flow. Recover a single valid membership before deciding the
+    // user needs onboarding; onboarding is only for users with no workspace.
+    const memberships = await getMembersForUser(session.user.id)
+    if (memberships.length === 1) {
+      // Cookie mutation must happen in a route handler or browser client.
+      // /auth-redirect sets the sole workspace active with Better Auth and
+      // then returns here.
+      console.log("[DASHBOARD-LAYOUT] one workspace with no active org → /auth-redirect")
+      redirect("/auth-redirect")
+    }
+    console.log("[DASHBOARD-LAYOUT] no memberships → /onboarding")
+    redirect(memberships.length > 1 ? "/select-org" : "/onboarding")
   }
 
   // [LAYOUT] Fetch the active org, the user's membership, admin status,
@@ -65,6 +76,13 @@ export default async function DashboardLayout({
 
   // [LAYOUT] Find this user's role in the active org
   const myMembership = members.find((m) => m.userId === session.user.id)
+  // Never render a workspace solely because it remains in a stale session.
+  // This can happen after a member is removed in another browser/session.
+  // The centralized resolver will choose another membership or onboarding.
+  if (!myMembership && !isAdminForGate) {
+    console.warn("[DASHBOARD-LAYOUT] active org has no membership → /auth-redirect")
+    redirect("/auth-redirect")
+  }
   const role = myMembership?.role ?? "member"
 
   // [LAYOUT] Gate: workspace-scoped suspension (WS-26).
@@ -134,6 +152,13 @@ export default async function DashboardLayout({
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+async function getMembersForUser(userId: string) {
+  return db
+    .select({ organizationId: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, userId))
 }
 
 /**

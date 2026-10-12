@@ -2,7 +2,7 @@ import "server-only"
 import { headers } from "next/headers"
 import { db } from "@/lib/db"
 import { eq, and } from "drizzle-orm"
-import { member, organization } from "@/lib/schema"
+import { member, organization, invitation } from "@/lib/schema"
 import { auth } from "@/lib/auth"
 import { getSession } from "@/lib/dal"
 
@@ -33,6 +33,16 @@ export type Destination =
   | "/onboarding"
   | "/select-org"
 
+/** A new invite recipient has no member row until the invite is accepted. */
+async function getPendingInviteDestination(email: string): Promise<Destination | string | null> {
+  const rows = await db
+    .select({ id: invitation.id })
+    .from(invitation)
+    .where(and(eq(invitation.email, email.toLowerCase()), eq(invitation.status, "pending")))
+    .limit(1)
+  return rows[0]?.id ? `/invite/${rows[0].id}` : null
+}
+
 const KNOWN_DESTS: ReadonlyArray<Destination> = [
   "/admin",
   "/dashboard",
@@ -46,7 +56,7 @@ function isKnownDest(s: string): s is Destination {
 
 export async function postAuthDestination(
   opts: { next?: string | null; activeOrgId?: string | null } = {}
-): Promise<Destination> {
+): Promise<Destination | string> {
   console.log("[ROLE-PATHS] resolving post-auth destination", {
     next: opts.next,
     activeOrgId: opts.activeOrgId,
@@ -68,6 +78,12 @@ export async function postAuthDestination(
   if ((session.user as any).role === "admin") {
     console.log(`[ROLE-PATHS] platform admin ${session.user.email} → /admin`)
     return "/admin"
+  }
+
+  const pendingInvite = await getPendingInviteDestination(session.user.email)
+  if (pendingInvite) {
+    console.log(`[ROLE-PATHS] pending invite for ${session.user.email} → ${pendingInvite}`)
+    return pendingInvite
   }
 
   // 2/3/4. Look at the user's orgs
@@ -109,7 +125,7 @@ export async function postAuthDestination(
 
 /** Used by the /api/me/routing client-callable endpoint. */
 export async function getRoutingPayload(): Promise<{
-  destination: Destination
+  destination: Destination | string
   isPlatformAdmin: boolean
   email: string | null
   name: string | null
@@ -128,6 +144,20 @@ export async function getRoutingPayload(): Promise<{
     }
   }
   const isAdmin = (session.user as any).role === "admin"
+
+  if (!isAdmin) {
+    const pendingInvite = await getPendingInviteDestination(session.user.email)
+    if (pendingInvite) {
+      return {
+        destination: pendingInvite,
+        isPlatformAdmin: false,
+        email: session.user.email,
+        name: session.user.name ?? null,
+        orgs: [],
+        activeOrgId: (session.session as any)?.activeOrganizationId ?? null,
+      }
+    }
+  }
 
   const memberships = await db
     .select({
