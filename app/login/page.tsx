@@ -2,9 +2,10 @@
 
 import { LoginForm } from "@/components/login-form"
 import Link from "next/link"
+import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams()
   // Honor ?next= through to the signup page so a recipient who clicks
   // "Create account" from an invite link is routed back to the invite
@@ -15,8 +16,7 @@ export default function LoginPage() {
     : "/signup"
 
   return (
-    <div className="min-h-screen bg-brand-cream flex flex-col">
-      {/* Top bar */}
+    <>
       <header className="w-full bg-[#fbf8f3]">
         <div className="mx-auto flex max-w-[1440px] items-center gap-10 px-6 py-[22px] md:px-16">
           <Link href="/" className="flex items-center">
@@ -41,6 +41,20 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center px-6 py-12 md:px-16">
         <LoginForm />
       </main>
+    </>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen bg-brand-cream flex flex-col">
+      <Suspense fallback={
+        <div className="flex-1 flex items-center justify-center">
+          <span className="font-geist text-sm text-brand-muted-soft">Loading…</span>
+        </div>
+      }>
+        <LoginContent />
+      </Suspense>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
 import { Loader2, Truck, ArrowRight } from "lucide-react"
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -320,6 +320,18 @@ export default function SignupPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center">
+        <span className="font-geist text-sm text-brand-muted-soft">Loading…</span>
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   )
 }
 
