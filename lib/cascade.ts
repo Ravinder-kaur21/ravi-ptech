@@ -341,9 +341,8 @@ export type CascadeRemoveMemberResult = {
  *   - Delete the member row (via Better Auth removeMember)
  *   - Audit "user.remove-from-org"
  *
- * If the user has no other workspace memberships AND is not a
- * platform admin AND the workspace owner confirms (by calling this
- * path at all), hard-delete the user too via cascadeDeleteUser.
+ * The removed person retains their platform account even if this was their
+ * final membership. Workspace access revocation must not delete an account.
  */
 export async function cascadeRemoveMember(args: {
   memberId: string
@@ -366,7 +365,12 @@ export async function cascadeRemoveMember(args: {
     })
     .from(member)
     .innerJoin(user, eq(user.id, member.userId))
-    .where(eq(member.id, memberId))
+    .where(
+      and(
+        eq(member.id, memberId),
+        eq(member.organizationId, organizationId),
+      ),
+    )
     .limit(1)
 
   if (!target) {
@@ -451,28 +455,17 @@ export async function cascadeRemoveMember(args: {
     })
   })
 
-  // 3. After the workspace-scoped cleanup, decide whether to
-  //    hard-delete the user. Conditions:
-  //      - not a platform admin (target.userRole !== "admin")
-  //      - has no other member rows
-  //      - we just removed their last workspace membership
+  // 3. Return the remaining membership count. User deletion is reserved for
+  // a separate, explicit platform-admin action.
   const otherMemberships = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(member)
     .where(eq(member.userId, target.userId))
   result.otherMembershipsRemaining = Number(otherMemberships[0]?.count ?? 0)
 
-  if (target.userRole !== "admin" && result.otherMembershipsRemaining === 0) {
-    console.log(
-      `[CASCADE] member had no other workspaces + not platform admin — hard-deleting user ${target.userId}`
-    )
-    await cascadeDeleteUser({ userId: target.userId, actor })
-    result.userDeleted = true
-  } else {
-    console.log(
-      `[CASCADE] keeping user ${target.userId} (otherMemberships=${result.otherMembershipsRemaining}, isPlatformAdmin=${target.userRole === "admin"})`
-    )
-  }
+  console.log(
+    `[CASCADE] keeping user ${target.userId} (otherMemberships=${result.otherMembershipsRemaining}, isPlatformAdmin=${target.userRole === "admin"})`,
+  )
 
   console.log(`[CASCADE] cascadeRemoveMember done`, result)
   return result

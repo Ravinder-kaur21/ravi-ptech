@@ -16,7 +16,7 @@
  * No raw Date params in `sql\`${...}\`` (postgres-js binding).
  */
 import { z } from "zod"
-import { eq, and } from "drizzle-orm"
+import { eq, and, gt } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { member, invitation, user, organization, session as sessionTable } from "@/lib/schema"
@@ -33,6 +33,16 @@ const resendSchema = z.object({
 })
 
 export type ResendInvitationResult = { ok: true; invitationId: string }
+
+const assignableRoleSchema = z.enum([
+  "admin",
+  "member",
+  "operations_manager",
+  "dispatcher",
+  "accounting",
+  "driver",
+  "safety",
+])
 
 /**
  * Re-sends the invitation email. We don't drive Better Auth's
@@ -63,10 +73,11 @@ export async function resendInvitationAction(input: {
       and(
         eq(invitation.id, input.invitationId),
         eq(invitation.organizationId, ctx.tenantId),
+        gt(invitation.expiresAt, new Date()),
       ),
     )
     .limit(1)
-  if (!inv) throw new Error("Invitation not found in this workspace")
+  if (!inv) throw new Error("Invitation was not found or has expired")
   if (inv.status !== "pending") {
     throw new Error(`Cannot resend: invitation is ${inv.status}`)
   }
@@ -115,6 +126,78 @@ export async function resendInvitationAction(input: {
 
   revalidatePath("/settings/team")
   return { ok: true, invitationId: inv.id }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WS-24 / WS-29 — Server-authorized member role changes
+// ─────────────────────────────────────────────────────────────────────────────
+
+const updateRoleSchema = z.object({
+  memberId: z.string().min(1),
+  role: assignableRoleSchema,
+})
+
+export async function updateMemberRoleAction(input: {
+  memberId: string
+  role: z.infer<typeof assignableRoleSchema>
+}): Promise<{ ok: true }> {
+  const parsed = updateRoleSchema.safeParse(input)
+  if (!parsed.success) throw new Error("Invalid member role update")
+  const ctx = await requireTenant()
+
+  const [actorMember] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
+    )
+    .limit(1)
+  if (!actorMember || !["owner", "admin"].includes(actorMember.role)) {
+    throw new Error("Only workspace owners and administrators can change roles")
+  }
+
+  const [target] = await db
+    .select({ id: member.id, role: member.role, userId: member.userId })
+    .from(member)
+    .where(
+      and(
+        eq(member.id, parsed.data.memberId),
+        eq(member.organizationId, ctx.tenantId),
+      ),
+    )
+    .limit(1)
+  if (!target) throw new Error("Member not found in this workspace")
+  if (target.role === "owner") {
+    throw new Error("Transfer ownership before changing an owner's role")
+  }
+  if (target.userId === ctx.userId) {
+    throw new Error("You cannot change your own role")
+  }
+
+  const [actor] = await db
+    .select({ id: user.id, email: user.email })
+    .from(user)
+    .where(eq(user.id, ctx.userId))
+    .limit(1)
+  if (!actor) throw new Error("Actor not found")
+
+  await db
+    .update(member)
+    .set({ role: parsed.data.role })
+    .where(eq(member.id, target.id))
+
+  await recordAuditEvent({
+    actor,
+    action: "user.set-member-role",
+    target: { type: "member", id: target.id, label: null },
+    metadata: {
+      organizationId: ctx.tenantId,
+      previousRole: target.role,
+      newRole: parsed.data.role,
+    },
+  })
+  revalidatePath("/settings/team")
+  return { ok: true }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

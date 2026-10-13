@@ -11,6 +11,7 @@ import {
   suspendMemberAction,
   liftWorkspaceSuspensionAction,
   transferOwnershipAction,
+  updateMemberRoleAction,
 } from "@/app/actions/invitation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -394,10 +395,8 @@ function TeamSettingsInner() {
   })
 
   // ─── Remove member (cascade) ──
-  // The server action cascadeRemoveMember() detaches the member's
-  // driver rows in this workspace, kills their sessions in this
-  // workspace, deletes the membership, and (if the user has no other
-  // workspaces and is not a platform admin) hard-deletes the user.
+  // The server action detaches workspace-scoped driver rows and sessions,
+  // then deletes only this membership. The person's account is retained.
   const removeMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
       console.log(`[TEAM] removeMember (cascade) → ${memberId}`)
@@ -405,18 +404,9 @@ function TeamSettingsInner() {
     },
     onSuccess: (result) => {
       console.log("[TEAM] removeMember cascade result:", result)
-      const msg = result.userDeleted
-        ? "Member removed and their account was permanently deleted (last workspace)"
-        : "Member removed from this workspace"
-      toast.success(msg, { duration: 5000 })
+      toast.success("Member removed from this workspace", { duration: 5000 })
       queryClient.invalidateQueries({ queryKey: ["workspace-members"] })
       queryClient.invalidateQueries({ queryKey: ["workspace-recent-events"] })
-      // If the user was hard-deleted, their row disappears from
-      // many admin views too — invalidate everything.
-      if (result.userDeleted) {
-        queryClient.invalidateQueries({ queryKey: ["admin-users"] })
-        queryClient.invalidateQueries({ queryKey: ["admin-stats"] })
-      }
       router.refresh()
     },
     onError: (err: Error) => {
@@ -429,12 +419,10 @@ function TeamSettingsInner() {
   const updateRoleMutation = useMutation({
     mutationFn: async ({ memberId, role }: { memberId: string; role: string }) => {
       console.log("[TEAM] updateMemberRole →", { memberId, role })
-      const { error } = await authClient.organization.updateMemberRole({
+      return await updateMemberRoleAction({
         memberId,
-        role,
+        role: role as Role,
       })
-      if (error) throw new Error(error.message || "Failed to update role")
-      return true
     },
     onSuccess: () => {
       toast.success("Role updated")

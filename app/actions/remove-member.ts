@@ -11,17 +11,16 @@
  *   2. Sessions with active_organization_id = this workspace are
  *      detached.
  *   3. The member row is deleted.
- *   4. If the user has no other workspace memberships AND is not a
- *      platform admin, the user is hard-deleted (cascadeDeleteUser).
+ *   4. The user's account remains available for future re-invitation.
  *
  * Used by the settings/team-client.tsx remove button.
  */
 import { z } from "zod"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { requireTenant } from "@/lib/dal"
 import { cascadeRemoveMember } from "@/lib/cascade"
 import { db } from "@/lib/db"
-import { user } from "@/lib/schema"
+import { member, user } from "@/lib/schema"
 
 const removeSchema = z.object({
   memberId: z.string().min(1),
@@ -48,6 +47,34 @@ export async function removeMemberAction(input: {
   // scoped to that tenant.
   const ctx = await requireTenant()
 
+  const [actorMembership] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(
+        eq(member.userId, ctx.userId),
+        eq(member.organizationId, ctx.tenantId),
+      ),
+    )
+    .limit(1)
+  if (!actorMembership || !["owner", "admin"].includes(actorMembership.role)) {
+    throw new Error("Only workspace owners and administrators can remove members")
+  }
+
+  // Scope the target lookup to the active workspace before invoking the
+  // cascade. A member ID must never act as a cross-workspace capability.
+  const [target] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(
+      and(
+        eq(member.id, input.memberId),
+        eq(member.organizationId, ctx.tenantId),
+      ),
+    )
+    .limit(1)
+  if (!target) throw new Error("Member not found in this workspace")
+
   // Look up the actor's email so the audit row has it.
   const [actor] = await db
     .select({ id: user.id, email: user.email })
@@ -63,7 +90,7 @@ export async function removeMemberAction(input: {
   )
 
   const result = await cascadeRemoveMember({
-    memberId: input.memberId,
+    memberId: target.id,
     organizationId: ctx.tenantId,
     actor: { id: actor.id, email: actor.email },
   })
