@@ -65,8 +65,8 @@ type NavItem = {
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Loads", href: "/loads", icon: Sparkle },
-  { label: "AI workspace", href: "/ai", icon: Truck },
+  { label: "Loads", href: "/loads", icon: Truck},
+  { label: "AI workspace", href: "/chat", icon: Sparkle },
   { label: "Trips", href: "/trips", icon: Map },
   { label: "Fleet", href: "/fleet", icon: Truck },
   { label: "Drivers", href: "/drivers", icon: Users },
