@@ -62,7 +62,7 @@ export default async function DashboardLayout({
     fetchActiveAnnouncements({
       userId: session.user.id,
       orgId,
-      isAdmin: false, // updated below
+      isAdmin: isAdminForGate,
     }),
   ])
 

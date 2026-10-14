@@ -49,20 +49,62 @@ const KIND_META: Record<Announcement["kind"], { icon: LucideIcon; cls: string }>
 
 const DISMISS_KEY = "muvx:dismissed_announcements"
 
+// --- sessionStorage-backed dismissed-announcements store ---
+// Uses useSyncExternalStore so the server-rendered HTML and the
+// client's initial hydration render both see an empty Set. After
+// hydration the hook switches to reading sessionStorage; if that
+// differs it re-renders naturally — never a hydration mismatch.
+
+const DISMISSED_CHANGED = "muvx:dismissed-changed"
+
+// Stable empty Set reference — must be cached so getServerSnapshot
+// returns the same object identity on every call (useSyncExternalStore
+// compares with Object.is; a new Set each call would loop forever).
+const EMPTY_SET = new Set<string>()
+
+let cachedRaw: string | null = null
+let cachedSet: Set<string> | null = null
+
+function readDismissed(): Set<string> {
+  if (typeof window === "undefined") return EMPTY_SET
+  try {
+    const raw = sessionStorage.getItem(DISMISS_KEY)
+    if (raw === cachedRaw && cachedSet) return cachedSet
+    cachedRaw = raw
+    cachedSet = new Set<string>(JSON.parse(raw ?? "[]"))
+    return cachedSet
+  } catch {
+    cachedRaw = null
+    cachedSet = null
+    return EMPTY_SET
+  }
+}
+
+function writeDismissed(next: Set<string>): void {
+  const raw = JSON.stringify([...next])
+  sessionStorage.setItem(DISMISS_KEY, raw)
+  cachedRaw = raw
+  cachedSet = next
+  // Notify same-tab listeners so useSyncExternalStore re-reads.
+  window.dispatchEvent(new CustomEvent(DISMISSED_CHANGED))
+}
+
+function subscribeDismissed(onChange: () => void): () => void {
+  window.addEventListener(DISMISSED_CHANGED, onChange)
+  return () => window.removeEventListener(DISMISSED_CHANGED, onChange)
+}
+
 export function AnnouncementBanner({
   initial = [],
 }: {
   initial?: Announcement[]
 }) {
   const [items, setItems] = React.useState<Announcement[]>(initial)
-  const [dismissed, setDismissed] = React.useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set()
-    try {
-      return new Set(JSON.parse(sessionStorage.getItem(DISMISS_KEY) ?? "[]"))
-    } catch {
-      return new Set()
-    }
-  })
+  const dismissed = React.useSyncExternalStore(
+    subscribeDismissed,
+    readDismissed,
+    () => EMPTY_SET
+  )
 
   // Poll every 60s for new banners (e.g. admin just enabled maintenance mode)
   React.useEffect(() => {
@@ -88,16 +130,9 @@ export function AnnouncementBanner({
   }, [])
 
   function dismiss(id: string) {
-    setDismissed((s) => {
-      const next = new Set(s)
-      next.add(id)
-      try {
-        sessionStorage.setItem(DISMISS_KEY, JSON.stringify([...next]))
-      } catch {
-        // ignore
-      }
-      return next
-    })
+    const next = new Set(dismissed)
+    next.add(id)
+    writeDismissed(next)
   }
 
   const visible = items.filter((a) => !dismissed.has(a.id))
