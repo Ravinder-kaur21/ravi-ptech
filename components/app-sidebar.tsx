@@ -65,6 +65,7 @@ type NavItem = {
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Loads", href: "/loads", icon: Truck },
+  { label: "AI workspace", href: "/ai", icon: Truck },
   { label: "Trips", href: "/trips", icon: Map },
   { label: "Fleet", href: "/fleet", icon: Truck },
   { label: "Drivers", href: "/drivers", icon: Users },
@@ -76,10 +77,9 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Members", href: "/settings/members", icon: UserCog },
-  { label: "Settings", href: "/settings", icon: Settings },
   { label: "Billing", href: "/settings/billing", icon: CreditCard },
+  { label: "Settings", href: "/settings", icon: Settings },
 ]
 
 // ─── Component ───────────────────────────────────────────────────
@@ -103,12 +103,10 @@ type SidebarOrg = {
 export function AppSidebar({
   org,
   session,
-  isAdmin = false,
   isImpersonating = false,
 }: {
   org: SidebarOrg
   session: SidebarSession
-  isAdmin?: boolean
   isImpersonating?: boolean
 }) {
   const pathname = usePathname()
@@ -254,8 +252,8 @@ export function AppSidebar({
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-4" />
-                      <span>{item.label}</span>
+                      <item.icon className="size-[18px]" />
+                      <span className="text-[15px] font-medium">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
@@ -294,8 +292,8 @@ export function AppSidebar({
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-4" />
-                      <span>{item.label}</span>
+                      <item.icon className="size-[18px]" />
+                      <span className="text-[15px] font-medium">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
@@ -309,10 +307,9 @@ export function AppSidebar({
       <SidebarFooter>
         <NavUser
           user={session}
-          isAdmin={isAdmin}
           isImpersonating={isImpersonating}
         />
-       
+
       </SidebarFooter>
 
       <SidebarRail className="border-sidebar-border" />

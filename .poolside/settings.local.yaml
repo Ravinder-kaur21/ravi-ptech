@@ -1,0 +1,20 @@
+tools:
+    shell:
+        allow:
+            - find *
+            - head *
+            - ls *
+            - sort
+            - cat *
+            - wc *
+            - tail *
+            - node *
+            - grep *
+            - echo *
+            - cd *
+            - npx tsc *
+            - npx eslint *
+            - git diff *
+            - git status
+            - git remote *
+            - git branch *

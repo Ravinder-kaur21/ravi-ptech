@@ -3,12 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import {
-  ChevronsUpDown,
+  MoreVertical,
   CreditCard,
   Eye,
   LogOut,
   Settings,
-  ShieldCheck,
   Sparkles,
   UserCog,
 } from "lucide-react"
@@ -44,8 +43,6 @@ type NavUserProps = {
     userImage: string | null
     userRole: string
   }
-  /** When true, shows an "Admin console" item in the dropdown. */
-  isAdmin?: boolean
   /** When true, shows a "Stop impersonating" item at the top of the dropdown. */
   isImpersonating?: boolean
 }
@@ -55,13 +52,11 @@ type NavUserProps = {
  * pattern: avatar + name/email trigger a dropdown with profile, settings,
  * billing, switch workspace, and sign out. Adapted to the Muvx brand.
  *
- * When `isSuperadmin` is true, the dropdown gains an "Admin console" item.
  * When `isImpersonating` is true, an amber "Stop impersonating" item appears
  * at the top so superadmins can exit quickly from anywhere in the app.
  */
 export function NavUser({
   user,
-  isAdmin = false,
   isImpersonating = false,
 }: NavUserProps) {
   const reset = useAuthStore((s) => s.reset)
@@ -108,7 +103,7 @@ export function NavUser({
             render={
               <SidebarMenuButton
                 size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border border-sidebar-border"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
               />
             }
           >
@@ -126,7 +121,7 @@ export function NavUser({
                 {user.userRole}
               </span>
             </div>
-            <ChevronsUpDown className="ml-auto size-4 text-brand-muted-soft" />
+            <MoreVertical className="ml-auto size-[18px] text-brand-muted-soft" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-56 rounded-lg border-brand-rule bg-brand-card p-1"
@@ -195,23 +190,6 @@ export function NavUser({
                 Billing
               </DropdownMenuItem>
             </DropdownMenuGroup>
-
-            {/* Admin console — only for admins */}
-            {isAdmin && (
-              <>
-                <DropdownMenuSeparator className="bg-brand-rule" />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    render={
-                      <Link href="/admin" className="rounded-md cursor-pointer" />
-                    }
-                  >
-                    <ShieldCheck className="mr-2 size-4 text-brand-accent" />
-                    Admin console
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </>
-            )}
 
             <DropdownMenuSeparator className="bg-brand-rule" />
             <DropdownMenuItem

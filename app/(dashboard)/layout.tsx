@@ -54,12 +54,11 @@ export default async function DashboardLayout({
     redirect(memberships.length > 1 ? "/select-org" : "/onboarding")
   }
 
-  // [LAYOUT] Fetch the active org, the user's membership, admin status,
+  // [LAYOUT] Fetch the active org, the user's membership,
   // and the list of currently-active announcements — all in parallel.
-  const [org, members, isAdmin, activeAnnouncements] = await Promise.all([
+  const [org, members, activeAnnouncements] = await Promise.all([
     getOrganizationById(orgId),
     getMembersForOrg(orgId),
-    getIsAdmin(),
     fetchActiveAnnouncements({
       userId: session.user.id,
       orgId,
@@ -138,7 +137,6 @@ export default async function DashboardLayout({
           metadata: (org.metadata as Record<string, any> | null) ?? null,
         }}
         session={sidebarSession}
-        isAdmin={isAdmin}
         isImpersonating={!!impersonatedBy}
       />
       <SidebarInset className="bg-background">
