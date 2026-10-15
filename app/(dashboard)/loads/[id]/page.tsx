@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, Truck, MapPin, Calendar, DollarSign, User } from "lucide-react"
-import { getSession, getLoadById } from "@/lib/dal"
+import { getSession, getLoadById, getWorkspaceProfile } from "@/lib/dal"
+import { formatWorkspaceDate } from "@/lib/timezone"
 import { Card } from "@/components/ui/card"
 import { StarButton } from "@/components/load-star-button"
 import { StatusBadge } from "@/components/status-badge"
@@ -21,6 +22,8 @@ export default async function LoadDetailPage({
   const { id } = await params
   const load = await getLoadById(id, tenantId)
   if (!load) notFound()
+
+  const profile = await getWorkspaceProfile(tenantId)
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
@@ -42,7 +45,7 @@ export default async function LoadDetailPage({
           </div>
           <p className="mt-1 text-sm text-brand-ink/80">
             {load.customerName || "No customer"} · Created{" "}
-            {new Date(load.createdAt).toLocaleDateString()}
+            {formatWorkspaceDate(load.createdAt, profile?.timeZone)}
           </p>
         </div>
         <StarButton loadId={load.id} initial={load.isStarred ?? false} />
@@ -90,12 +93,12 @@ export default async function LoadDetailPage({
             <DetailRow
               icon={Calendar}
               label="Pickup"
-              value={load.pickupDate ? new Date(load.pickupDate).toLocaleDateString() : "—"}
+              value={load.pickupDate ? formatWorkspaceDate(load.pickupDate, profile?.timeZone, undefined, { mode: "date" }) : "—"}
             />
             <DetailRow
               icon={Calendar}
               label="Delivery"
-              value={load.deliveryDate ? new Date(load.deliveryDate).toLocaleDateString() : "—"}
+              value={load.deliveryDate ? formatWorkspaceDate(load.deliveryDate, profile?.timeZone, undefined, { mode: "date" }) : "—"}
             />
             <DetailRow
               icon={DollarSign}

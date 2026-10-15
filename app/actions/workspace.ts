@@ -78,6 +78,13 @@ const profileSchema = z.object({
     .string()
     .regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/, "Must be MM-DD")
     .default("01-01"),
+  logo: z
+    .string()
+    .url("Logo must be a valid URL")
+    .max(2048, "Logo URL is too long")
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
 })
 
 export type UpdateWorkspaceProfileInput = z.input<typeof profileSchema>
@@ -148,6 +155,7 @@ async function withUpdateWorkspaceProfile(
     defaultCurrency: data.defaultCurrency,
     timeZone: data.timeZone,
     fiscalYearStart: data.fiscalYearStart,
+    logo: data.logo ?? null,
   }
   await db
     .update(organization)
@@ -168,6 +176,7 @@ async function withUpdateWorkspaceProfile(
   const PROFILE_KEYS = [
     "name",
     "slug",
+    "logo",
     "businessType",
     "dotNumber",
     "mcNumber",

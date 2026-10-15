@@ -64,6 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 export function Communications() {
   return (
@@ -115,6 +116,7 @@ type Announcement = {
 }
 
 function AnnouncementsSection() {
+  const { formatDate } = useWorkspaceDate()
   const queryClient = useQueryClient()
   const list = useQuery({
     queryKey: ["admin-announcements"],
@@ -237,11 +239,11 @@ function AnnouncementsSection() {
                     {a.startsAt || a.endsAt ? (
                       <>
                         {a.startsAt
-                          ? new Date(a.startsAt).toLocaleDateString()
+                          ? formatDate(new Date(a.startsAt))
                           : "now"}
                         {" → "}
                         {a.endsAt
-                          ? new Date(a.endsAt).toLocaleDateString()
+                          ? formatDate(new Date(a.endsAt))
                           : "∞"}
                       </>
                     ) : (

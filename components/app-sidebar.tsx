@@ -23,7 +23,6 @@ import {
   Building2,
   MoreHorizontal,
   type LucideIcon,
-  Sparkle,
 } from "lucide-react"
 import {
   Sidebar,
@@ -66,7 +65,6 @@ type NavItem = {
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Loads", href: "/loads", icon: Truck},
-  { label: "ai", href: "/ai", icon: Sparkle },
   { label: "Trips", href: "/trips", icon: Map },
   { label: "Fleet", href: "/fleet", icon: Truck },
   { label: "Drivers", href: "/drivers", icon: Users },
@@ -78,8 +76,8 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Members", href: "/settings/members", icon: UserCog },
-  { label: "Billing", href: "/settings/billing", icon: CreditCard },
+  { label: "Members", href: "/settings/team", icon: UserCog },
+  { label: "Billing", href: "/settings", icon: CreditCard },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 

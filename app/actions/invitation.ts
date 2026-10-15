@@ -20,9 +20,10 @@ import { eq, and, gt } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { member, invitation, user, organization, session as sessionTable } from "@/lib/schema"
-import { requireTenant } from "@/lib/dal"
+import { requireTenant, requirePermission } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
 import { sendInvitationEmail } from "@/lib/email"
+import { ASSIGNABLE_ROLE_IDS, ROLE_CATALOG } from "@/lib/auth-roles"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WS-20 — Resend invitation
@@ -34,15 +35,8 @@ const resendSchema = z.object({
 
 export type ResendInvitationResult = { ok: true; invitationId: string }
 
-const assignableRoleSchema = z.enum([
-  "admin",
-  "member",
-  "operations_manager",
-  "dispatcher",
-  "accounting",
-  "driver",
-  "safety",
-])
+// assignableRoleSchema is defined below (near updateMemberRoleAction),
+// derived from ROLE_CATALOG — single source of truth.
 
 /**
  * Re-sends the invitation email. We don't drive Better Auth's
@@ -132,6 +126,10 @@ export async function resendInvitationAction(input: {
 // WS-24 / WS-29 — Server-authorized member role changes
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Derived from ROLE_CATALOG (lib/auth-roles.ts) — single source of truth.
+// Excludes "owner" (set only via transfer-ownership).
+const assignableRoleSchema = z.enum(ASSIGNABLE_ROLE_IDS)
+
 const updateRoleSchema = z.object({
   memberId: z.string().min(1),
   role: assignableRoleSchema,
@@ -145,16 +143,11 @@ export async function updateMemberRoleAction(input: {
   if (!parsed.success) throw new Error("Invalid member role update")
   const ctx = await requireTenant()
 
-  const [actorMember] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!actorMember || !["owner", "admin"].includes(actorMember.role)) {
-    throw new Error("Only workspace owners and administrators can change roles")
-  }
+  // GAP-5: Replaced hardcoded ["owner","admin"] check with
+  // permission-driven authorization. Better Auth checks the actor's
+  // role statement (owner/admin grant member:update; operations_manager
+  // does not — so only owners and admins can reach this code path now).
+  await requirePermission({ resource: "member", action: "update" })
 
   const [target] = await db
     .select({ id: member.id, role: member.role, userId: member.userId })
@@ -186,6 +179,18 @@ export async function updateMemberRoleAction(input: {
     .set({ role: parsed.data.role })
     .where(eq(member.id, target.id))
 
+  // GAP-8: Compute the effective-permission diff between the old and
+  // new role, so the audit log captures WHAT changed, not just the
+  // role string delta.
+  const oldRoleEntry = ROLE_CATALOG.find((r) => r.id === target.role)
+  const newRoleEntry = ROLE_CATALOG.find((r) => r.id === parsed.data.role)
+  const oldPerms = JSON.stringify(
+    oldRoleEntry ? oldRoleEntry.role.statements : null,
+  )
+  const newPerms = JSON.stringify(
+    newRoleEntry ? newRoleEntry.role.statements : null,
+  )
+
   await recordAuditEvent({
     actor,
     action: "user.set-member-role",
@@ -194,6 +199,11 @@ export async function updateMemberRoleAction(input: {
       organizationId: ctx.tenantId,
       previousRole: target.role,
       newRole: parsed.data.role,
+      permissionDiff: {
+        previousPermissions: oldPerms,
+        newPermissions: newPerms,
+        changed: oldPerms !== newPerms,
+      },
     },
   })
   revalidatePath("/settings/team")
@@ -235,16 +245,9 @@ export async function suspendMemberAction(input: {
   if (!parsed.success) throw new Error("Invalid input")
   const ctx = await requireTenant()
 
-  const [me] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!me || (me.role !== "owner" && me.role !== "admin")) {
-    throw new Error("Only owners and admins can suspend members")
-  }
+  // GAP-5: Permission-driven — only roles granting member:suspend
+  // (owner, admin) pass this check.
+  await requirePermission({ resource: "member", action: "suspend" })
 
   const [target] = await db
     .select({
@@ -331,16 +334,9 @@ export async function liftWorkspaceSuspensionAction(input: {
   if (!parsed.success) throw new Error("Invalid input")
   const ctx = await requireTenant()
 
-  const [me] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!me || (me.role !== "owner" && me.role !== "admin")) {
-    throw new Error("Only owners and admins can lift suspensions")
-  }
+  // GAP-5: Permission-driven — only roles granting member:lift-suspension
+  // (owner, admin) pass this check.
+  await requirePermission({ resource: "member", action: "lift-suspension" })
 
   const [target] = await db
     .select({ id: member.id, userId: member.userId })

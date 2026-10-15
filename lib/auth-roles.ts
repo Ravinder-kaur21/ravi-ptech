@@ -9,8 +9,29 @@ import { defaultStatements } from "better-auth/plugins/organization/access"
 // imports like ./db and ./email.
 // ──────────────────────────────────────────────────────────────────
 
+/**
+ * Single source of truth for all role IDs. Use `as const` so TypeScript
+ * preserves the literal union type: `"owner" | "admin" | "member" | ...`.
+ * Every other role list in the codebase derives from this — no hardcoded
+ * arrays elsewhere (fixes GAP-2 / GAP-6 role-list divergence).
+ */
+export const ROLE_IDS = [
+  "owner",
+  "admin",
+  "member",
+  "operations_manager",
+  "dispatcher",
+  "accounting",
+  "driver",
+  "safety",
+] as const
+export type RoleId = (typeof ROLE_IDS)[number]
+
 const statement = {
   ...defaultStatements,
+  // Member resource: BA defaults (create, update, delete) + TMS-specific
+  // suspend / lift-suspension actions for workspace-scoped member actions.
+  member: ["create", "update", "delete", "suspend", "lift-suspension"],
   // TMS-specific resources. Declared now so the role model is
   // type-safe; per-module permission checks get wired up as the
   // Fleet/Drivers/Invoice modules land.
@@ -35,6 +56,7 @@ const FULL_TMS = {
   truck: ["create", "read", "update", "delete"],
   invoice: ["create", "read", "update", "delete"],
   payroll: ["create", "read", "update", "delete"],
+  member: ["create", "update", "delete", "suspend", "lift-suspension"],
   workspace: ["read", "update"],
 } as const
 
@@ -49,7 +71,6 @@ export const owner = ac.newRole({
 export const administrator = ac.newRole({
   organization: ["update"],
   invitation: ["create", "cancel"],
-  member: ["create", "update", "delete"],
   ...FULL_TMS,
 })
 
@@ -125,7 +146,7 @@ export const safety = ac.newRole({
 
 export type RoleCatalogEntry = {
   /** The role id used in `member.role`. */
-  id: string
+  id: RoleId
   /** The BA-issued role object (for its `.statements`). */
   role: ReturnType<typeof ac.newRole>
   /** Human-readable label for the UI. */
@@ -205,6 +226,31 @@ export const ROLE_CATALOG: RoleCatalogEntry[] = [
 
 /** All resources declared in the access-control statement. */
 export const CATALOG_RESOURCES = Object.keys(statement) as (keyof typeof statement)[]
+
+/**
+ * Roles assignable via invite or role-change dialogs.
+ * `owner` is excluded — it is set only via transfer-ownership.
+ * This is the SINGLE SOURCE OF TRUTH for the assignable role set,
+ * replacing the hardcoded lists that previously diverged across
+ * team-client.tsx, onboarding/page.tsx, and invitation.ts (GAP-2, GAP-6).
+ */
+export const ASSIGNABLE_ROLES = ROLE_CATALOG.filter((r) => r.id !== "owner")
+export type AssignableRoleId = (typeof ASSIGNABLE_ROLES)[number]["id"]
+
+/**
+ * Literal tuple of assignable role IDs (excluding "owner"),
+ * for use with zod's z.enum — preserves the literal union type
+ * at compile time (fixes type regression from dynamic array).
+ */
+export const ASSIGNABLE_ROLE_IDS = [
+  "admin",
+  "member",
+  "operations_manager",
+  "dispatcher",
+  "accounting",
+  "driver",
+  "safety",
+] as const
 
 /** All actions declared for a given resource. */
 export const actionsForResource = (resource: string): readonly string[] => {

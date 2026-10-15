@@ -26,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 type Health = {
   dbLatencyMs: number
@@ -37,6 +38,7 @@ type Health = {
 }
 
 export function SystemHealth({ health, loading }: { health: Health | null; loading?: boolean }) {
+  const { formatTime } = useWorkspaceDate()
   console.log("[OVERVIEW/HEALTH] rendering", { health, loading })
   if (loading || !health) {
     return (
@@ -78,10 +80,7 @@ export function SystemHealth({ health, loading }: { health: Health | null; loadi
           {health.lastErrorAt && (
             <span className="ml-2 font-mono text-[10px] text-brand-muted-soft">
               · last{" "}
-              {new Date(health.lastErrorAt).toLocaleTimeString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {formatTime(new Date(health.lastErrorAt))}
             </span>
           )}
         </Row>

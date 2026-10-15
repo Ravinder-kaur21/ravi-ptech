@@ -26,6 +26,7 @@ import {
 } from "@/lib/schema"
 import { listAuditEvents } from "@/lib/audit"
 import { cache } from "react"
+import { ROLE_CATALOG } from "@/lib/auth-roles"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROLE RESOLUTION (platform + workspace, kept distinct)
@@ -279,6 +280,46 @@ export async function requirePermission(opts: {
     )
     throw new TenantError("FORBIDDEN")
   }
+}
+
+/**
+ * getEffectivePermissions — returns the flat set of "resource:action"
+ * permission strings for a given member in a workspace.
+ *
+ * Used by:
+ *   - /settings/roles member-level permission inspector (GAP-3)
+ *   - Impact preview when changing a member's role (WS-39)
+ *   - "Who has this permission?" reverse lookup
+ *
+ * Resolves the member's role → looks up ROLE_CATALOG → flattens all
+ * (resource, action) pairs into "resource:action" strings.
+ */
+export async function getEffectivePermissions(
+  userId: string,
+  tenantId: string,
+): Promise<string[]> {
+  const [row] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(eq(member.userId, userId), eq(member.organizationId, tenantId)),
+    )
+    .limit(1)
+
+  if (!row) return []
+
+  const catalogEntry = ROLE_CATALOG.find((r) => r.id === row.role)
+  if (!catalogEntry) return []
+
+  const perms: string[] = []
+  for (const [resource, actions] of Object.entries(
+    catalogEntry.role.statements,
+  )) {
+    for (const action of actions as readonly string[]) {
+      perms.push(`${resource}:${action}`)
+    }
+  }
+  return perms
 }
 
 const TENANT_ERROR_STATUS: Record<TenantError["code"], number> = {

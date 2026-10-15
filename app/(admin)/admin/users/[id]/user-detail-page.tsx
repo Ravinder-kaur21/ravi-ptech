@@ -35,6 +35,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { format, formatDistanceToNow } from "date-fns"
 import { authClient } from "@/lib/auth-client"
 import { toast } from "sonner"
+import { useWorkspaceDate } from "@/lib/timezone"
 import {
   ArrowLeft,
   ShieldOff,
@@ -328,6 +329,7 @@ export function UserDetailPage({ user: u, memberships }: Props) {
   console.log(`[USER-DETAIL-PAGE] rendering user=${u.id} ${u.email}`)
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { formatDate } = useWorkspaceDate()
   const [copied, setCopied] = React.useState<string | null>(null)
   const copy = (label: string, value: string) => {
     navigator.clipboard.writeText(value)
@@ -787,7 +789,7 @@ export function UserDetailPage({ user: u, memberships }: Props) {
                 <span>{u.banReason}</span>
                 {u.banExpires && (
                   <span className="text-[11px] opacity-80">
-                    · expires {new Date(u.banExpires).toLocaleString()}
+                    · expires {formatDate(new Date(u.banExpires))}
                   </span>
                 )}
               </AlertDescription>
@@ -805,9 +807,9 @@ export function UserDetailPage({ user: u, memberships }: Props) {
                   <span className="text-[11px] opacity-80">
                     ·{" "}
                     {u.suspendedUntil
-                      ? `ends ${new Date(u.suspendedUntil).toLocaleString()}`
+                      ? `ends ${formatDate(new Date(u.suspendedUntil))}`
                       : "indefinite"}{" "}
-                    · started {new Date(u.suspendedAt).toLocaleString()}
+                    · started {formatDate(new Date(u.suspendedAt))}
                   </span>
                 </AlertDescription>
               </Alert>

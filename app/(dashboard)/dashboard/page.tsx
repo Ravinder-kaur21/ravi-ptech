@@ -163,7 +163,7 @@ export default async function DashboardHomePage() {
                 hint="See all active and completed trips"
               />
               <QuickAction
-                href="/invoices/new"
+                href="/invoices"
                 icon={DollarSign}
                 label="Send invoice"
                 hint="Bill a delivered load instantly"
@@ -192,7 +192,7 @@ export default async function DashboardHomePage() {
                 icon={AlertCircle}
                 title="Configure billing"
                 description="Set up your rates and customer info"
-                href="/settings/billing"
+                href="/settings"
               />
             </div>
           </Card>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { useWorkspaceDate } from "@/lib/timezone"
 import { removeMemberAction } from "@/app/actions/remove-member"
 import {
   resendInvitationAction,
@@ -72,18 +73,22 @@ import {
   Ban,
 } from "lucide-react"
 
-// ─── Role metadata (matches Better Auth org plugin roles in lib/auth-roles.ts) ──
-const ROLES = [
-  { value: "admin", label: "Admin", description: "Full access except billing" },
-  { value: "operations_manager", label: "Ops Manager", description: "Loads, trips, fleet, drivers" },
-  { value: "dispatcher", label: "Dispatcher", description: "Create / assign loads & trips" },
-  { value: "accounting", label: "Accounting", description: "Invoices, payroll, reports" },
-  { value: "driver", label: "Driver", description: "View assigned loads, upload POD" },
-  { value: "safety", label: "Safety", description: "Driver records, compliance" },
-] as const
+// ─── Role metadata — SINGLE SOURCE OF TRUTH ──────────────────────────
+// Roles are defined in lib/auth-roles.ts (ROLE_CATALOG) and served by
+// /api/settings/role-catalog. We map that catalog here to avoid the role
+// list drifting across files (GAP-2). `owner` is excluded from assignable
+// roles — owners are set only via transfer-ownership, not via invite or
+// role-change dialogs. `member` (previously missing) is included and is
+// now the default invite role.
+import { ROLE_CATALOG, type RoleId } from "@/lib/auth-roles"
 
-const ROLE_VALUES = ROLES.map((r) => r.value)
-type Role = (typeof ROLES)[number]["value"]
+type RoleMeta = { value: string; label: string; description: string }
+const ROLES: RoleMeta[] = ROLE_CATALOG.filter(
+  (r) => r.id !== "owner",
+).map((r) => ({ value: r.id, label: r.label, description: r.description }))
+
+// Canonical assignable role type (excludes "owner" — set via transfer only)
+type Role = Exclude<RoleId, "owner">
 
 // Better Auth returns the active member via getActiveMember (and it's on
 // session.user.role too). We treat owner / admin as full-access; everyone
@@ -121,6 +126,7 @@ function TeamSettingsInner() {
   const queryClient = useQueryClient()
   const reset = useAuthStore((s) => s.reset)
   const activeOrg = useAuthStore((s) => s.activeOrganization)
+  const { formatDate, formatTime } = useWorkspaceDate()
 
   // Deep log on mount (per memory rule).
   useEffect(() => {
@@ -251,7 +257,7 @@ function TeamSettingsInner() {
   // ─── Invite dialog state ──
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState<Role>("dispatcher")
+  const [inviteRole, setInviteRole] = useState<Role>("member")
 
   // ─── Suspend / lift / transfer state (WS-26, WS-28) ──
   const [suspendTarget, setSuspendTarget] = useState<
@@ -278,7 +284,7 @@ function TeamSettingsInner() {
     onSuccess: () => {
       toast.success(`Invitation sent to ${inviteEmail}`)
       setInviteEmail("")
-      setInviteRole("dispatcher")
+      setInviteRole("member")
       setInviteOpen(false)
       queryClient.invalidateQueries({ queryKey: ["workspace-invitations"] })
       queryClient.invalidateQueries({ queryKey: ["workspace-recent-events"] })
@@ -344,7 +350,7 @@ function TeamSettingsInner() {
     onSuccess: (res) => {
       toast.success(
         res.suspendedUntil
-          ? `Member suspended until ${new Date(res.suspendedUntil).toLocaleDateString()}`
+          ? `Member suspended until ${formatDate(new Date(res.suspendedUntil))}`
           : "Member suspended",
       )
       queryClient.invalidateQueries({ queryKey: ["workspace-members"] })
@@ -774,9 +780,9 @@ function TeamSettingsInner() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
-                        {ROLE_VALUES.filter((r) => r !== "admin").map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {ROLES.find((x) => x.value === r)?.label ?? r}
+                        {ROLES.filter((r) => r.value !== "admin").map((r) => (
+                          <SelectItem key={r.value} value={r.value}>
+                            {r.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -944,7 +950,7 @@ function TeamSettingsInner() {
                     {inv.expiresAt && (
                       <>
                         {" · expires "}
-                        {new Date(inv.expiresAt).toLocaleDateString()}
+                        {formatDate(new Date(inv.expiresAt))}
                       </>
                     )}
                     {inv.inviterEmail && (
@@ -1026,7 +1032,7 @@ function TeamSettingsInner() {
                     </span>
                   </p>
                   <p className="text-[11px] text-brand-muted-soft mt-0.5">
-                    {new Date(e.createdAt).toLocaleString()} · target:{" "}
+                    {formatDate(new Date(e.createdAt))} · target:{" "}
                     {e.targetLabel ?? e.targetType}
                   </p>
                 </div>

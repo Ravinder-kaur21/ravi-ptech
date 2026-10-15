@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { user } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/dal"
+import { formatWorkspaceDate, DEFAULT_TIMEZONE } from "@/lib/timezone"
 import { AppealForm } from "@/components/suspended/appeal-form"
 import { ShieldOff, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -57,10 +58,8 @@ export default async function SuspendedPage() {
   }
 
   const liftedAt = suspendedUntil
-    ? suspendedUntil.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
+    ? formatWorkspaceDate(suspendedUntil, DEFAULT_TIMEZONE, undefined, {
+        mode: "date",
       })
     : null
 
@@ -118,7 +117,10 @@ export default async function SuspendedPage() {
               <p className="mt-2 text-sm text-brand-ink">
                 We received your appeal on{" "}
                 {row.appealSubmittedAt
-                  ? new Date(row.appealSubmittedAt as Date | string).toLocaleString()
+                  ? formatWorkspaceDate(
+                      new Date(row.appealSubmittedAt as Date | string),
+                      DEFAULT_TIMEZONE,
+                    )
                   : ""}
                 . An admin will respond by email. You can update your appeal
                 below if you have more context to share.

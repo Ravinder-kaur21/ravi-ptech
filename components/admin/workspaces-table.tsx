@@ -43,6 +43,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 type AdminOrg = {
   id: string
@@ -65,6 +66,7 @@ const STATUSES = [
 type StatusFilter = (typeof STATUSES)[number]["value"]
 
 export function WorkspacesTable() {
+  const { formatDate } = useWorkspaceDate()
   const queryClient = useQueryClient()
   const router = useRouter()
   const [search, setSearch] = React.useState("")
@@ -265,7 +267,7 @@ export function WorkspacesTable() {
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-brand-muted-soft">
-                    {new Date(o.createdAt).toLocaleDateString()}
+                    {formatDate(new Date(o.createdAt))}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

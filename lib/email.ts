@@ -1,6 +1,7 @@
 import { Resend } from "resend"
 import { db } from "@/lib/db"
 import { emailLog } from "@/lib/schema"
+import { formatWorkspaceDate, DEFAULT_TIMEZONE } from "@/lib/timezone"
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY
@@ -272,7 +273,7 @@ export async function sendInvitationEmail(data: {
   const inviterName = data.inviter?.name || data.inviter?.email || "A teammate"
   const roleLabel = data.role || "member"
   const orgName = data.organization?.name || "a Muvx workspace"
-  const expiresAtText = new Date(data.expiresAt).toLocaleDateString()
+  const expiresAtText = formatWorkspaceDate(new Date(data.expiresAt), DEFAULT_TIMEZONE)
 
   const subject = `Join ${orgName} on Muvx`
 

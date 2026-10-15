@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/toggle-group"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Spinner } from "@/components/ui/spinner"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 type Point = { date: string; signups: number; sessions: number }
 
@@ -51,6 +52,7 @@ const chartConfig = {
 
 export function SignupsChart() {
   const isMobile = useIsMobile()
+  const { formatDate } = useWorkspaceDate()
   const [range, setRange] = React.useState<"90d" | "30d" | "7d">("90d")
   const [data, setData] = React.useState<Point[] | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -189,10 +191,7 @@ export function SignupsChart() {
                 minTickGap={32}
                 tickFormatter={(value) => {
                   const date = new Date(value)
-                  return date.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })
+                  return formatDate(date)
                 }}
                 tick={{ fill: "var(--brand-muted-soft)", fontSize: 11 }}
               />
@@ -201,11 +200,7 @@ export function SignupsChart() {
                 content={
                   <ChartTooltipContent
                     labelFormatter={(value) =>
-                      new Date(value).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })
+                      formatDate(new Date(value))
                     }
                     indicator="dot"
                   />

@@ -1,19 +1,36 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
+import { useAuthStore } from "@/lib/stores/auth-store"
+import { ROLE_CATALOG, ASSIGNABLE_ROLES } from "@/lib/auth-roles"
+import { useWorkspaceDate } from "@/lib/timezone"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { KeyRound, ShieldCheck, AlertCircle } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  KeyRound,
+  ShieldCheck,
+  AlertCircle,
+  Users,
+  Eye,
+  ChevronRight,
+} from "lucide-react"
 
-// ─── Phase 3 — WS-31/32/33: permission catalog ──────────────────────────────
-// Read-only view of every predefined role + its effective permissions.
-// Custom-role editor (P2) deferred.
+// ─── Types ──────────────────────────────────────────────────────────
 
 type ResourceEntry = { resource: string; actions: string[] }
 type RoleEntry = {
@@ -23,11 +40,49 @@ type RoleEntry = {
   order: number
   permissions: Record<string, string[]>
 }
+type MemberEntry = {
+  memberId: string
+  userId: string
+  email: string
+  name: string | null
+  image: string | null
+  role: string
+  platformRole: string | null
+  banned: boolean
+  memberSuspendedAt: Date | string | null
+  memberSuspendedUntil: Date | string | null
+  joinedAt: Date | string
+  lastActiveAt: Date | string | null
+}
+
+interface CatalogResponse {
+  roles: RoleEntry[]
+  resources: ResourceEntry[]
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/** Flatten a role's permissions into a Set of "resource.action" strings. */
+function permissionsToSet(role: RoleEntry): Set<string> {
+  const set = new Set<string>()
+  for (const [res, actions] of Object.entries(role.permissions)) {
+    for (const a of actions) set.add(`${res}.${a}`)
+  }
+  return set
+}
+
+/** Get all actions for a resource across all roles in the catalog. */
+function allActionStrings(res: string, resources: ResourceEntry[]): string[] {
+  const r = resources.find((r) => r.resource === res)
+  return r ? r.actions : []
+}
+
+// ─── Component ─────────────────────────────────────────────────────
 
 export function RolesClient() {
   const router = useRouter()
+  const { formatDate } = useWorkspaceDate()
 
-  // Guard
   useEffect(() => {
     ;(async () => {
       const { data } = await authClient.getSession()
@@ -35,19 +90,33 @@ export function RolesClient() {
     })()
   }, [router])
 
-  const q = useQuery({
+  // ── Role catalog (static — same for every workspace) ──
+  const catalogQuery = useQuery({
     queryKey: ["role-catalog"],
-    queryFn: async () => {
+    queryFn: async (): Promise<CatalogResponse> => {
       const r = await fetch("/api/settings/role-catalog", {
         credentials: "include",
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      return (await r.json()) as { roles: RoleEntry[]; resources: ResourceEntry[] }
+      return await r.json()
     },
     staleTime: 60_000,
   })
 
-  if (q.isLoading) {
+  // ── Workspace members (for the member-level inspector) ──
+  const membersQuery = useQuery({
+    queryKey: ["workspace-members"],
+    queryFn: async (): Promise<{ members: MemberEntry[] }> => {
+      const r = await fetch("/api/settings/workspace-members", {
+        credentials: "include",
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return await r.json()
+    },
+    staleTime: 30_000,
+  })
+
+  if (catalogQuery.isLoading) {
     return (
       <div className="p-4 lg:p-8 space-y-4 max-w-5xl mx-auto">
         <Skeleton className="h-10 w-64" />
@@ -56,26 +125,88 @@ export function RolesClient() {
       </div>
     )
   }
-  if (q.isError) {
+  if (catalogQuery.isError) {
     return (
       <div className="p-8 max-w-2xl mx-auto">
-        <Alert>
+        <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Failed to load role catalog: {(q.error as Error).message}
+            Failed to load role catalog: {(catalogQuery.error as Error).message}
           </AlertDescription>
         </Alert>
       </div>
     )
   }
 
-  const { roles, resources } = q.data!
-  const sortedResources = [...resources].sort((a, b) =>
-    a.resource.localeCompare(b.resource),
+  if (!catalogQuery.data) return null
+
+  const { roles, resources } = catalogQuery.data
+  const members = membersQuery.data?.members ?? []
+  const sortedResources = useMemo(
+    () =>
+      [...resources].sort((a, b) => a.resource.localeCompare(b.resource)),
+    [resources],
   )
 
   return (
+    <RolePermissionsShell
+      roles={roles}
+      resources={sortedResources}
+      members={members}
+      membersLoading={membersQuery.isLoading}
+      formatDate={formatDate}
+    />
+  )
+}
+
+// ─── Shell (tabs + matrix + members) ────────────────────────────────
+
+function RolePermissionsShell({
+  roles,
+  resources,
+  members,
+  membersLoading,
+  formatDate,
+}: {
+  roles: RoleEntry[]
+  resources: ResourceEntry[]
+  members: MemberEntry[]
+  membersLoading: boolean
+  formatDate: (d: Date | string) => string
+}) {
+  // Impact preview state: compare two roles
+  const [compareFrom, setCompareFrom] = useState<string>("")
+  const [compareTo, setCompareTo] = useState<string>("")
+  const [selectedRoleForMembers, setSelectedRoleForMembers] = useState<string>("")
+  const [inspectedMember, setInspectedMember] = useState<MemberEntry | null>(null)
+
+  const impactResult = useMemo(() => {
+    if (!compareFrom || !compareTo) return null
+    const from = roles.find((r) => r.id === compareFrom)
+    const to = roles.find((r) => r.id === compareTo)
+    if (!from || !to) return null
+
+    const fromSet = permissionsToSet(from)
+    const toSet = permissionsToSet(to)
+
+    const granted: string[] = []
+    const removed: string[] = []
+    const same: string[] = []
+
+    for (const perm of Array.from(new Set([...fromSet, ...toSet])).sort()) {
+      const inFrom = fromSet.has(perm)
+      const inTo = toSet.has(perm)
+      if (inTo && !inFrom) granted.push(perm)
+      else if (!inTo && inFrom) removed.push(perm)
+      else if (inTo && inFrom) same.push(perm)
+    }
+
+    return { granted, removed, same, fromLabel: from.label, toLabel: to.label }
+  }, [compareFrom, compareTo, roles])
+
+  return (
     <div className="p-4 lg:p-8 space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
       <div>
         <div className="flex items-center gap-3 mb-2">
           <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
@@ -86,12 +217,13 @@ export function RolesClient() {
           </h1>
         </div>
         <p className="text-sm text-brand-ink/80">
-          The {roles.length} predefined roles in MUVX and the exact resource ×
-          action permissions each one grants. Custom roles (P2) are not yet
-          editable from this surface.
+          The {roles.length} predefined roles in MUVX. Explore the full permission
+          matrix, inspect what individual members can do, and preview the impact
+          of a role change before you apply it.
         </p>
       </div>
 
+      {/* Info card */}
       <Card className="border-brand-rule bg-brand-card p-4">
         <div className="flex items-start gap-3 text-xs text-brand-muted-soft">
           <KeyRound className="h-4 w-4 mt-0.5 shrink-0" />
@@ -99,7 +231,11 @@ export function RolesClient() {
             <p className="mb-1">
               <span className="text-brand-ink font-medium">Permission resolution:</span>{" "}
               Default-deny. A user can only perform an action if an applicable
-              role grants the matching <code className="font-mono text-[11px] bg-brand-cream px-1 rounded">resource:action</code> pair.
+              role grants the matching{" "}
+              <code className="font-mono text-[11px] bg-brand-cream px-1 rounded">
+                resource:action
+              </code>
+              .
             </p>
             <p>
               Critical administrative actions (e.g. role delegation, ownership
@@ -110,35 +246,214 @@ export function RolesClient() {
         </div>
       </Card>
 
-      <Tabs defaultValue={roles[0]?.id} className="w-full">
+      <Tabs defaultValue="matrix" className="w-full">
         <TabsList className="bg-brand-cream border border-brand-rule flex-wrap h-auto">
-          {roles.map((r) => (
-            <TabsTrigger key={r.id} value={r.id} className="text-xs">
-              {r.label}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger value="matrix" className="text-xs">
+            Permission matrix
+          </TabsTrigger>
+          <TabsTrigger value="members" className="text-xs">
+            Members &amp; access
+          </TabsTrigger>
+          <TabsTrigger value="impact" className="text-xs">
+            Impact preview
+          </TabsTrigger>
         </TabsList>
-        {roles.map((r) => (
-          <TabsContent key={r.id} value={r.id} className="mt-4 space-y-4">
-            <RolePermissionGrid role={r} resources={sortedResources} />
-          </TabsContent>
-        ))}
+
+        {/* ── Matrix tab ── */}
+        <TabsContent key="matrix" value="matrix" className="mt-4 space-y-4">
+          {roles.map((role) => (
+            <RoleMatrixCard
+              key={role.id}
+              role={role}
+              resources={resources}
+            />
+          ))}
+        </TabsContent>
+
+        {/* ── Members tab ── */}
+        <TabsContent value="members" className="mt-4 space-y-4">
+          <MembersTabContent
+            roles={roles}
+            resources={resources}
+            members={members}
+            membersLoading={membersLoading}
+            formatDate={formatDate}
+            selectedRoleForMembers={selectedRoleForMembers}
+            setSelectedRoleForMembers={setSelectedRoleForMembers}
+            onInspect={setInspectedMember}
+          />
+          {/* Reverse-lookup helper: who has this permission? */}
+          {selectedRoleForMembers && (
+            <Card className="border-brand-rule bg-brand-card p-4 mt-4">
+              <h3 className="font-medium text-sm text-brand-ink mb-2">
+                Members with role: {roles.find((r) => r.id === selectedRoleForMembers)?.label ?? selectedRoleForMembers}
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {members.filter((m) => m.role === selectedRoleForMembers).length === 0 && (
+                  <p className="text-xs text-brand-muted-soft">No members have this role.</p>
+                )}
+                {members
+                  .filter((m) => m.role === selectedRoleForMembers)
+                  .map((m) => (
+                    <div
+                      key={m.memberId}
+                      className="flex items-center gap-2 text-xs"
+                    >
+                      <Badge
+                        variant="outline"
+                        className="border-brand-rule text-brand-ink/80 text-[10px] font-mono"
+                      >
+                        {m.role}
+                      </Badge>
+                      <span className="text-brand-ink/80">
+                        {m.name || m.email}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── Impact tab ── */}
+        <TabsContent value="impact" className="mt-4 space-y-4">
+          <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
+            <div>
+              <h2 className="font-serif text-xl text-brand-ink">
+                Impact preview
+              </h2>
+              <p className="text-xs text-brand-muted-soft mt-1">
+                Compare two roles to see the exact permission delta — what
+                would be granted, removed, or unchanged.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-brand-ink">
+                  From role
+                </label>
+                <select
+                  value={compareFrom}
+                  onChange={(e) => setCompareFrom(e.target.value)}
+                  className="h-9 w-52 rounded-lg border border-brand-rule bg-white px-3 text-sm text-brand-ink focus:ring-2 focus:ring-brand-accent/20"
+                >
+                  <option value="">Select a role…</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-brand-ink">
+                  To role
+                </label>
+                <select
+                  value={compareTo}
+                  onChange={(e) => setCompareTo(e.target.value)}
+                  className="h-9 w-52 rounded-lg border border-brand-rule bg-white px-3 text-sm text-brand-ink focus:ring-2 focus:ring-brand-accent/20"
+                >
+                  <option value="">Select a role…</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {impactResult && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="size-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-medium text-brand-ink">
+                      Newly granted ({impactResult.granted.length})
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {impactResult.granted.length === 0 ? (
+                      <p className="text-xs text-brand-muted-soft">
+                        No new permissions
+                      </p>
+                    ) : (
+                      impactResult.granted.map((p) => (
+                        <code
+                          key={p}
+                          className="block text-[10px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded"
+                        >
+                          {p}
+                        </code>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="size-2 rounded-full bg-red-500" />
+                    <span className="text-xs font-medium text-brand-ink">
+                      Removed ({impactResult.removed.length})
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {impactResult.removed.length === 0 ? (
+                      <p className="text-xs text-brand-muted-soft">
+                        No permissions removed
+                      </p>
+                    ) : (
+                      impactResult.removed.map((p) => (
+                        <code
+                          key={p}
+                          className="block text-[10px] font-mono text-red-800 bg-red-50 px-1.5 py-0.5 rounded"
+                        >
+                          {p}
+                        </code>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="size-2 rounded-full bg-brand-muted-soft/40" />
+                    <span className="text-xs font-medium text-brand-ink">
+                      Unchanged ({impactResult.same.length})
+                    </span>
+                  </div>
+                  <p className="text-xs text-brand-muted-soft">
+                    {impactResult.same.length} permissions stay the same.
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* ── Member permission inspector dialog ── */}
+      <MemberPermissionDialog
+        member={inspectedMember}
+        roles={roles}
+        resources={resources}
+        onClose={() => setInspectedMember(null)}
+        formatDate={formatDate}
+      />
     </div>
   )
 }
 
-function RolePermissionGrid({
+// ─── Permission matrix card per role ────────────────────────────────
+
+function RoleMatrixCard({
   role,
   resources,
 }: {
   role: RoleEntry
   resources: ResourceEntry[]
 }) {
-  const granted = new Set<string>()
-  for (const [res, actions] of Object.entries(role.permissions)) {
-    for (const a of actions) granted.add(`${res}.${a}`)
-  }
+  const granted = permissionsToSet(role)
 
   return (
     <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
@@ -152,11 +467,7 @@ function RolePermissionGrid({
             variant="outline"
             className="border-brand-rule text-brand-muted-soft"
           >
-            {Object.values(role.permissions).reduce(
-              (n, arr) => n + arr.length,
-              0,
-            )}{" "}
-            grants
+            {Array.from(granted).length} grants
           </Badge>
           <span className="text-[10px] font-mono text-brand-muted-soft">
             role = &quot;{role.id}&quot;
@@ -172,55 +483,325 @@ function RolePermissionGrid({
                 Resource
               </th>
               <th className="text-left px-3 py-2 font-medium text-brand-ink">
-                Granted actions
+                Permission
+              </th>
+              <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                Status
               </th>
             </tr>
           </thead>
           <tbody>
             {resources.map((r, i) => {
-              const grantedActions = (role.permissions[r.resource] ?? []).slice().sort()
-              return (
-                <tr
-                  key={r.resource}
-                  className={
-                    i % 2 === 0
-                      ? "bg-white"
-                      : "bg-brand-cream/40"
-                  }
-                >
-                  <td className="px-3 py-2 align-top font-mono text-xs text-brand-ink-soft">
-                    {r.resource}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {grantedActions.length === 0 ? (
-                      <span className="text-xs text-brand-muted-soft">
-                        — none
-                      </span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {grantedActions.map((a) => (
-                          <Badge
-                            key={a}
-                            className="bg-brand-accent-tint text-brand-accent border-0 text-[10px] font-mono"
-                          >
-                            {a}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              )
+              const actions = allActionStrings(r.resource, resources)
+              return actions.map((action, j) => {
+                const permKey = `${r.resource}.${action}`
+                const isGranted = granted.has(permKey)
+                const rowIdx = i * 10 + j // for zebra striping
+                return (
+                  <tr
+                    key={permKey}
+                    className={
+                      rowIdx % 2 === 0
+                        ? "bg-white"
+                        : "bg-brand-cream/40"
+                    }
+                  >
+                    <td className="px-3 py-2 align-top font-mono text-xs text-brand-ink-soft">
+                      {r.resource}
+                    </td>
+                    <td className="px-3 py-2 align-top font-mono text-xs text-brand-ink/60">
+                      {action}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {isGranted ? (
+                        <Badge
+                          variant="default"
+                          className="bg-emerald-100 text-emerald-800 border-0 text-[10px] font-mono"
+                        >
+                          granted
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-brand-muted-soft">
+                          — denied
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })
             })}
           </tbody>
         </table>
       </div>
 
       <p className="text-[11px] text-brand-muted-soft">
-        Effective access for this role. The role is assigned to a workspace
-        member via <code className="font-mono text-[10px] bg-brand-cream px-1 rounded">organization.updateMemberRole</code>{" "}
-        and is enforced by the server on every protected action.
+        This role grants {Array.from(granted).length} specific resource:action
+        pairs. Denied actions fall back to default-deny.
       </p>
     </Card>
+  )
+}
+
+// ─── Members tab ───────────────────────────────────────────────────
+
+function MembersTabContent({
+  roles,
+  resources,
+  members,
+  membersLoading,
+  formatDate,
+  selectedRoleForMembers,
+  setSelectedRoleForMembers,
+  onInspect,
+}: {
+  roles: RoleEntry[]
+  resources: ResourceEntry[]
+  members: MemberEntry[]
+  membersLoading: boolean
+  formatDate: (d: Date | string) => string
+  selectedRoleForMembers: string
+  setSelectedRoleForMembers: (v: string) => void
+  onInspect: (m: MemberEntry) => void
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Role filter */}
+      <div className="flex items-end gap-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-brand-ink">
+            Filter by role
+          </label>
+          <select
+            value={selectedRoleForMembers}
+            onChange={(e) => setSelectedRoleForMembers(e.target.value)}
+            className="h-9 w-48 rounded-lg border border-brand-rule bg-white px-3 text-sm text-brand-ink focus:ring-2 focus:ring-brand-accent/20"
+          >
+            <option value="">All roles</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Member list */}
+      <Card className="border-brand-rule bg-brand-card">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-brand-rule bg-brand-cream">
+                <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                  Member
+                </th>
+                <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                  Role
+                </th>
+                <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                  Permissions
+                </th>
+                <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                  Last active
+                </th>
+                <th className="w-12" />
+              </tr>
+            </thead>
+            <tbody>
+              {membersLoading ? (
+                <tr>
+                  <td colSpan={5} className="p-4">
+                    <Skeleton className="h-5 w-full" />
+                  </td>
+                </tr>
+              ) : members.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-xs text-brand-muted-soft">
+                    No members found.
+                  </td>
+                </tr>
+              ) : (
+                members
+                  .filter(
+                    (m) => !selectedRoleForMembers || m.role === selectedRoleForMembers,
+                  )
+                  .map((m) => {
+                    const roleEntry = roles.find((r) => r.id === m.role)
+                    const permCount = roleEntry
+                      ? permissionsToSet(roleEntry).size
+                      : 0
+                    return (
+                      <tr key={m.memberId} className="border-b border-brand-rule/40">
+                        <td className="px-3 py-2 align-top">
+                          <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-full bg-brand-cream flex items-center justify-center overflow-hidden">
+                              {m.image ? (
+                                <img
+                                  src={m.image}
+                                  alt={m.name || m.email}
+                                  className="size-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xs font-mono text-brand-muted-soft">
+                                  {m.email?.[0]?.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-brand-ink">
+                                {m.name || m.email}
+                              </p>
+                              <p className="text-xs text-brand-muted-soft">
+                                {m.email}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] font-mono"
+                          >
+                            {m.role}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 align-top text-xs text-brand-muted-soft">
+                          {permCount} permissions
+                        </td>
+                        <td className="px-3 py-2 align-top text-xs text-brand-muted-soft">
+                          {m.lastActiveAt
+                            ? formatDate(m.lastActiveAt)
+                            : "Never"}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onInspect(m)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ─── Member permission inspector dialog ─────────────────────────────
+
+function MemberPermissionDialog({
+  member,
+  roles,
+  resources,
+  onClose,
+  formatDate,
+}: {
+  member: MemberEntry | null
+  roles: RoleEntry[]
+  resources: ResourceEntry[]
+  onClose: () => void
+  formatDate: (d: Date | string) => string
+}) {
+  if (!member) return null
+  const roleEntry = roles.find((r) => r.id === member.role)
+  const granted = roleEntry ? permissionsToSet(roleEntry) : new Set<string>()
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Member details</span>
+          </DialogTitle>
+          <DialogDescription>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="size-8 rounded-full bg-brand-cream flex items-center justify-center overflow-hidden">
+                {member.image ? (
+                  <img
+                    src={member.image}
+                    alt={member.name || member.email}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs font-mono text-brand-muted-soft">
+                    {member.email?.[0]?.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <span className="font-medium text-brand-ink">
+                {member.name || member.email}
+              </span>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-4">
+          <div>
+            <h3 className="font-medium text-sm text-brand-ink">
+              Role: {roleEntry?.label ?? member.role}
+            </h3>
+            <p className="text-xs text-brand-muted-soft mt-1">
+              {roleEntry?.description ?? "Unknown role"}
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-medium text-sm text-brand-ink mb-2">
+              Effective permissions ({granted.size})
+            </h3>
+            <div className="border border-brand-rule rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-brand-cream">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                      Resource
+                    </th>
+                    <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from(granted)
+                    .sort()
+                    .map((perm, i) => {
+                      const [res, action] = perm.split(".")
+                      return (
+                        <tr
+                          key={perm}
+                          className={
+                            i % 2 === 0 ? "bg-white" : "bg-brand-cream/40"
+                          }
+                        >
+                          <td className="px-3 py-1.5 font-mono text-brand-ink-soft">
+                            {res}
+                          </td>
+                          <td className="px-3 py-1.5 text-brand-ink/60">
+                            {action}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

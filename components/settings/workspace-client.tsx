@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, Building2, Check, AlertCircle, Lock } from "lucide-react"
+import { Loader2, Building2, Check, AlertCircle, Lock, Upload, X } from "lucide-react"
 import { toast } from "sonner"
 
 // ─── Phase 3 — workspace profile (WS-09, WS-10, WS-14) ──────────────────────
@@ -72,6 +73,7 @@ type Profile = {
   id: string
   name: string
   slug: string
+  logo: string | null
   businessType: string | null
   dotNumber: string | null
   mcNumber: string | null
@@ -156,6 +158,7 @@ export function WorkspaceSettingsClient() {
       setForm({
         name: profileQuery.data.name,
         slug: profileQuery.data.slug,
+        logo: profileQuery.data.logo ?? null,
         businessType: profileQuery.data.businessType,
         dotNumber: profileQuery.data.dotNumber,
         mcNumber: profileQuery.data.mcNumber,
@@ -206,6 +209,7 @@ export function WorkspaceSettingsClient() {
     mutationFn: async () => {
       console.log("[WORKSPACE] save →", form)
       return await updateWorkspaceProfileAction({
+        logo: form.logo ?? null,
         name: form.name,
         slug: slugClean,
         businessType: (form.businessType as "broker" | "carrier" | "shipper" | "3pl" | "other" | null) ?? null,
@@ -254,6 +258,62 @@ export function WorkspaceSettingsClient() {
     },
   })
 
+  // ─── Logo upload (S3 presigned PUT) ──────────────────────────────
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoRemoving, setLogoRemoving] = useState(false)
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      console.log(`[WORKSPACE] Logo upload: ${file.name} (${file.size} bytes, ${file.type})`)
+
+      // 1. Get presigned URL from server (server checks tenant + permission)
+      const presignRes = await fetch("/api/upload/logo", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentType: file.type,
+          contentLength: file.size,
+        }),
+      })
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}))
+        throw new Error(err.message || `Upload failed (${presignRes.status})`)
+      }
+      const { uploadUrl, publicUrl } = await presignRes.json()
+
+      // 2. Upload directly to S3 (server never touches the file bytes)
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      })
+      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status})`)
+
+      console.log("[WORKSPACE] Logo uploaded to S3:", publicUrl)
+      return publicUrl as string
+    },
+    onSuccess: (url) => {
+      update("logo", url)
+      toast.success("Logo uploaded. Click Save to apply.")
+    },
+    onError: (err: Error) => {
+      console.error("[WORKSPACE] Logo upload failed:", err)
+      toast.error(err.message)
+    },
+  })
+
+  const removeLogoMutation = useMutation({
+    mutationFn: async () => {
+      if (!form.logo) return
+      // Extract the S3 key from the URL to delete
+      setLogoRemoving(true)
+      // The delete endpoint is admin-only; for now we just clear the field
+      // and let Save persist the null
+      update("logo", null)
+    },
+  })
+
   if (!ready || profileQuery.isLoading) {
     return (
       <div className="p-4 lg:p-8 space-y-4 max-w-3xl mx-auto">
@@ -292,6 +352,7 @@ export function WorkspaceSettingsClient() {
     JSON.stringify({
       name: profile.name,
       slug: profile.slug,
+      logo: profile.logo,
       businessType: profile.businessType,
       dotNumber: profile.dotNumber,
       mcNumber: profile.mcNumber,
@@ -394,6 +455,99 @@ export function WorkspaceSettingsClient() {
               {canEdit && slugChanged && (slugAvailable === false || slugQuery.isError) && (
                 <p className="text-brand-accent">✗ This URL is already taken.</p>
               )}
+            </div>
+          </div> {/* workspace name / slug row */}
+        </div> {/* grid-cols-1 md:grid-cols-2 */}
+
+        <Separator className="bg-brand-rule" />
+
+        {/* ── Logo ── */}
+        <div className="space-y-3">
+          <Label>Workspace logo</Label>
+          <div className="flex items-start gap-6">
+            {form.logo ? (
+              <Avatar className="size-24 border border-brand-rule">
+                <AvatarImage
+                  src={form.logo}
+                  alt={form.name ?? "Workspace logo"}
+                  className="object-cover"
+                />
+                <AvatarFallback className="bg-brand-cream text-brand-muted-soft">
+                  <Building2 className="h-8 w-8" />
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="size-24 rounded-xl border-2 border-dashed border-brand-rule bg-brand-cream flex items-center justify-center">
+                <Building2 className="h-8 w-8 text-brand-muted-soft" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {form.logo && canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    update("logo", null)
+                    toast.info("Logo will be removed on save.")
+                  }}
+                  className="h-8"
+                >
+                  <X className="h-3 w-3 mr-1" /> Remove
+                </Button>
+              )}
+              {canEdit && !form.logo && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("logo-upload")?.click()}
+                  disabled={logoUploading}
+                  className="h-8"
+                >
+                  {logoUploading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3 w-3 mr-1" /> Upload
+                    </>
+                  )}
+                </Button>
+              )}
+              {!canEdit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled
+                  className="h-8"
+                >
+                  <Upload className="h-3 w-3 mr-1" /> Upload
+                </Button>
+              )}
+              <input
+                id="logo-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (!canEdit) {
+                    toast.error("You don't have permission to upload a logo.")
+                    return
+                  }
+                  await uploadLogoMutation.mutateAsync(file)
+                  e.target.value = ""
+                }}
+                className="hidden"
+              />
+              <p className="text-xs text-brand-muted-soft max-w-xs">
+                PNG, JPG, WebP, or GIF. Max 5 MB. Will appear on invoices and
+                the sidebar.
+              </p>
             </div>
           </div>
         </div>

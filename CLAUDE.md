@@ -1,5 +1,11 @@
 # Rules (strict)
 
+## AWS Setup
+- AWS Account: 061534656693
+- AWS Region: ap-southeast-2 (primary)
+- S3 Bucket: muvx-app-storage (created for project storage)
+- Use default AWS profile for all operations
+
 ## Process
 1. Never assume. Before writing ANY code, read the official docs/source via MCP and use the exact official code. No estimated or workaround code.
 2. UI: use the shadcn MCP; match official docs exactly; use as many fitting components as possible in our design language.

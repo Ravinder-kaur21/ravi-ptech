@@ -6,6 +6,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { PreviewCard as PreviewCardPrimitive } from "@base-ui/react/preview-card";
 import { cn } from "@/lib/utils";
 import type { FileUIPart, SourceDocumentUIPart } from "ai";
 import {
@@ -369,23 +370,26 @@ export const AttachmentRemove = ({
 // AttachmentHoverCard - Hover preview
 // ============================================================================
 
-export type AttachmentHoverCardProps = ComponentProps<typeof HoverCard>;
+export type AttachmentHoverCardProps = PreviewCardPrimitive.Root.Props;
 
-export const AttachmentHoverCard = ({
-  openDelay = 0,
-  closeDelay = 0,
-  ...props
-}: AttachmentHoverCardProps) => (
-  <HoverCard closeDelay={closeDelay} openDelay={openDelay} {...props} />
+export const AttachmentHoverCard = (props: AttachmentHoverCardProps) => (
+  <HoverCard {...props} />
 );
 
-export type AttachmentHoverCardTriggerProps = ComponentProps<
-  typeof HoverCardTrigger
->;
+export type AttachmentHoverCardTriggerProps = React.ComponentProps<
+  typeof PreviewCardPrimitive.Trigger
+> & {
+  delay?: number;
+  closeDelay?: number;
+};
 
-export const AttachmentHoverCardTrigger = (
-  props: AttachmentHoverCardTriggerProps
-) => <HoverCardTrigger {...props} />;
+export const AttachmentHoverCardTrigger = ({
+  delay,
+  closeDelay,
+  ...props
+}: AttachmentHoverCardTriggerProps) => (
+  <HoverCardTrigger delay={delay} closeDelay={closeDelay} {...props} />
+);
 
 export type AttachmentHoverCardContentProps = ComponentProps<
   typeof HoverCardContent
