@@ -16,8 +16,10 @@ import { presignWorkspaceLogo } from "@/lib/storage"
 import { TenantError } from "@/lib/dal"
 import { s3Configured } from "@/lib/s3"
 
-export const runtime = "nodejs" // @aws-sdk needs Node runtime
-
+// Node.js is the default runtime for route handlers, which is what the
+// @aws-sdk/S3 client requires. The `runtime = "nodejs"` export was removed
+// because it's incompatible with `cacheComponents` and the Edge runtime is
+// deprecated — Node.js is selected automatically.
 export async function POST(req: NextRequest) {
   try {
     if (!s3Configured) {
