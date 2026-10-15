@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
-import { ROLE_CATALOG, ASSIGNABLE_ROLES } from "@/lib/auth-roles"
 import { useWorkspaceDate } from "@/lib/timezone"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -18,17 +18,21 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   KeyRound,
   ShieldCheck,
   AlertCircle,
-  Users,
   Eye,
-  ChevronRight,
+  Plus,
+  Check,
+  Loader2,
 } from "lucide-react"
+import { toast } from "sonner"
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -155,6 +159,7 @@ export function RolesClient() {
       members={members}
       membersLoading={membersQuery.isLoading}
       formatDate={formatDate}
+      onRoleCreated={() => catalogQuery.refetch()}
     />
   )
 }
@@ -167,18 +172,21 @@ function RolePermissionsShell({
   members,
   membersLoading,
   formatDate,
+  onRoleCreated,
 }: {
   roles: RoleEntry[]
   resources: ResourceEntry[]
   members: MemberEntry[]
   membersLoading: boolean
   formatDate: (d: Date | string) => string
+  onRoleCreated: () => void
 }) {
   // Impact preview state: compare two roles
   const [compareFrom, setCompareFrom] = useState<string>("")
   const [compareTo, setCompareTo] = useState<string>("")
   const [selectedRoleForMembers, setSelectedRoleForMembers] = useState<string>("")
   const [inspectedMember, setInspectedMember] = useState<MemberEntry | null>(null)
+  const [showCreateRole, setShowCreateRole] = useState(false)
 
   const impactResult = useMemo(() => {
     if (!compareFrom || !compareTo) return null
@@ -261,6 +269,20 @@ function RolePermissionsShell({
 
         {/* ── Matrix tab ── */}
         <TabsContent key="matrix" value="matrix" className="mt-4 space-y-4">
+          {/* Header row: title + Create role button */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-brand-muted-soft">
+              {roles.length} roles defined globally. Custom roles are scoped to this workspace.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowCreateRole(true)}
+              className="h-7 gap-1.5 text-xs border-brand-rule text-brand-ink"
+            >
+              <Plus className="h-3 w-3" /> Create role
+            </Button>
+          </div>
           {roles.map((role) => (
             <RoleMatrixCard
               key={role.id}
@@ -440,7 +462,230 @@ function RolePermissionsShell({
         onClose={() => setInspectedMember(null)}
         formatDate={formatDate}
       />
+
+      {/* ── Create custom role dialog ── */}
+      <CreateRoleDialog
+        open={showCreateRole}
+        onClose={() => setShowCreateRole(false)}
+        resources={resources}
+        onCreated={onRoleCreated}
+      />
     </div>
+  )
+}
+
+// ─── Create custom role dialog ─────────────────────────────────────
+
+function CreateRoleDialog({
+  open,
+  onClose,
+  resources,
+  onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  resources: ResourceEntry[]
+  onCreated: () => void
+}) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const activeOrg = useAuthStore((s) => s.activeOrganization)
+
+  const [name, setName] = useState("")
+  const [label, setLabel] = useState("")
+  // permission toggles keyed as "resource.action"
+  const [perms, setPerms] = useState<Record<string, boolean>>({})
+  const [submitting, setSubmitting] = useState(false)
+
+  // Reset form when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setName("")
+      setLabel("")
+      setPerms({})
+      setSubmitting(false)
+    }
+  }, [open])
+
+  const togglePerm = (key: string) =>
+    setPerms((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  const permCount = Object.values(perms).filter(Boolean).length
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeOrg?.id) throw new Error("No active organization")
+      // Build permission object: { resource: ["action1", "action2"] }
+      const permission: Record<string, string[]> = {}
+      for (const [key, enabled] of Object.entries(perms)) {
+        if (!enabled) continue
+        const [resource, action] = key.split(".")
+        if (!permission[resource]) permission[resource] = []
+        permission[resource].push(action)
+      }
+      return await authClient.organization.createRole({
+        role: name.trim(),
+        permission,
+        organizationId: activeOrg.id,
+      })
+    },
+    onSuccess: () => {
+      toast.success(`Role "${name}" created`)
+      queryClient.invalidateQueries({ queryKey: ["role-catalog"] })
+      onCreated()
+      onClose()
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to create role")
+      setSubmitting(false)
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      toast.error("Role ID is required")
+      return
+    }
+    if (!/^[a-z0-9_-]+$/.test(name.trim())) {
+      toast.error("Role ID must be lowercase letters, numbers, hyphens, or underscores")
+      return
+    }
+    if (permCount === 0) {
+      toast.error("Select at least one permission")
+      return
+    }
+    setSubmitting(true)
+    createMutation.mutate()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-brand-accent" />
+            Create custom role
+          </DialogTitle>
+          <DialogDescription>
+            Custom roles are scoped to this workspace. Members assigned this role
+            will get exactly the permissions you enable below.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
+          {/* Role ID + label */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="role-id">
+                Role ID{" "}
+                <span className="text-brand-muted-soft font-normal">(slug)</span>
+              </Label>
+              <Input
+                id="role-id"
+                value={name}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                placeholder="custom-dispatcher"
+                className="h-9 font-mono text-xs"
+              />
+              <p className="text-[10px] text-brand-muted-soft">
+                Lowercase letters, numbers, hyphens, underscores.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="role-label">Display name</Label>
+              <Input
+                id="role-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Custom Dispatcher"
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          {/* Permission grid */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Permissions</Label>
+              <span className="text-xs text-brand-muted-soft">
+                {permCount} selected
+              </span>
+            </div>
+            <div className="border border-brand-rule rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-brand-cream">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-brand-ink w-8" />
+                    <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                      Resource
+                    </th>
+                    <th className="text-left px-3 py-2 font-medium text-brand-ink">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resources.map((res) =>
+                    res.actions.map((action, i) => {
+                      const key = `${res.resource}.${action}`
+                      return (
+                        <tr
+                          key={key}
+                          className={i % 2 === 0 ? "bg-white" : "bg-brand-cream/30"}
+                        >
+                          <td className="px-3 py-2 text-center">
+                            <Checkbox
+                              checked={perms[key] ?? false}
+                              onCheckedChange={() => togglePerm(key)}
+                              className="text-brand-accent data-[state=checked]:bg-brand-accent"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-mono text-brand-ink-soft">
+                            {i === 0 ? res.resource : ""}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-brand-ink/60">
+                            {action}
+                          </td>
+                        </tr>
+                      )
+                    }),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="border-brand-rule"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={submitting || permCount === 0 || !name.trim()}
+              className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Create role
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
