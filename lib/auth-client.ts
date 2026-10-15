@@ -34,6 +34,12 @@ export const authClient = createAuthClient({
         driver: driverRole,
         safety,
       },
+      // ─── Dynamic Access Control (Phase 3 — WS-31/32/33) ────────────
+      // Must match the server-side setting. Dynamic roles are checked
+      // via hasPermission() on the client — NOT checkRolePermission().
+      dynamicAccessControl: {
+        enabled: true,
+      },
     }),
     adminClient(),
     lastLoginMethodClient(),

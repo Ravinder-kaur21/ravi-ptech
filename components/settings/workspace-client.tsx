@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
   SelectContent,
@@ -24,12 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { Loader2, Building2, Check, AlertCircle, Lock, Upload, X } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -389,35 +384,36 @@ export function WorkspaceSettingsClient() {
     <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-1.5">
           <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
             <Building2 className="h-4 w-4" strokeWidth={1.8} />
           </div>
           <h1 className="font-serif text-3xl tracking-tight text-brand-ink">
-            <span className="italic text-brand-accent">Workspace</span> profile
+            Organization <span className="italic text-brand-accent">settings</span>
           </h1>
         </div>
         <p className="text-sm text-brand-ink/80">
-          Company details, regulatory identifiers, and operational defaults.
-          {isOwnerAdmin ? (
-            " Changes are visible to your team immediately and recorded in the audit log."
-          ) : (
-            <span className="inline-flex items-center gap-1.5 ml-1">
-              <Lock className="h-3 w-3" />
-              You have read-only access.
-            </span>
-          )}
+          {isOwnerAdmin
+            ? "Manage your organization's profile, regulatory IDs, and operational defaults."
+            : "You have read-only access. Contact an admin to request changes."}
         </p>
       </div>
 
-      {/* ─── Identity ─────────────────────────────────────────── */}
-      <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
-        <div>
-          <h2 className="font-serif text-xl text-brand-ink">Identity</h2>
-          <p className="text-xs text-brand-muted-soft mt-1">
-            How your workspace appears to the team and on invoices.
-          </p>
-        </div>
+      <Tabs defaultValue="identity" className="w-full">
+        <TabsList className="bg-brand-cream border border-brand-rule flex-wrap h-auto gap-1">
+          <TabsTrigger value="identity" className="text-xs data-[state=active]:bg-brand-accent data-[state=active]:text-brand-ink">
+            Identity
+          </TabsTrigger>
+          <TabsTrigger value="address" className="text-xs data-[state=active]:bg-brand-accent data-[state=active]:text-brand-ink">
+            Address
+          </TabsTrigger>
+          <TabsTrigger value="operations" className="text-xs data-[state=active]:bg-brand-accent data-[state=active]:text-brand-ink">
+            Operations
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ─── Identity tab ──────────────────────────────────── */}
+        <TabsContent value="identity" className="mt-4 space-y-5">
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Workspace name */}
@@ -731,16 +727,11 @@ export function WorkspaceSettingsClient() {
             />
           </div>
         </div>
-      </Card>
+      </TabsContent>
 
-      {/* ─── Address ──────────────────────────────────────────── */}
-      <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
-        <div>
-          <h2 className="font-serif text-xl text-brand-ink">Address</h2>
-          <p className="text-xs text-brand-muted-soft mt-1">
-            Mailing address for invoices and regulatory correspondence.
-          </p>
-        </div>
+      {/* ─── Address tab ──────────────────────────────────────── */}
+      <TabsContent value="address" className="mt-4 space-y-4">
+        <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
 
         <div className="space-y-1.5">
           <Label htmlFor="addressLine1">
@@ -890,16 +881,11 @@ export function WorkspaceSettingsClient() {
           />
         </div>
       </Card>
+      </TabsContent>
 
-      {/* ─── Operations ─────────────────────────────────────── */}
-      <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
-        <div>
-          <h2 className="font-serif text-xl text-brand-ink">Operations</h2>
-          <p className="text-xs text-brand-muted-soft mt-1">
-            Defaults used by the rest of the workspace (invoices, payroll,
-            scheduling).
-          </p>
-        </div>
+      {/* ─── Operations tab ────────────────────────────────── */}
+      <TabsContent value="operations" className="mt-4 space-y-4">
+        <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1.5">
@@ -993,40 +979,39 @@ export function WorkspaceSettingsClient() {
             />
           </div>
         </div>
-      </Card>
+        </Card>
+        </TabsContent>
+        </Tabs>
 
-      {/* ─── Save ─────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="text-xs text-brand-muted-soft">
-          {isOwnerAdmin ? (
-            <>
-              <Badge
-                variant="outline"
-                className="border-brand-rule text-brand-muted-soft mr-2"
-              >
-                audit logged
-              </Badge>
-              All changes are recorded in the workspace audit log.
-            </>
-          ) : (
-            <>Read-only — only owners and admins can edit the profile.</>
-          )}
+        {/* ─── Save bar ─────────────────────────────────────── */}
+        <div className="flex items-center justify-between pt-2 pb-4">
+          <div className="text-xs text-brand-muted-soft">
+            {isOwnerAdmin ? (
+              <>
+                <Badge variant="outline" className="border-brand-rule text-brand-muted-soft mr-2">
+                  audit logged
+                </Badge>
+                All changes are recorded in the audit log.
+              </>
+            ) : (
+              <>Read-only — only owners and admins can edit.</>
+            )}
+          </div>
+          <Button
+            onClick={form.handleSubmit((values) => saveMutation.mutate(values))}
+            disabled={!canSave}
+            className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+          >
+            {saveMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
         </div>
-        <Button
-          onClick={form.handleSubmit((values) => saveMutation.mutate(values))}
-          disabled={!canSave}
-          className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving…
-            </>
-          ) : (
-            "Save changes"
-          )}
-        </Button>
-      </div>
     </div>
   )
 }

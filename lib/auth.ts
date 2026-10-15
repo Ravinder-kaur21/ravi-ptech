@@ -56,6 +56,16 @@ export const auth = betterAuth({
       // while still encouraging single-org usage for TMS
       organizationLimit: 3,
       teams: { enabled: false },
+      // ─── Dynamic Access Control (Phase 3 — WS-31/32/33) ────────────
+      // Enables per-workspace custom roles in addition to the global
+      // ROLE_CATALOG. Creates the `organizationRole` table on migration.
+      // Roles created at the org level are checked via hasPermission()
+      // (not checkRolePermission, which is static-only on the client).
+      dynamicAccessControl: {
+        enabled: true,
+        // Cap custom roles per org to prevent permission sprawl
+        maximumRolesPerOrganization: 20,
+      },
 
       // ─── Invitation email (Phase 1 — WS-16, WS-18) ────────────────
       // Required: without this callback, `authClient.organization.inviteMember()`
