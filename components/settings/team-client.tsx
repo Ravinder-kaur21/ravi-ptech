@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
@@ -253,6 +253,45 @@ function TeamSettingsInner() {
 
   const isOwner = viewerRole === "owner"
   const canManage = isOwner || viewerRole === "admin"
+
+  // ─── Dynamic roles (per-workspace custom roles from organization_role table) ──
+  // Fetched when canManage=true so the role Select includes custom roles.
+  const dynamicRolesQuery = useQuery({
+    queryKey: ["workspace-dynamic-roles", activeOrg?.id],
+    queryFn: async () => {
+      const { data, error } = await authClient.organization.listRoles({
+        query: { organizationId: activeOrg?.id },
+      })
+      if (error) throw new Error(error.message || "Failed to load custom roles")
+      return data as Array<{
+        role: string
+        permission: Record<string, string[]>
+        createdAt: Date
+        updatedAt: Date
+      }>
+    },
+    enabled: !!activeOrg?.id && canManage,
+    staleTime: 60_000,
+  })
+
+  // ─── All assignable roles: static catalog + custom roles ──
+  // Merged so the invite + change-role Select shows both built-in and custom roles.
+  const allRoles = useMemo<RoleMeta[]>(() => {
+    const staticRoles: RoleMeta[] = ROLE_CATALOG.filter(
+      (r) => r.id !== "owner",
+    ).map((r) => ({ value: r.id, label: r.label, description: r.description }))
+    if (!dynamicRolesQuery.data) return staticRoles
+    const customRoles: RoleMeta[] = dynamicRolesQuery.data.map((dr) => ({
+      value: dr.role,
+      label: dr.role,
+      description: "Custom role",
+    }))
+    const staticIds = new Set(staticRoles.map((r) => r.value))
+    return [
+      ...staticRoles,
+      ...customRoles.filter((cr) => !staticIds.has(cr.value)),
+    ]
+  }, [dynamicRolesQuery.data])
 
   // ─── Invite dialog state ──
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -584,7 +623,7 @@ function TeamSettingsInner() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ROLES.map((r) => (
+                        {allRoles.map((r) => (
                           <SelectItem key={r.value} value={r.value}>
                             <div className="flex flex-col">
                               <span className="font-medium">{r.label}</span>
@@ -780,7 +819,7 @@ function TeamSettingsInner() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
-                        {ROLES.filter((r) => r.value !== "admin").map((r) => (
+                        {allRoles.filter((r) => r.value !== "admin").map((r) => (
                           <SelectItem key={r.value} value={r.value}>
                             {r.label}
                           </SelectItem>
@@ -789,7 +828,7 @@ function TeamSettingsInner() {
                     </Select>
                   ) : (
                     <Badge variant="secondary" className="h-6 text-[11px]">
-                      {ROLES.find((x) => x.value === m.role)?.label ?? m.role}
+                      {allRoles.find((x) => x.value === m.role)?.label ?? m.role}
                     </Badge>
                   )}
                   {canManage && !isMe && (
@@ -946,7 +985,7 @@ function TeamSettingsInner() {
                     </Badge>
                   </div>
                   <p className="truncate text-xs text-brand-muted-soft">
-                    {ROLES.find((r) => r.value === inv.role)?.label ?? inv.role}
+                    {allRoles.find((r) => r.value === inv.role)?.label ?? inv.role}
                     {inv.expiresAt && (
                       <>
                         {" · expires "}

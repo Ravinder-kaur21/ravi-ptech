@@ -43,6 +43,7 @@ type RoleEntry = {
   description: string
   order: number
   permissions: Record<string, string[]>
+  isCustom?: boolean
 }
 type MemberEntry = {
   memberId: string
@@ -85,7 +86,9 @@ function allActionStrings(res: string, resources: ResourceEntry[]): string[] {
 
 export function RolesClient() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { formatDate } = useWorkspaceDate()
+  const activeOrg = useAuthStore((s) => s.activeOrganization)
 
   useEffect(() => {
     ;(async () => {
@@ -93,6 +96,25 @@ export function RolesClient() {
       if (!data?.user) router.replace("/login")
     })()
   }, [router])
+
+  // ── Delete custom role ──────────────────────────────────────────────
+  const deleteRoleMutation = useMutation({
+    mutationFn: async ({ roleId }: { roleId: string }) => {
+      if (!activeOrg?.id) throw new Error("No active organization")
+      const { error } = await authClient.organization.deleteRole({
+        roleId,
+        organizationId: activeOrg.id,
+      })
+      if (error) throw new Error(error.message || "Failed to delete role")
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["role-catalog"] })
+      toast.success("Role deleted")
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to delete role")
+    },
+  })
 
   // ── Role catalog (static — same for every workspace) ──
   const catalogQuery = useQuery({
@@ -160,6 +182,7 @@ export function RolesClient() {
       membersLoading={membersQuery.isLoading}
       formatDate={formatDate}
       onRoleCreated={() => catalogQuery.refetch()}
+      onDeleteRole={(roleId: string) => deleteRoleMutation.mutate({ roleId })}
     />
   )
 }
@@ -173,6 +196,7 @@ function RolePermissionsShell({
   membersLoading,
   formatDate,
   onRoleCreated,
+  onDeleteRole,
 }: {
   roles: RoleEntry[]
   resources: ResourceEntry[]
@@ -180,6 +204,7 @@ function RolePermissionsShell({
   membersLoading: boolean
   formatDate: (d: Date | string) => string
   onRoleCreated: () => void
+  onDeleteRole: (roleId: string) => void
 }) {
   // Impact preview state: compare two roles
   const [compareFrom, setCompareFrom] = useState<string>("")
@@ -288,6 +313,7 @@ function RolePermissionsShell({
               key={role.id}
               role={role}
               resources={resources}
+              onDeleteRole={role.isCustom ? onDeleteRole : undefined}
             />
           ))}
         </TabsContent>
@@ -694,11 +720,14 @@ function CreateRoleDialog({
 function RoleMatrixCard({
   role,
   resources,
+  onDeleteRole,
 }: {
   role: RoleEntry
   resources: ResourceEntry[]
+  onDeleteRole?: (roleId: string) => void
 }) {
   const granted = permissionsToSet(role)
+  const isCustom = role.isCustom === true
 
   return (
     <Card className="border-brand-rule bg-brand-card p-6 space-y-4">
@@ -717,6 +746,14 @@ function RoleMatrixCard({
           <span className="text-[10px] font-mono text-brand-muted-soft">
             role = &quot;{role.id}&quot;
           </span>
+          {isCustom && onDeleteRole && (
+            <button
+              onClick={() => onDeleteRole(role.id)}
+              className="text-[10px] text-red-500 hover:text-red-700 mt-1"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
