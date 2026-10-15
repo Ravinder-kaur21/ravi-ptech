@@ -21,7 +21,7 @@
   --popover-foreground: oklch(0.180 0.010 250);
 
   /* Brand action */
-  --primary: oklch(78.634% 0.15893 168.185);          /* burnt orange #d9622b */
+  --primary: oklch(0.620 0.180 45);          /* burnt orange #d9622b */
   --primary-foreground: oklch(0.962 0.010 80); /* cream on orange */
 
   /* Secondary = warm hairlines, used for subtle borders/fills */
