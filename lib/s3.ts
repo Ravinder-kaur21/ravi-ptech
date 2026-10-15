@@ -87,7 +87,7 @@ export async function createPresignedPut(
     Key: key,
     ContentType: contentType,
     ContentLength: contentLength,
-    ACL: "public-read", // logos are publicly readable (served on invoices)
+    // ACL removed — bucket has BlockPublicAcls=true; use presigned GET URLs for public access
   })
   const url = await getSignedUrl(getS3(), command, {
     expiresIn: expiresInSec,
@@ -96,9 +96,23 @@ export async function createPresignedPut(
   return { url }
 }
 
-/** Full public URL for a key stored in the bucket. */
+/** Full public URL for a key stored in the bucket. 
+ * Note: Objects are private by default (bucket blocks public ACLs).
+ * For public access, use presigned GET URLs with appropriate expiry.
+ */
 export function publicUrl(key: string): string {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
+}
+
+/** Generate a presigned GET URL for public sharing (e.g., invoice logos). */
+export async function createPresignedGet(
+  key: string,
+  expiresInSec = 3600, // 1 hour default
+): Promise<{ url: string }> {
+  const { GetObjectCommand } = await import("@aws-sdk/client-s3")
+  const command = new GetObjectCommand({ Bucket: bucket, Key: key })
+  const url = await getSignedUrl(getS3(), command, { expiresIn: expiresInSec })
+  return { url }
 }
 
 /** Delete an object by key. */

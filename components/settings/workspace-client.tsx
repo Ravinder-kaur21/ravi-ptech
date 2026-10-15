@@ -283,12 +283,15 @@ export function WorkspaceSettingsClient() {
       const { uploadUrl, publicUrl } = await presignRes.json()
 
       // 2. Upload directly to S3 (server never touches the file bytes)
+      console.log("[WORKSPACE] Uploading to S3:", { uploadUrl: uploadUrl.substring(0, 100), contentType: file.type, size: file.size })
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
         body: file,
         headers: { "Content-Type": file.type },
       })
-      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status})`)
+      const putText = await putRes.text().catch(() => "no body")
+      console.log("[WORKSPACE] S3 response:", { status: putRes.status, body: putText.substring(0, 500) })
+      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status}): ${putText.substring(0, 200)}`)
 
       console.log("[WORKSPACE] Logo uploaded to S3:", publicUrl)
       return publicUrl as string
