@@ -165,6 +165,19 @@ export function WorkspaceSettingsClient() {
         router.replace("/login")
         return
       }
+      // Read THIS user's role in the ACTIVE workspace (not the
+      // platform-level user.role, which is for super-admin and
+      // unrelated to org membership). If hasPermission reports
+      // success we can edit, so the role string only matters for
+      // badge display ("Owner" vs "Admin").
+      try {
+        const { data: me } = await authClient.organization.getActiveMember()
+        if (cancelled) return
+        const myRole = (me as { role?: string } | null)?.role as RoleId | undefined
+        if (myRole) setOrgRoleId(myRole)
+      } catch {
+        // Fall through: hasPermission below still gates the form
+      }
       const { data: perm } = await authClient.organization.hasPermission({
         permissions: { workspace: ["update"] },
       })
@@ -174,10 +187,6 @@ export function WorkspaceSettingsClient() {
         setReady(true)
         return
       }
-      // Owner/admin: also resolve the org role for field-level gates
-      // orgRoleId comes from the session membership; fall back to "admin"
-      const sessionRole = (data.user as { role?: string } | null)?.role ?? "admin"
-      setOrgRoleId(sessionRole as RoleId)
       setReady(true)
     })()
     return () => {
