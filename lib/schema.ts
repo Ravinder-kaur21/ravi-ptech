@@ -231,6 +231,33 @@ export const invitation = pgTable(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC ACCESS CONTROL — organizationRole table (WS-31/32/33)
+// Better Auth uses camelCase JS property names; the DB columns are
+// snake_case. This table maps to the organization_role table created
+// by drizzle migration 0011.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const organizationRole = pgTable(
+  "organization_role",
+  {
+    id: text("id").primaryKey(), // BA requires this even though CRUD endpoints don't use it directly
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    permission: text("permission").notNull(), // JSON stringified: { resource: ["action1", ...] }
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("organization_role_organization_id_idx").on(table.organizationId),
+    index("organization_role_role_idx").on(table.role),
+    // Composite PK: (organizationId, role) is unique per workspace
+    index("organization_role_pk_idx").on(table.organizationId, table.role),
+  ],
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AUTH RELATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -258,6 +285,8 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
+  // Dynamic Access Control — custom per-workspace roles (WS-31/32/33)
+  organizationRoles: many(organizationRole),
   // TMS tables
   loads: many(load),
   drivers: many(driver),
@@ -289,6 +318,13 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
   inviter: one(user, {
     fields: [invitation.inviterId],
     references: [user.id],
+  }),
+}))
+
+export const organizationRoleRelations = relations(organizationRole, ({ one }) => ({
+  organization: one(organization, {
+    fields: [organizationRole.organizationId],
+    references: [organization.id],
   }),
 }))
 
