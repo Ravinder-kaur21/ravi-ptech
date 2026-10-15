@@ -15,9 +15,7 @@ import {
   ClipboardList,
   TrendingUp,
   Bell,
-  UserCog,
   Settings,
-  CreditCard,
   Plus,
   ChevronsUpDown,
   Building2,
@@ -76,8 +74,6 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Members", href: "/settings/team", icon: UserCog },
-  { label: "Billing", href: "/settings", icon: CreditCard },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 
