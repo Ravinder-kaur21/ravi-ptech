@@ -2,8 +2,8 @@
 
 /**
  * @author: @kokonutui
- * @description: AI Input Search
- * @version: 1.0.0
+ * @description: AI Input Search (with integrated model selector)
+ * @version: 1.1.0
  * @date: 2025-06-26
  * @license: MIT
  * @website: https://kokonutui.com
@@ -14,16 +14,39 @@ import { Globe, Paperclip, Send } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
+/** Short, human-readable label derived from a model ID like "deepseek-ai/deepseek-v4.1-flash". */
+function formatModelLabel(model: string): string {
+  return (model.split("/").pop() || model)
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export interface AIInputSearchProps {
   placeholder?: string;
   searchLabel?: string;
-  /** Receives the text and whether web search was on when it was sent. */
-  onSubmit?: (value: string, options: { webSearch: boolean }) => void;
+  /** Available model IDs to show in the selector. */
+  models: string[];
+  /** Currently selected model (controlled). */
+  selectedModel: string;
+  /** Called when the user picks a different model. */
+  onModelChange: (model: string) => void;
+  /** Receives the text, web-search flag, and selected model. */
+  onSubmit?: (
+    value: string,
+    options: { webSearch: boolean; model: string | null }
+  ) => void;
   /** Called with the files picked through the attach button. */
   onFilesSelected?: (files: File[]) => void;
   /** Controlled web-search state. Leave unset to let the component own it. */
@@ -36,6 +59,9 @@ export interface AIInputSearchProps {
 export default function AI_Input_Search({
   placeholder = "Search the web...",
   searchLabel = "Search",
+  models = [],
+  selectedModel = "",
+  onModelChange,
   onSubmit,
   onFilesSelected,
   webSearch: webSearchProp,
@@ -65,7 +91,7 @@ export default function AI_Input_Search({
     if (!value.trim()) {
       return;
     }
-    onSubmit?.(value, { webSearch });
+    onSubmit?.(value, { webSearch, model: selectedModel });
     setValue("");
     adjustHeight(true);
   };
@@ -88,7 +114,6 @@ export default function AI_Input_Search({
         <div
           className={cn(
             "relative flex w-full cursor-text flex-col rounded-xl text-left transition-shadow duration-200",
-            "ring-1 ring-black/10 dark:ring-white/10",
             "has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-sky-600 dark:has-[textarea:focus-visible]:ring-sky-500"
           )}
           onClick={(e) => handleContainerClick(e.target)}
@@ -117,6 +142,29 @@ export default function AI_Input_Search({
 
           <div className="flex items-center justify-between rounded-b-xl bg-black/5 px-3 pt-1 pb-3 dark:bg-white/5">
             <div className="flex items-center gap-2">
+              {/* Model selector */}
+              <Select
+                value={selectedModel}
+                onValueChange={(v) => v && onModelChange(v)}
+                disabled={models.length === 0}
+              >
+                <SelectTrigger className="h-8 w-[180px] border-none bg-transparent text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      <div className="flex flex-col">
+                        <span>{formatModelLabel(model)}</span>
+                        <span className="text-xs text-muted-foreground/60">
+                          {model}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <label className="group/attach cursor-pointer rounded-lg bg-black/5 p-2 transition-transform has-focus-visible:ring-2 has-focus-visible:ring-sky-600 motion-safe:active:scale-[0.97] dark:bg-white/5 dark:has-focus-visible:ring-sky-500">
                 <input
                   aria-label="Attach file"

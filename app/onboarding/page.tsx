@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
@@ -122,7 +122,7 @@ const STEPS = [
   { stop: "STOP 06", subtitle: "WE'LL PRIORITISE THIS", title: ["What should Muvx fix", "first for you?"] },
 ]
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreatingAdditionalWorkspace = searchParams.get("create") === "1"
@@ -650,6 +650,34 @@ export default function OnboardingPage() {
       </div>
     </div>
   )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Onboarding page — wraps the content in Suspense so that useSearchParams()
+// in OnboardingContent can stream in after prerender instead of blocking it.
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="flex min-h-screen items-center justify-center"
+          style={{ background: "#f7f3ec" }}
+        >
+          <div className="text-center">
+            <Loader2
+              className="h-8 w-8 animate-spin mx-auto"
+              style={{ color: "#8a8b8f" }}
+            />
+            <p className="mt-4 text-sm" style={{ color: "#8a8b8f" }}>
+              Loading…
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <OnboardingContent />
+    </Suspense>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
