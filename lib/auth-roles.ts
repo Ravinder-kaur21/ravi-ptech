@@ -47,6 +47,59 @@ const statement = {
   workspace: ["read", "update"],
 } as const
 
+// ─── Field-level permissions for workspace profile (Phase C3) ────────────────
+// Better Auth's ac.hasPermission() is resource-grained: workspace: ["update"]
+// means the *entire* workspace resource, not individual fields.
+// This map layers per-field edit gates on top of the resource-level check.
+// Order matters: first matching role wins (for hierarchy inheritance).
+//
+// Fields not listed here default to owner+admin only.
+// All roles can READ any field — only the edit list is restricted.
+
+export const WORKSPACE_FIELD_PERMISSIONS = {
+  // ── Identity ──────────────────────────────────────────────────────────────
+  name:         ["owner", "admin"],
+  slug:         ["owner", "admin"],
+  logo:         ["owner", "admin"],
+  businessType: ["owner", "admin"],
+  phone:        ["owner", "admin"],
+  // ── Regulatory / compliance (ops-relevant) ──────────────────────────────
+  dotNumber: ["owner", "admin", "operations_manager"],
+  mcNumber:  ["owner", "admin", "operations_manager"],
+  ein:       ["owner", "admin"],
+  // ── Address ─────────────────────────────────────────────────────────────
+  addressLine1: ["owner", "admin"],
+  addressLine2: ["owner", "admin"],
+  city:         ["owner", "admin"],
+  state:        ["owner", "admin"],
+  postalCode:   ["owner", "admin"],
+  country:      ["owner", "admin"],
+  // ── Operations defaults ─────────────────────────────────────────────────
+  defaultCurrency: ["owner", "admin", "accounting"],
+  timeZone:        ["owner", "admin", "accounting"],
+  fiscalYearStart: ["owner", "admin", "accounting"],
+} as const
+
+export type WorkspaceField = keyof typeof WORKSPACE_FIELD_PERMISSIONS
+
+/** Returns true when the given role can edit the named workspace field. */
+export function canEditField(field: WorkspaceField, roleId: RoleId): boolean {
+  const allowed = WORKSPACE_FIELD_PERMISSIONS[field] as readonly RoleId[]
+  return allowed.includes(roleId)
+}
+
+/** Returns the list of fields the given role can edit. */
+export function getPermittedFields(roleId: RoleId): WorkspaceField[] {
+  return Object.keys(WORKSPACE_FIELD_PERMISSIONS).filter((field) =>
+    canEditField(field as WorkspaceField, roleId)
+  ) as WorkspaceField[]
+}
+
+/** Returns a set of editable field names for O(1) lookup. */
+export function getEditableFieldSet(roleId: RoleId): Set<WorkspaceField> {
+  return new Set(getPermittedFields(roleId))
+}
+
 export const ac = createAccessControl(statement)
 
 const FULL_TMS = {

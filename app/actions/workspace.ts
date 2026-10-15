@@ -1,11 +1,17 @@
 "use server"
 
 import { z } from "zod"
-import { eq } from "drizzle-orm"
+import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { organization, user as userTable } from "@/lib/schema"
+import { organization, user as userTable, member } from "@/lib/schema"
 import { requireTenant, requirePermission, TenantError } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
+import {
+  canEditField,
+  WORKSPACE_FIELD_PERMISSIONS,
+  type WorkspaceField,
+  type RoleId,
+} from "@/lib/auth-roles"
 
 // ─── Phase 3 — WS-10: update workspace profile ──────────────────────────────
 // Server action gated by `workspace: ["update"]` (owner + admin only).
@@ -103,7 +109,7 @@ export async function updateWorkspaceProfileAction(
 async function withUpdateWorkspaceProfile(
   raw: UpdateWorkspaceProfileInput,
 ): Promise<UpdateWorkspaceProfileResult> {
-  // 1. Auth + permission gate
+  // 1. Auth + resource-level permission gate
   let ctx
   try {
     ctx = await requireTenant()
@@ -114,6 +120,20 @@ async function withUpdateWorkspaceProfile(
     }
     throw err
   }
+
+  // 1b. Resolve organization role from member table for field-level check
+  const [membership] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(
+        eq(member.userId, ctx.userId),
+        eq(member.organizationId, ctx.tenantId),
+      ),
+    )
+    .limit(1)
+
+  const orgRoleId: RoleId = (membership?.role as RoleId) ?? "member"
 
   // 2. Validate
   const parsed = profileSchema.safeParse(raw)
@@ -126,6 +146,22 @@ async function withUpdateWorkspaceProfile(
     return { ok: false, error: "VALIDATION_ERROR", fieldErrors }
   }
   const data = parsed.data
+
+  // 2c. Field-level permission check — reject fields this role cannot edit
+  const permErrors: Record<string, string[]> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue // omit()ed fields are fine
+    if (!canEditField(key as WorkspaceField, orgRoleId)) {
+      permErrors[key] = [
+        `You don't have permission to edit this field (requires ${
+          WORKSPACE_FIELD_PERMISSIONS[key as WorkspaceField].join(" or ")
+        })`,
+      ]
+    }
+  }
+  if (Object.keys(permErrors).length > 0) {
+    return { ok: false, error: "FORBIDDEN", fieldErrors: permErrors }
+  }
 
   // 3. Snapshot before
   const [before] = await db
