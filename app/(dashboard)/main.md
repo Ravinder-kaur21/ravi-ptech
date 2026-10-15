@@ -1,17 +1,5 @@
 # MUVX TMS — Enterprise Company Workspace: Complete Requirements and Implementation Prompt
 
-## Objective
-
-Build a comprehensive, enterprise-ready company workspace for MUVX TMS, a transportation management system serving carriers, brokers, and companies operating as both.
-
-The workspace must support company management, members, roles, granular permissions, teams, terminals, operational access, financial controls, security, audit history, approval workflows, integrations, billing, and enterprise administration.
-
-**Phase 0 must be an audit only. Do not modify files or implement features until the audit and proposed plan have been reviewed and approved.**
-
-Do not include technology-stack discussions in the product specification. Focus on product requirements, business rules, user experience, authorization, and verification.
-
----
-
 # 1. Workspace Architecture
 
 The product has two separate administrative areas.
