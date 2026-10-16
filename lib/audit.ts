@@ -79,6 +79,11 @@ export type AuditAction =
   | "truck.update"
   | "truck.delete"
   | "workspace.update"
+  | "member.role_change"
+  | "member.permissions.reset"
+  | "member.permission.grant"
+  | "member.permission.revoke"
+  | "member.remove"
 
 export type AuditTargetType =
   | "user"
@@ -105,6 +110,8 @@ export type RecordAuditEvent = {
   action: AuditAction
   target: { type: AuditTargetType; id?: string | null; label?: string | null }
   metadata?: Record<string, unknown>
+  /** Optional one-line summary that gets folded into the metadata JSON. */
+  summary?: string
   /** Skip the IP/UA capture (for background jobs with no request context). */
   skipRequestContext?: boolean
   /**
@@ -173,6 +180,10 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
 
     const executor = e.tx ?? db
     const prevHash = await getLastHash(executor)
+    const metadata = {
+      ...(e.metadata ?? {}),
+      ...(e.summary ? { summary: e.summary } : {}),
+    }
     const payload = {
       actorId: e.actor.id,
       actorEmail: e.actor.email,
@@ -180,7 +191,7 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
       targetType: e.target.type,
       targetId: e.target.id ?? null,
       targetLabel: e.target.label ?? null,
-      metadata: e.metadata ?? {},
+      metadata,
       ipAddress,
       userAgent,
       prevHash,
@@ -194,7 +205,7 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
       targetType: e.target.type,
       targetId: e.target.id ?? null,
       targetLabel: e.target.label ?? null,
-      metadata: (e.metadata ?? {}) as any,
+      metadata: metadata as any,
       ipAddress,
       userAgent,
       prevHash,

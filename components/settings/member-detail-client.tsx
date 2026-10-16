@@ -59,6 +59,7 @@ type MemberPermResponse = {
 
 export function MemberDetailClient({ userId }: { userId: string }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const perms = usePermissions()
   const canManage = perms.has("users.change_role")
 
@@ -321,14 +322,6 @@ export function MemberDetailClient({ userId }: { userId: string }) {
     </div>
   )
 }
-
-const queryClient = (() => {
-  // The hook above uses the module-scope queryClient which React Query
-  // attaches automatically when used inside QueryClientProvider (set
-  // up in app/providers.tsx). This indirection is here so the matrix
-  // component can use the same client without re-importing.
-  return null
-})()
 
 function PermissionMatrix({
   data,

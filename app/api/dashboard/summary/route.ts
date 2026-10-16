@@ -9,7 +9,7 @@
  * the runtime filter on the dashboard sections component.
  */
 import { NextResponse } from "next/server"
-import { and, eq, gte, isNull, ne, sql } from "drizzle-orm"
+import { and, eq, gte, ne, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { load, driver, invoice } from "@/lib/schema"
 import { requireTenant, TenantError } from "@/lib/dal"
@@ -23,6 +23,14 @@ export async function GET() {
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
+    // Active loads: anything not delivered, cancelled, or completed.
+    // (load.status enum includes those values.)
+    // Active drivers: status='active'.
+    // Month-to-date revenue: SUM(invoice.amount::numeric) for paid invoices
+    //   since the start of this calendar month.
+    // AR aging: amount outstanding (amount - 0 since there's no amountPaid
+    //   column yet — we treat "paid" invoices as zero balance) bucketed by
+    //   days past due (computed from dueDate - now()).
     const [
       [activeLoadsRow],
       [activeDriversRow],
@@ -34,45 +42,46 @@ export async function GET() {
         .from(load)
         .where(
           and(
-            eq(load.organizationId, t.tenantId),
+            eq(load.tenantId, t.tenantId),
             ne(load.status, "delivered"),
             ne(load.status, "cancelled"),
-            ne(load.status, "completed")
-          )
+            ne(load.status, "completed"),
+          ),
         ),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(driver)
         .where(
-          and(eq(driver.organizationId, t.tenantId), eq(driver.status, "active"))
-        ),
-      db
-        .select({ total: sql<number>`coalesce(sum(${invoice.total}),0)::int` })
-        .from(invoice)
-        .where(
-          and(
-            eq(invoice.organizationId, t.tenantId),
-            gte(invoice.createdAt, monthStart)
-          )
+          and(eq(driver.tenantId, t.tenantId), eq(driver.status, "active")),
         ),
       db
         .select({
-          current: sql<number>`coalesce(sum(case when coalesce(${invoice.daysOverdue},0) <= 0 then ${invoice.total} - ${invoice.amountPaid} else 0 end),0)::int`,
-          d30: sql<number>`coalesce(sum(case when coalesce(${invoice.daysOverdue},0) between 1 and 30 then ${invoice.total} - ${invoice.amountPaid} else 0 end),0)::int`,
-          d60: sql<number>`coalesce(sum(case when coalesce(${invoice.daysOverdue},0) between 31 and 60 then ${invoice.total} - ${invoice.amountPaid} else 0 end),0)::int`,
-          d90: sql<number>`coalesce(sum(case when coalesce(${invoice.daysOverdue},0) > 60 then ${invoice.total} - ${invoice.amountPaid} else 0 end),0)::int`,
+          total: sql<number>`coalesce(sum(${invoice.amount}::numeric),0)::int`,
         })
         .from(invoice)
         .where(
           and(
-            eq(invoice.organizationId, t.tenantId),
-            sql`${invoice.amountPaid} < ${invoice.total}`,
-            ne(invoice.status, "void")
-          )
+            eq(invoice.tenantId, t.tenantId),
+            gte(invoice.createdAt, monthStart),
+          ),
+        ),
+      db
+        .select({
+          current: sql<number>`coalesce(sum(case when (${invoice.dueDate} IS NULL OR ${invoice.dueDate} >= NOW()) then ${invoice.amount}::numeric else 0 end),0)::int`,
+          d30: sql<number>`coalesce(sum(case when ${invoice.dueDate} < NOW() - INTERVAL '30 days' then 0 when ${invoice.dueDate} < NOW() then ${invoice.amount}::numeric else 0 end),0)::int`,
+          d60: sql<number>`coalesce(sum(case when ${invoice.dueDate} < NOW() - INTERVAL '30 days' AND ${invoice.dueDate} >= NOW() - INTERVAL '60 days' then ${invoice.amount}::numeric else 0 end),0)::int`,
+          d90: sql<number>`coalesce(sum(case when ${invoice.dueDate} < NOW() - INTERVAL '60 days' then ${invoice.amount}::numeric else 0 end),0)::int`,
+        })
+        .from(invoice)
+        .where(
+          and(
+            eq(invoice.tenantId, t.tenantId),
+            ne(invoice.status, "paid"),
+            ne(invoice.status, "void"),
+          ),
         ),
     ])
 
-    // Today queue: read by category. The client filters by perm.
     const todayQueue: {
       id: string
       title: string
@@ -83,23 +92,24 @@ export async function GET() {
       tone?: "default" | "amber" | "red"
     }[] = []
 
-    // Unassigned loads (dispatcher)
+    // Unassigned loads (dispatcher) — use status='available' as the
+    // proxy since `assignedDriverId` lives on the trip table, not the
+    // load table.
     try {
       const unassigned = await db
-        .select({ id: load.id, reference: load.referenceNumber })
+        .select({ id: load.id, reference: load.loadNumber })
         .from(load)
         .where(
           and(
-            eq(load.organizationId, t.tenantId),
-            isNull(load.assignedDriverId),
-            ne(load.status, "cancelled")
-          )
+            eq(load.tenantId, t.tenantId),
+            eq(load.status, "available"),
+          ),
         )
         .limit(5)
       for (const u of unassigned) {
         todayQueue.push({
           id: `load-${u.id}`,
-          title: `Load #${u.reference ?? u.id.slice(0, 6)} unassigned`,
+          title: `Load #${u.reference ?? u.id.slice(0, 6)} available`,
           detail: "Pick a driver and dispatch.",
           href: `/loads/${u.id}`,
           cta: "Assign",
@@ -107,42 +117,51 @@ export async function GET() {
           tone: "amber",
         })
       }
-    } catch {
-      // load may not have assignedDriverId column; skip.
+    } catch (e) {
+      console.warn("[API/DASHBOARD-SUMMARY] unassigned loads skipped:", e)
     }
 
-    // Invoices past 30 days (accounting)
+    // Overdue invoices (accounting) — derive days from dueDate.
     try {
       const overdueInvoices = await db
         .select({
           id: invoice.id,
           number: invoice.invoiceNumber,
-          days: invoice.daysOverdue,
-          total: invoice.total,
+          amount: invoice.amount,
+          dueDate: invoice.dueDate,
         })
         .from(invoice)
         .where(
           and(
-            eq(invoice.organizationId, t.tenantId),
-            sql`coalesce(${invoice.daysOverdue},0) >= 30`,
+            eq(invoice.tenantId, t.tenantId),
+            sql`${invoice.dueDate} < NOW() - INTERVAL '30 days'`,
+            ne(invoice.status, "paid"),
             ne(invoice.status, "void"),
-            ne(invoice.status, "paid")
-          )
+          ),
         )
         .limit(5)
       for (const inv of overdueInvoices) {
+        const days = inv.dueDate
+          ? Math.max(
+              0,
+              Math.floor(
+                (now.getTime() - new Date(inv.dueDate).getTime()) /
+                  (24 * 60 * 60 * 1000),
+              ),
+            )
+          : 0
         todayQueue.push({
           id: `inv-${inv.id}`,
-          title: `Invoice ${inv.number} ${inv.days} days overdue`,
-          detail: `$${inv.total} outstanding`,
+          title: `Invoice ${inv.number} ${days} days overdue`,
+          detail: `$${inv.amount} outstanding`,
           href: `/invoices/${inv.id}`,
           cta: "Send reminder",
           requiresKey: "accounting.invoices.send",
           tone: "red",
         })
       }
-    } catch {
-      // skip if daysOverdue column doesn't exist
+    } catch (e) {
+      console.warn("[API/DASHBOARD-SUMMARY] overdue invoices skipped:", e)
     }
 
     return NextResponse.json({
@@ -176,7 +195,7 @@ export async function GET() {
               : err.code === "FORBIDDEN"
                 ? 403
                 : 409,
-        }
+        },
       )
     }
     const message = err instanceof Error ? err.message : "Unknown error"
