@@ -13,7 +13,14 @@
  * @see https://ai-sdk.dev/providers/openai-compatible-providers/nim
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
+
+// ─── OpenRouter ─────────────────────────────────────────────────────────
+
+export const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 // ─── NVIDIA NIM (free inference credits for new users) ──────────────────
 
@@ -29,14 +36,18 @@ const nim = createOpenAICompatible({
 
 /**
  * Resolve a LanguageModel instance from provider/model strings.
- * Any model name accepted by the provider is supported — the list
- * of available models is fetched dynamically from the provider API.
+ * Supports OpenRouter, NVIDIA NIM, and direct model identifiers.
  */
 export function getModel(provider: string, model: string): LanguageModel {
   switch (provider) {
+    case "openrouter":
+      return openrouter(model);
     case "nim":
       return nim.chatModel(model);
     default:
+      if (provider.includes("/") || !model) {
+        return openrouter(provider);
+      }
       throw new Error(`Unknown provider: ${provider}`);
   }
 }
