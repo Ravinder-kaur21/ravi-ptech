@@ -28,10 +28,16 @@ import { TeamSubNav } from "@/components/settings/team-subnav"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { usePermissions } from "@/lib/permissions-context"
+import { useWorkspaceRoles } from "@/lib/use-workspace-roles"
+import { Sparkles } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -263,18 +269,22 @@ function TeamSettingsInner() {
     },
   })
 
+  const perms = usePermissions()
+  const { starterRoles, customRoles, allAssignableRoles, getRoleLabel, isCustomRole } = useWorkspaceRoles()
+
   const viewerRole: ViewerRole =
     (activeMember as { role?: string } | null)?.role ??
     activeOrg?.metadata?.role ??
     "member"
 
   const isOwner = viewerRole === "owner"
-  const canManage = isOwner || viewerRole === "admin"
+  const canManage = isOwner || perms.has("users.change_role") || perms.has("users.roles.manage")
+  const canInvite = isOwner || perms.has("users.invite")
 
   // ─── Invite dialog state ──
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState<Role>("member")
+  const [inviteRole, setInviteRole] = useState<string>("member")
 
   // ─── Suspend / lift / transfer state (WS-26, WS-28) ──
   const [suspendTarget, setSuspendTarget] = useState<
@@ -599,22 +609,63 @@ function TeamSettingsInner() {
                     <Label htmlFor="invite-role">Role</Label>
                     <Select
                       value={inviteRole}
-                      onValueChange={(v) => setInviteRole(v as Role)}
+                      onValueChange={(v) => setInviteRole(v ?? "member")}
                     >
                       <SelectTrigger className="h-10">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        {ROLES.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{r.label}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {r.description}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
+                      <SelectContent className="max-h-80">
+                        <SelectGroup>
+                          <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft px-2 py-1.5">
+                            Standard Presets ({starterRoles.length})
+                          </SelectLabel>
+                          {starterRoles.map((r) => (
+                            <SelectItem key={r.value} value={r.value} className="py-2">
+                              <div className="flex flex-col text-left">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium text-brand-ink">{r.label}</span>
+                                  <span className="text-[10px] font-mono text-brand-muted-soft px-1.5 py-0.2 rounded bg-brand-cream/60">
+                                    {r.onCount} ON
+                                  </span>
+                                </div>
+                                {r.description && (
+                                  <span className="text-[11px] text-brand-muted-soft line-clamp-1 mt-0.5">
+                                    {r.description}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+
+                        {customRoles.length > 0 && (
+                          <>
+                            <SelectSeparator className="my-1 bg-brand-rule" />
+                            <SelectGroup>
+                              <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-blue-700 px-2 py-1.5 flex items-center justify-between">
+                                <span>Workspace Custom Roles ({customRoles.length})</span>
+                                <span className="text-[9px] bg-blue-100 text-blue-800 px-1 rounded">Custom</span>
+                              </SelectLabel>
+                              {customRoles.map((r) => (
+                                <SelectItem key={r.value} value={r.value} className="py-2">
+                                  <div className="flex flex-col text-left">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-medium text-brand-ink">{r.label}</span>
+                                      <span className="text-[10px] font-mono text-blue-700 px-1.5 py-0.2 rounded bg-blue-50 border border-blue-200">
+                                        {r.onCount} ON
+                                      </span>
+                                    </div>
+                                    {r.description && (
+                                      <span className="text-[11px] text-brand-muted-soft line-clamp-1 mt-0.5">
+                                        {r.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -817,23 +868,58 @@ function TeamSettingsInner() {
                             })
                           }
                         >
-                          <SelectTrigger className="h-8 w-[150px] text-xs">
+                          <SelectTrigger className="h-8 w-[160px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            {ROLES.filter((r) => r.value !== "admin").map(
-                              (r) => (
-                                <SelectItem key={r.value} value={r.value}>
-                                  {r.label}
+                          <SelectContent className="max-h-80">
+                            <SelectGroup>
+                              <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft px-2 py-1">
+                                Standard Presets
+                              </SelectLabel>
+                              {starterRoles.map((r) => (
+                                <SelectItem key={r.value} value={r.value} className="text-xs">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{r.label}</span>
+                                    <span className="text-[10px] font-mono text-brand-muted-soft">
+                                      ({r.onCount} ON)
+                                    </span>
+                                  </div>
                                 </SelectItem>
-                              ),
+                              ))}
+                            </SelectGroup>
+
+                            {customRoles.length > 0 && (
+                              <>
+                                <SelectSeparator className="my-1 bg-brand-rule" />
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-blue-700 px-2 py-1">
+                                    Custom Workspace Roles
+                                  </SelectLabel>
+                                  {customRoles.map((r) => (
+                                    <SelectItem key={r.value} value={r.value} className="text-xs">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-blue-900 font-medium">{r.label}</span>
+                                        <span className="text-[10px] font-mono text-blue-700">
+                                          ({r.onCount} ON)
+                                        </span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </>
                             )}
                           </SelectContent>
                         </Select>
                       ) : (
-                        <Badge variant="secondary" className="h-6 text-[11px]">
-                          {ROLES.find((x) => x.value === m.role)?.label ?? m.role}
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "h-6 text-[11px] gap-1",
+                            isCustomRole(m.role) && "bg-blue-50 text-blue-700 border border-blue-200"
+                          )}
+                        >
+                          {isCustomRole(m.role) && <Sparkles className="size-2.5 text-blue-600" />}
+                          {getRoleLabel(m.role)}
                         </Badge>
                       )}
                     </TableCell>

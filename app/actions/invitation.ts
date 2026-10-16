@@ -19,7 +19,7 @@ import { z } from "zod"
 import { eq, and, gt } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
-import { member, invitation, user, organization, session as sessionTable } from "@/lib/schema"
+import { member, invitation, user, organization, session as sessionTable, organizationRole } from "@/lib/schema"
 import { requireTenant, requirePermission } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
 import { sendInvitationEmail } from "@/lib/email"
@@ -126,9 +126,9 @@ export async function resendInvitationAction(input: {
 // WS-24 / WS-29 — Server-authorized member role changes
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Derived from ROLE_CATALOG (lib/auth-roles.ts) — single source of truth.
+// Single source of truth for assignable roles: static starter roles + custom org roles.
 // Excludes "owner" (set only via transfer-ownership).
-const assignableRoleSchema = z.enum(ASSIGNABLE_ROLE_IDS)
+const assignableRoleSchema = z.string().min(2).max(50)
 
 const updateRoleSchema = z.object({
   memberId: z.string().min(1),
@@ -137,17 +137,40 @@ const updateRoleSchema = z.object({
 
 export async function updateMemberRoleAction(input: {
   memberId: string
-  role: z.infer<typeof assignableRoleSchema>
+  role: string
 }): Promise<{ ok: true }> {
   const parsed = updateRoleSchema.safeParse(input)
   if (!parsed.success) throw new Error("Invalid member role update")
   const ctx = await requireTenant()
+
+  if (parsed.data.role === "owner") {
+    throw new Error("Cannot assign Owner role directly. Use transfer ownership.")
+  }
 
   // GAP-5: Replaced hardcoded ["owner","admin"] check with
   // permission-driven authorization. Better Auth checks the actor's
   // role statement (owner/admin grant member:update; operations_manager
   // does not — so only owners and admins can reach this code path now).
   await requirePermission({ resource: "member", action: "update" })
+
+  // Validate that the role exists: either a starter role or a custom workspace role
+  const isStarter = (ASSIGNABLE_ROLE_IDS as readonly string[]).includes(parsed.data.role)
+  if (!isStarter) {
+    const [customRoleRow] = await db
+      .select({ id: organizationRole.id })
+      .from(organizationRole)
+      .where(
+        and(
+          eq(organizationRole.organizationId, ctx.tenantId),
+          eq(organizationRole.role, parsed.data.role),
+        ),
+      )
+      .limit(1)
+
+    if (!customRoleRow) {
+      throw new Error(`Role "${parsed.data.role}" is not recognized in this workspace`)
+    }
+  }
 
   const [target] = await db
     .select({ id: member.id, role: member.role, userId: member.userId })

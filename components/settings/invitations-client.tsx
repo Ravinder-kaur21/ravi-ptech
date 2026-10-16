@@ -20,6 +20,8 @@ import { authClient } from "@/lib/auth-client"
 import { resendInvitationAction } from "@/app/actions/invitation"
 import { ROLE_CATALOG, type RoleId } from "@/lib/auth-roles"
 import { TeamSubNav } from "@/components/settings/team-subnav"
+import { usePermissions } from "@/lib/permissions-context"
+import { useWorkspaceRoles } from "@/lib/use-workspace-roles"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -47,7 +49,10 @@ import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -123,12 +128,15 @@ export function InvitationsClient() {
   const router = useRouter()
   const queryClient = useQueryClient()
 
+  const perms = usePermissions()
+  const { starterRoles, customRoles, allAssignableRoles, getRoleLabel, isCustomRole } = useWorkspaceRoles()
+
   const [ready, setReady] = useState(false)
   const [status, setStatus] = useState<Status>("pending")
   const [search, setSearch] = useState("")
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState<Role>("member")
+  const [inviteRole, setInviteRole] = useState<string>("member")
   const [inviterRole, setInviterRole] = useState<string>("member")
 
   useEffect(() => {
@@ -150,7 +158,7 @@ export function InvitationsClient() {
     }
   }, [router])
 
-  const canInvite = inviterRole === "owner" || inviterRole === "admin"
+  const canInvite = inviterRole === "owner" || perms.has("users.invite")
 
   // Counts per status (one unfiltered fetch, client-side split)
   const allQuery = useQuery({
@@ -393,10 +401,15 @@ export function InvitationsClient() {
                         </span>
                       </TableCell>
                       <TableCell className="py-3">
-                        <Badge variant="secondary" className="h-6 text-[11px]">
-                          {ROLES.find((r) => r.value === inv.role)?.label ??
-                            inv.role ??
-                            "member"}
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "h-6 text-[11px] gap-1",
+                            inv.role && isCustomRole(inv.role) && "bg-blue-50 text-blue-700 border border-blue-200"
+                          )}
+                        >
+                          {inv.role && isCustomRole(inv.role) && <Sparkles className="size-2.5 text-blue-600" />}
+                          {inv.role ? getRoleLabel(inv.role) : "member"}
                         </Badge>
                       </TableCell>
                       <TableCell className="py-3">

@@ -53,27 +53,80 @@ import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
 
+import { usePermissions } from "@/lib/permissions-context"
+
 type NavItem = {
   label: string
   href: string
   icon: LucideIcon
+  permissions?: string[]
 }
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Loads", href: "/loads", icon: Truck},
-  { label: "Trips", href: "/trips", icon: Map },
-  { label: "Fleet", href: "/fleet", icon: Truck },
-  { label: "Drivers", href: "/drivers", icon: Users },
-  { label: "Invoices", href: "/invoices", icon: Receipt },
-  { label: "Accounts Payable", href: "/accounts-payable", icon: Receipt },
-  { label: "Carrier Pay", href: "/carrier-pay", icon: Banknote },
-  { label: "Payroll", href: "/payroll", icon: ClipboardList },
-  { label: "Reports", href: "/reports", icon: TrendingUp },
+  {
+    label: "Loads",
+    href: "/loads",
+    icon: Truck,
+    permissions: ["loads.module", "loads.view_all", "loads.view_own"],
+  },
+  {
+    label: "Trips",
+    href: "/trips",
+    icon: Map,
+    permissions: ["trips.module", "trips.view_all", "trips.view_assigned"],
+  },
+  {
+    label: "Fleet",
+    href: "/fleet",
+    icon: Truck,
+    permissions: ["fleet.module", "fleet.view_all"],
+  },
+  {
+    label: "Drivers",
+    href: "/drivers",
+    icon: Users,
+    permissions: ["drivers.module", "drivers.view_all", "drivers.view_own"],
+  },
+  {
+    label: "Invoices",
+    href: "/invoices",
+    icon: Receipt,
+    permissions: ["invoices.module", "invoices.view_all", "invoices.view_own"],
+  },
+  {
+    label: "Accounts Payable",
+    href: "/accounts-payable",
+    icon: Receipt,
+    permissions: ["accounting.module", "accounting.invoices.view_all"],
+  },
+  {
+    label: "Carrier Pay",
+    href: "/carrier-pay",
+    icon: Banknote,
+    permissions: ["accounting.module", "accounting.carrier_pay.view"],
+  },
+  {
+    label: "Payroll",
+    href: "/payroll",
+    icon: ClipboardList,
+    permissions: ["accounting.module", "accounting.payroll.view"],
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: TrendingUp,
+    permissions: ["reports.module", "reports.view"],
+  },
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Settings", href: "/settings", icon: Settings },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: Settings,
+    permissions: ["workspace.module", "workspace.profile.view", "users.module"],
+  },
 ]
 
 // ─── Component ───────────────────────────────────────────────────
@@ -104,6 +157,21 @@ export function AppSidebar({
   isImpersonating?: boolean
 }) {
   const pathname = usePathname()
+  const perms = usePermissions()
+
+  const visibleMainNav = React.useMemo(() => {
+    return MAIN_NAV.filter((item) => {
+      if (!item.permissions || item.permissions.length === 0) return true
+      return item.permissions.some((p) => perms.has(p))
+    })
+  }, [perms])
+
+  const visibleAccountNav = React.useMemo(() => {
+    return ACCOUNT_NAV.filter((item) => {
+      if (!item.permissions || item.permissions.length === 0) return true
+      return item.permissions.some((p) => perms.has(p))
+    })
+  }, [perms])
 
   // [SIDEBAR] List of all orgs the user is a member of (for the switcher)
   const { data: orgsData } = useQuery({
@@ -230,7 +298,7 @@ export function AppSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {MAIN_NAV.map((item) => {
+              {visibleMainNav.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/")
@@ -270,7 +338,7 @@ export function AppSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {ACCOUNT_NAV.map((item) => {
+              {visibleAccountNav.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/")
