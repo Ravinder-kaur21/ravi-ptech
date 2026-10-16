@@ -277,12 +277,9 @@ export default function SmoothDrawer({
 
   return (
     <Drawer
-      activeSnapPoint={snapPoints[expanded ? 1 : 0]}
-      fadeFromIndex={0}
       onOpenChange={handleOpenChange}
       open={isOpen}
-      setActiveSnapPoint={(point) => setSnap(point === 1)}
-      snapPoints={snapPoints}
+      snapPoints={snapPoints as number[]}
     >
       <DrawerTrigger render={<Button className="h-10 rounded-lg px-4" variant="outline" />}>{triggerLabel}</DrawerTrigger>
       <DrawerContent
