@@ -17,6 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
   ArrowLeft,
@@ -27,14 +35,15 @@ import {
   Circle,
   CircleCheck,
   Mail,
-  Calendar,
   ShieldCheck,
   ChevronDown,
   ChevronRight,
   Loader2,
+  Plus,
+  Trash2,
+  Sparkles,
   History,
 } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
 import { usePermissions } from "@/lib/permissions-context"
 import { PRESET_LIST } from "@/lib/role-presets"
 import {
@@ -62,6 +71,7 @@ export function MemberDetailClient({ userId }: { userId: string }) {
   const queryClient = useQueryClient()
   const perms = usePermissions()
   const canManage = perms.has("users.change_role")
+  const [grantOpen, setGrantOpen] = React.useState(false)
 
   const { data, isLoading } = useQuery<MemberPermResponse>({
     queryKey: ["member-permissions", userId],
@@ -156,7 +166,7 @@ export function MemberDetailClient({ userId }: { userId: string }) {
             </p>
             <p className="mt-1 text-[13px] text-brand-ink/80">
               Detailed profile fields live in the next phase. For now, the
-              member's role and effective permissions are managed on the
+              member&apos;s role and effective permissions are managed on the
               <strong> Permissions </strong>
               tab.
             </p>
@@ -192,6 +202,7 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                     toast.success(`Role changed to ${v}`)
                     queryClient.invalidateQueries({ queryKey: ["member-permissions", userId] })
                     queryClient.invalidateQueries({ queryKey: ["members-list-v2"] })
+                    router.refresh()
                   }}
                   disabled={!canManage}
                 >
@@ -210,21 +221,20 @@ export function MemberDetailClient({ userId }: { userId: string }) {
               <p className="text-[12px] text-brand-muted-soft">
                 {data.effectiveKeys.length} of {ALL_PERMISSION_KEYS.length} permissions ON
               </p>
-              {data.overrides.length > 0 ? (
-                <div className="rounded-md border border-brand-accent/30 bg-brand-accent-tint/40 p-3 text-[12px] text-brand-ink/90">
-                  <p>
-                    <strong>{data.overrides.length}</strong> custom override
-                    {data.overrides.length === 1 ? "" : "s"} on top of the{" "}
-                    {data.presetLabel} preset.
-                  </p>
-                  <div className="mt-2 flex gap-2">
+              <div className="rounded-md border border-brand-rule bg-brand-cream/50 p-3 text-[12px] text-brand-ink/90">
+                <p>
+                  Using the <strong>{data.presetLabel}</strong> preset as the
+                  starting point. Any extra grants below are layered on top.
+                </p>
+                {data.overrides.length > 0 && (
+                  <div className="mt-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={async () => {
                         if (
                           !confirm(
-                            "Reset this member's permissions to the preset? Custom overrides will be removed."
+                            "Reset this member's permissions to the preset? All extra grants will be removed."
                           )
                         )
                           return
@@ -247,6 +257,7 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                         queryClient.invalidateQueries({
                           queryKey: ["member-permissions", userId],
                         })
+                        router.refresh()
                       }}
                       disabled={!canManage}
                       className="h-7 text-[12px] border-brand-rule"
@@ -255,12 +266,8 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                       <span className="ml-1">Reset to preset</span>
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <p className="text-[12px] text-brand-muted-soft">
-                  Using the preset as-is. No overrides.
-                </p>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Quick summary */}
@@ -291,6 +298,112 @@ export function MemberDetailClient({ userId }: { userId: string }) {
             </div>
           </div>
 
+          {/* ─── Extra grants on top of role ─── */}
+          <div className="rounded-lg border border-brand-rule bg-brand-card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-brand-rule">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-brand-accent" />
+                <p className="text-[14px] font-semibold text-brand-ink">
+                  Extra grants on top of role
+                </p>
+                {data.overrides.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="border-brand-accent/30 text-brand-accent text-[10px] h-4 px-1.5"
+                  >
+                    {data.overrides.length}
+                  </Badge>
+                )}
+                <span className="text-[11px] text-brand-muted-soft">
+                  {canManage
+                    ? "You can extend this member's access with one-off grants."
+                    : "Owner only."}
+                </span>
+              </div>
+              {canManage && (
+                <Button
+                  onClick={() => setGrantOpen(true)}
+                  size="sm"
+                  className="h-8 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+                >
+                  <Plus className="size-3.5 mr-1" />
+                  Grant a key
+                </Button>
+              )}
+            </div>
+
+            {data.overrides.length === 0 ? (
+              <div className="px-5 py-6 text-center">
+                <p className="text-[13px] text-brand-muted-soft">
+                  No extra grants yet. {canManage ? "Click “Grant a key” to extend this person's access." : ""}
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-brand-rule">
+                {data.overrides.map((key) => {
+                  const entry = data.modules
+                    .flatMap((m) => m.keys)
+                    .find((k) => k.key === key)
+                  return (
+                    <li
+                      key={key}
+                      className="px-5 py-3 flex items-center gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] text-brand-ink">
+                          {entry?.label ?? key}
+                        </p>
+                        <p className="text-[11px] text-brand-muted-soft font-mono">
+                          {key}
+                        </p>
+                      </div>
+                      {canManage && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            if (
+                              !confirm(
+                                `Revoke ${key}? ${data.name || data.email} will lose this access.`
+                              )
+                            )
+                              return
+                            const r = await fetch(
+                              "/api/settings/member-permissions",
+                              {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  userId: data.userId,
+                                  action: "revoke",
+                                  key,
+                                }),
+                              }
+                            )
+                            if (!r.ok) {
+                              const j = await r.json().catch(() => ({}))
+                              toast.error(j.error || "Failed to revoke")
+                              return
+                            }
+                            toast.success(`Revoked ${key}`)
+                            queryClient.invalidateQueries({
+                              queryKey: ["member-permissions", userId],
+                            })
+                            router.refresh()
+                          }}
+                          className="h-7 text-[12px] text-brand-muted-soft hover:text-red-600"
+                        >
+                          <Trash2 className="size-3 mr-1" />
+                          Revoke
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
           {/* Permission matrix */}
           <PermissionMatrix
             data={data}
@@ -298,6 +411,12 @@ export function MemberDetailClient({ userId }: { userId: string }) {
             userId={userId}
             presetSet={presetSet}
             overrideSet={overrideSet}
+            onChanged={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["member-permissions", userId],
+              })
+              router.refresh()
+            }}
           />
         </TabsContent>
 
@@ -319,7 +438,204 @@ export function MemberDetailClient({ userId }: { userId: string }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <GrantDialog
+        open={grantOpen}
+        onOpenChange={setGrantOpen}
+        data={data}
+        userId={userId}
+        onGranted={() => {
+          queryClient.invalidateQueries({
+            queryKey: ["member-permissions", userId],
+          })
+          router.refresh()
+        }}
+      />
     </div>
+  )
+}
+
+/** "Grant a key" dialog — Owner only. Anti-escalation is enforced
+ *  server-side: the actor must already have the key they are granting. */
+function GrantDialog({
+  open,
+  onOpenChange,
+  data,
+  userId,
+  onGranted,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  data: MemberPermResponse
+  userId: string
+  onGranted: () => void
+}) {
+  const [filter, setFilter] = React.useState("")
+  const [picked, setPicked] = React.useState<string>("")
+  const [reason, setReason] = React.useState("")
+
+  // All keys across modules, with their human label, marked OFF if the
+  // member already has them ON (so the default is to grant something new).
+  const allKeys = React.useMemo(
+    () =>
+      data.modules
+        .flatMap((m) => m.keys)
+        .slice()
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [data.modules],
+  )
+  const currentSet = new Set(data.effectiveKeys)
+  const candidates = allKeys.filter(
+    (k) =>
+      !currentSet.has(k.key) &&
+      (!filter ||
+        `${k.key} ${k.label} ${k.description}`
+          .toLowerCase()
+          .includes(filter.toLowerCase())),
+  )
+
+  const grant = useMutation({
+    mutationFn: async (key: string) => {
+      const r = await fetch("/api/settings/member-permissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          action: "grant",
+          key,
+        }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error(j.error || "Failed to grant")
+      }
+    },
+    onSuccess: (_d, key) => {
+      toast.success(`Granted ${key}`)
+      onGranted()
+      onOpenChange(false)
+      setPicked("")
+      setFilter("")
+      setReason("")
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const pickedEntry = allKeys.find((k) => k.key === picked)
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setPicked("")
+          setFilter("")
+          setReason("")
+        }
+        onOpenChange(o)
+      }}
+    >
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Grant {data.name || data.email} a permission</DialogTitle>
+          <DialogDescription>
+            This adds a one-off grant on top of their {data.presetLabel}{" "}
+            role. The action is recorded in the audit log.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!picked ? (
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-brand-muted-soft" />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Search 130 permission keys…"
+                className="h-9 pl-9 text-[13px] bg-brand-card border-brand-rule"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto rounded-md border border-brand-rule divide-y divide-brand-rule">
+              {candidates.length === 0 ? (
+                <p className="p-4 text-center text-[13px] text-brand-muted-soft">
+                  No keys match — every matching permission is already ON.
+                </p>
+              ) : (
+                candidates.slice(0, 60).map((k) => (
+                  <button
+                    key={k.key}
+                    onClick={() => setPicked(k.key)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-brand-cream/50 transition-colors"
+                  >
+                    <p className="text-[13px] text-brand-ink">{k.label}</p>
+                    <p className="text-[11px] text-brand-muted-soft font-mono">
+                      {k.key}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+            <p className="text-[11px] text-brand-muted-soft">
+              {candidates.length} key{candidates.length === 1 ? "" : "s"} can
+              still be granted. Already-ON keys are hidden.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-md border border-brand-accent/30 bg-brand-accent-tint/40 p-3">
+              <p className="text-[13px] text-brand-ink">
+                {pickedEntry?.label}
+              </p>
+              <p className="text-[11px] text-brand-muted-soft font-mono mt-0.5">
+                {picked}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
+                Reason (optional, recorded in audit log)
+              </label>
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. covering Sara's leave"
+                className="h-9 text-[13px] bg-brand-card border-brand-rule"
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          {picked ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => setPicked("")}
+                disabled={grant.isPending}
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => grant.mutate(picked)}
+                disabled={grant.isPending}
+                className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+              >
+                {grant.isPending ? (
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4 mr-2" />
+                )}
+                Grant access
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -329,12 +645,14 @@ function PermissionMatrix({
   userId,
   presetSet,
   overrideSet,
+  onChanged,
 }: {
   data: MemberPermResponse
   canManage: boolean
   userId: string
   presetSet: Set<string>
   overrideSet: Set<string>
+  onChanged?: () => void
 }) {
   const [filter, setFilter] = React.useState("")
   const [openModules, setOpenModules] = React.useState<Record<string, boolean>>(
@@ -367,8 +685,7 @@ function PermissionMatrix({
           ? `Granted ${vars.key}`
           : `Revoked ${vars.key}`
       )
-      // Refresh the page so layout re-derives permissions on next nav.
-      // (Server layout will recompute on next request automatically.)
+      onChanged?.()
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -396,7 +713,7 @@ function PermissionMatrix({
             Edit permissions
           </p>
           <div className="flex items-center gap-2">
-            <Select value={showFilter} onValueChange={(v: any) => setShowFilter(v)}>
+            <Select value={showFilter} onValueChange={(v) => setShowFilter(v as "all" | "on" | "off" | "overridden")}>
               <SelectTrigger className="h-8 text-[12px] w-[140px] bg-brand-card border-brand-rule">
                 <SelectValue />
               </SelectTrigger>
@@ -492,9 +809,6 @@ function PermissionMatrix({
                                   key: k.key,
                                   next: e.target.checked ? "grant" : "revoke",
                                 })
-                                // Soft refresh: revalidate so server layout
-                                // re-derives permissions on next request.
-                                setTimeout(() => routerRefresh(), 100)
                               } catch {}
                             }}
                             className="sr-only peer"
@@ -512,12 +826,4 @@ function PermissionMatrix({
       </ul>
     </div>
   )
-}
-
-function routerRefresh() {
-  // Use global navigation refresh; provided by next/navigation's useRouter
-  // in a real component. We re-import here lazily.
-  if (typeof window !== "undefined") {
-    window.location.reload()
-  }
 }

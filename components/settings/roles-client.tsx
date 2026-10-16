@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -28,6 +29,7 @@ import {
   ShieldCheck,
   AlertCircle,
   Eye,
+  X,
   Plus,
   Check,
   Loader2,
@@ -142,6 +144,17 @@ export function RolesClient() {
     staleTime: 30_000,
   })
 
+  const data = catalogQuery.data
+  const rawResources = useMemo(
+    () => data?.resources ?? [],
+    [data]
+  )
+  const sortedResources = useMemo(
+    () => [...rawResources].sort((a, b) => a.resource.localeCompare(b.resource)),
+    [rawResources]
+  )
+  const members = membersQuery.data?.members ?? []
+
   if (catalogQuery.isLoading) {
     return (
       <div className="p-4 lg:p-8 space-y-4 max-w-5xl mx-auto">
@@ -164,15 +177,9 @@ export function RolesClient() {
     )
   }
 
-  if (!catalogQuery.data) return null
+  if (!data) return null
 
-  const { roles, resources } = catalogQuery.data
-  const members = membersQuery.data?.members ?? []
-  const sortedResources = useMemo(
-    () =>
-      [...resources].sort((a, b) => a.resource.localeCompare(b.resource)),
-    [resources],
-  )
+  const roles = data.roles
 
   return (
     <RolePermissionsShell
@@ -279,8 +286,11 @@ function RolePermissionsShell({
         </div>
       </Card>
 
-      <Tabs defaultValue="matrix" className="w-full">
+      <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-brand-cream border border-brand-rule flex-wrap h-auto">
+          <TabsTrigger value="overview" className="text-xs">
+            What this role does
+          </TabsTrigger>
           <TabsTrigger value="matrix" className="text-xs">
             Permission matrix
           </TabsTrigger>
@@ -291,6 +301,14 @@ function RolePermissionsShell({
             Impact preview
           </TabsTrigger>
         </TabsList>
+
+        {/* ── Overview tab — human-readable summary ── */}
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          <RoleOverview
+            roles={roles}
+            selectedRoleForMembers={selectedRoleForMembers}
+          />
+        </TabsContent>
 
         {/* ── Matrix tab ── */}
         <TabsContent key="matrix" value="matrix" className="mt-4 space-y-4">
@@ -496,6 +514,190 @@ function RolePermissionsShell({
         resources={resources}
         onCreated={onRoleCreated}
       />
+    </div>
+  )
+}
+// ─── "What this role does" tab ─────────────────────────────────────
+
+const MODULE_LABELS: Record<string, { label: string; outcome: (n: number) => string }> = {
+  workspace: {
+    label: "Workspace",
+    outcome: (n) => `Edit ${n} workspace field${n === 1 ? "" : "s"} (name, address, billing, etc.)`,
+  },
+  member: {
+    label: "Team members",
+    outcome: () => "Invite, change role, suspend, and remove teammates",
+  },
+  invitation: {
+    label: "Invitations",
+    outcome: () => "Send, resend, and cancel pending invites",
+  },
+  load: {
+    label: "Loads",
+    outcome: (n) => `See, create, edit, dispatch ${n} load action${n === 1 ? "" : "s"}`,
+  },
+  trip: {
+    label: "Trips",
+    outcome: (n) => `Manage trip planning, dispatch, and updates (${n} action${n === 1 ? "" : "s"})`,
+  },
+  driver: {
+    label: "Drivers",
+    outcome: (n) => `Read and update driver records (${n} action${n === 1 ? "" : "s"})`,
+  },
+  truck: {
+    label: "Fleet (trucks & trailers)",
+    outcome: (n) => `Read and update fleet records (${n} action${n === 1 ? "" : "s"})`,
+  },
+  invoice: {
+    label: "Invoices & finance",
+    outcome: (n) => `Read, create, edit, and void invoices (${n} action${n === 1 ? "" : "s"})`,
+  },
+  payroll: {
+    label: "Payroll",
+    outcome: (n) => `Read and edit pay stubs and payroll (${n} action${n === 1 ? "" : "s"})`,
+  },
+  ac: {
+    label: "Custom roles (BA)",
+    outcome: () => "Create and edit custom role definitions",
+  },
+  team: {
+    label: "Teams (BA)",
+    outcome: (n) => `Manage team definitions (${n} action${n === 1 ? "" : "s"})`,
+  },
+  organization: {
+    label: "Organization",
+    outcome: (n) => `Update or delete the workspace (${n} action${n === 1 ? "" : "s"})`,
+  },
+}
+
+function RoleOverview({
+  roles,
+  selectedRoleForMembers,
+}: {
+  roles: RoleEntry[]
+  selectedRoleForMembers: string
+}) {
+  const [pickedId, setPickedId] = React.useState<string>(
+    selectedRoleForMembers || roles[0]?.id || ""
+  )
+  const role = roles.find((r) => r.id === pickedId) ?? roles[0]
+  if (!role) return null
+
+  const granted = permissionsToSet(role)
+  const moduleEntries = Object.entries(role.permissions)
+    .filter(([, actions]) => actions.length > 0)
+    .map(([res, actions]) => {
+      const meta = MODULE_LABELS[res] ?? {
+        label: res,
+        outcome: (n: number) => `${n} action${n === 1 ? "" : "s"} on ${res}`,
+      }
+      return { res, label: meta.label, actions, outcome: meta.outcome(actions.length) }
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+
+  const hiddenModules = Object.keys(MODULE_LABELS).filter(
+    (m) => !(role.permissions[m]?.length ?? 0)
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Role picker (when more than one role exists) */}
+      <div className="flex flex-wrap items-center gap-2">
+        {roles.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setPickedId(r.id)}
+            className={
+              r.id === pickedId
+                ? "h-8 px-3 rounded-full bg-brand-ink text-brand-cream text-[12px] font-medium"
+                : "h-8 px-3 rounded-full border border-brand-rule bg-brand-card text-[12px] text-brand-ink hover:bg-brand-cream"
+            }
+          >
+            {r.label}
+            {r.isCustom && (
+              <span className="ml-1.5 text-[10px] font-mono uppercase opacity-70">
+                custom
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-brand-rule bg-brand-card p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-serif text-2xl text-brand-ink">{role.label}</h2>
+            <p className="mt-1 text-[13px] text-brand-ink/80 max-w-prose">
+              {role.description}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
+              Grants
+            </p>
+            <p className="mt-1 font-serif text-2xl text-brand-ink">
+              {Array.from(granted).length}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* What they CAN do */}
+        <div className="rounded-xl border border-brand-rule bg-brand-card p-5 space-y-3">
+          <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
+            Modules this role can access
+          </p>
+          {moduleEntries.length === 0 ? (
+            <p className="text-[13px] text-brand-muted-soft">
+              No modules granted yet.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {moduleEntries.map((m) => (
+                <li key={m.res} className="flex items-start gap-2">
+                  <Check className="size-3.5 text-emerald-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-[13px] text-brand-ink font-medium">
+                      {m.label}
+                    </p>
+                    <p className="text-[12px] text-brand-ink/80">{m.outcome}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* What they CANNOT do */}
+        <div className="rounded-xl border border-brand-rule bg-brand-card p-5 space-y-3">
+          <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
+            Hidden from this role
+          </p>
+          {hiddenModules.length === 0 ? (
+            <p className="text-[13px] text-brand-muted-soft">
+              Nothing is hidden — this role has every module.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {hiddenModules.map((m) => (
+                <li
+                  key={m}
+                  className="flex items-center gap-2 text-[13px] text-brand-muted-soft"
+                >
+                  <X className="size-3.5 shrink-0" />
+                  {MODULE_LABELS[m]?.label ?? m}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[12px] text-brand-muted-soft">
+        Need to compare with another role? Switch to the{" "}
+        <span className="font-medium text-brand-ink">Impact preview</span> tab.
+      </p>
     </div>
   )
 }

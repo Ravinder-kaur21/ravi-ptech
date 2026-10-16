@@ -14,7 +14,6 @@ import {
   Banknote,
   ClipboardList,
   TrendingUp,
-  Bell,
   Settings,
   Plus,
   ChevronsUpDown,

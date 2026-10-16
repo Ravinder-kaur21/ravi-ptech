@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
@@ -55,6 +56,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { toast } from "sonner"
 import {
   Loader2,
@@ -682,190 +691,222 @@ function TeamSettingsInner() {
                 : "No members yet."}
           </p>
         ) : (
-          <ul className="divide-y divide-brand-rule">
-            {members.map((m) => {
-              const isMe = m.userId === activeMember?.user?.id
-              const canEditThisMember =
-                canManage && !isMe && m.role !== "owner"
-              // WS-23 — status projections
-              const isBanned = !!m.banned
-              const userSuspended =
-                m.userSuspendedAt &&
-                (!m.userSuspendedUntil ||
-                  new Date(m.userSuspendedUntil) > new Date())
-              const memberSuspended =
-                m.memberSuspendedAt &&
-                (!m.memberSuspendedUntil ||
-                  new Date(m.memberSuspendedUntil) > new Date())
-              return (
-                <li
-                  key={m.memberId}
-                  className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-                >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-accent-tint text-brand-accent font-medium text-sm uppercase">
-                    {(m.name ?? m.email ?? "?")
-                      .split(" ")
-                      .map((w: string) => w[0])
-                      .slice(0, 2)
-                      .join("")}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="truncate text-sm font-medium text-brand-ink">
-                        {m.name ?? m.email ?? "Member"}
-                        {isMe && (
-                          <span className="ml-1.5 text-xs text-brand-muted-soft font-normal">
-                            (you)
-                          </span>
-                        )}
-                      </p>
-                      {m.role === "owner" && (
-                        <Badge
-                          variant="default"
-                          className="h-5 text-[10px] uppercase"
-                        >
-                          Owner
-                        </Badge>
-                      )}
-                      {isBanned && (
-                        <Badge
-                          variant="destructive"
-                          className="h-5 text-[10px] uppercase gap-1"
-                        >
-                          <Ban className="h-2.5 w-2.5" />
-                          Banned
-                        </Badge>
-                      )}
-                      {userSuspended && !isBanned && (
-                        <Badge
-                          variant="destructive"
-                          className="h-5 text-[10px] uppercase"
-                        >
-                          Platform suspended
-                        </Badge>
-                      )}
-                      {memberSuspended && !userSuspended && (
-                        <Badge
-                          variant="secondary"
-                          className="h-5 text-[10px] uppercase bg-amber-100 text-amber-900 border-amber-200"
-                        >
-                          Workspace suspended
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="truncate text-xs text-brand-muted-soft">
-                      {m.email}
-                      {memberSuspended && m.memberSuspendedReason && (
-                        <>
-                          {" · "}
-                          <span className="italic">
-                            reason: {m.memberSuspendedReason}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  {canEditThisMember ? (
-                    <Select
-                      value={m.role}
-                      onValueChange={(v) =>
-                        updateRoleMutation.mutate({
-                          memberId: m.memberId,
-                          role: v ?? m.role,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-8 w-[150px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        {ROLES.filter((r) => r.value !== "admin").map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge variant="secondary" className="h-6 text-[11px]">
-                      {ROLES.find((x) => x.value === m.role)?.label ?? m.role}
-                    </Badge>
-                  )}
-                  {canManage && !isMe && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            aria-label="Member actions"
-                          />
-                        }
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead className="w-[160px]">Role</TableHead>
+                <TableHead className="w-12 text-right" aria-label="Actions" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map((m) => {
+                const isMe = m.userId === activeMember?.user?.id
+                const canEditThisMember =
+                  canManage && !isMe && m.role !== "owner"
+                // WS-23 — status projections
+                const isBanned = !!m.banned
+                const userSuspended =
+                  m.userSuspendedAt &&
+                  (!m.userSuspendedUntil ||
+                    new Date(m.userSuspendedUntil) > new Date())
+                const memberSuspended =
+                  m.memberSuspendedAt &&
+                  (!m.memberSuspendedUntil ||
+                    new Date(m.memberSuspendedUntil) > new Date())
+                return (
+                  <TableRow
+                    key={m.memberId}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/settings/team/${m.userId}`)}
+                  >
+                    <TableCell className="py-3">
+                      <Link
+                        href={`/settings/team/${m.userId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-3 min-w-0 hover:underline"
                       >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52">
-                        {memberSuspended ? (
-                          <DropdownMenuItem
-                            onClick={() => liftSuspendMutation.mutate(m.memberId)}
-                            disabled={liftSuspendMutation.isPending}
-                          >
-                            <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                            Lift suspension
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSuspendTarget({
-                                id: m.memberId,
-                                name: m.name ?? "",
-                                email: m.email,
-                                memberSuspendedAt: m.memberSuspendedAt,
-                              })
-                              setSuspendOpen(true)
-                            }}
-                            disabled={m.role === "owner"}
-                          >
-                            <ShieldOff className="mr-2 h-3.5 w-3.5" />
-                            Suspend from this workspace
-                          </DropdownMenuItem>
-                        )}
-                        {iAmOwner && m.role !== "owner" && !isMe && (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setTransferTarget({
-                                id: m.memberId,
-                                name: m.name ?? "",
-                                email: m.email,
-                              })
-                              setTransferOpen(true)
-                            }}
-                          >
-                            <ArrowLeftRight className="mr-2 h-3.5 w-3.5" />
-                            Transfer ownership
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                        {m.role !== "owner" && (
-                          <RemoveMemberDropdown
-                            memberId={m.memberId}
-                            name={m.name ?? m.email}
-                            workspaceName={activeOrg?.name ?? "this workspace"}
-                            pending={removeMemberMutation.isPending}
-                            onConfirm={() =>
-                              removeMemberMutation.mutate(m.memberId)
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-accent-tint text-brand-accent font-medium text-sm uppercase">
+                          {(m.name ?? m.email ?? "?")
+                            .split(" ")
+                            .map((w: string) => w[0])
+                            .slice(0, 2)
+                            .join("")}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2 flex-wrap">
+                            <span className="truncate text-sm font-medium text-brand-ink">
+                              {m.name ?? m.email ?? "Member"}
+                              {isMe && (
+                                <span className="ml-1.5 text-xs text-brand-muted-soft font-normal">
+                                  (you)
+                                </span>
+                              )}
+                            </span>
+                            {m.role === "owner" && (
+                              <Badge
+                                variant="default"
+                                className="h-5 text-[10px] uppercase"
+                              >
+                                Owner
+                              </Badge>
+                            )}
+                            {isBanned && (
+                              <Badge
+                                variant="destructive"
+                                className="h-5 text-[10px] uppercase gap-1"
+                              >
+                                <Ban className="h-2.5 w-2.5" />
+                                Banned
+                              </Badge>
+                            )}
+                            {userSuspended && !isBanned && (
+                              <Badge
+                                variant="destructive"
+                                className="h-5 text-[10px] uppercase"
+                              >
+                                Platform suspended
+                              </Badge>
+                            )}
+                            {memberSuspended && !userSuspended && (
+                              <Badge
+                                variant="secondary"
+                                className="h-5 text-[10px] uppercase bg-amber-100 text-amber-900 border-amber-200"
+                              >
+                                Workspace suspended
+                              </Badge>
+                            )}
+                          </span>
+                          <span className="block truncate text-xs text-brand-muted-soft">
+                            {m.email}
+                            {memberSuspended && m.memberSuspendedReason && (
+                              <>
+                                {" · "}
+                                <span className="italic">
+                                  reason: {m.memberSuspendedReason}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell
+                      className="py-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canEditThisMember ? (
+                        <Select
+                          value={m.role}
+                          onValueChange={(v) =>
+                            updateRoleMutation.mutate({
+                              memberId: m.memberId,
+                              role: v ?? m.role,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-[150px] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            {ROLES.filter((r) => r.value !== "admin").map(
+                              (r) => (
+                                <SelectItem key={r.value} value={r.value}>
+                                  {r.label}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="secondary" className="h-6 text-[11px]">
+                          {ROLES.find((x) => x.value === m.role)?.label ?? m.role}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className="py-3 text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canManage && !isMe && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8"
+                                aria-label="Member actions"
+                              />
                             }
-                          />
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            {memberSuspended ? (
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  liftSuspendMutation.mutate(m.memberId)
+                                }
+                                disabled={liftSuspendMutation.isPending}
+                              >
+                                <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                                Lift suspension
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSuspendTarget({
+                                    id: m.memberId,
+                                    name: m.name ?? "",
+                                    email: m.email,
+                                    memberSuspendedAt: m.memberSuspendedAt,
+                                  })
+                                  setSuspendOpen(true)
+                                }}
+                                disabled={m.role === "owner"}
+                              >
+                                <ShieldOff className="mr-2 h-3.5 w-3.5" />
+                                Suspend from this workspace
+                              </DropdownMenuItem>
+                            )}
+                            {iAmOwner && m.role !== "owner" && !isMe && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setTransferTarget({
+                                    id: m.memberId,
+                                    name: m.name ?? "",
+                                    email: m.email,
+                                  })
+                                  setTransferOpen(true)
+                                }}
+                              >
+                                <ArrowLeftRight className="mr-2 h-3.5 w-3.5" />
+                                Transfer ownership
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {m.role !== "owner" && (
+                              <RemoveMemberDropdown
+                                memberId={m.memberId}
+                                name={m.name ?? m.email}
+                                workspaceName={activeOrg?.name ?? "this workspace"}
+                                pending={removeMemberMutation.isPending}
+                                onConfirm={() =>
+                                  removeMemberMutation.mutate(m.memberId)
+                                }
+                              />
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         )}
       </Card>
 
