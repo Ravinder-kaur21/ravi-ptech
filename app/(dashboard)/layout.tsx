@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation"
 import { and, eq, isNull, lte, gte, or, sql } from "drizzle-orm"
-import { AppSidebar } from "@/components/app-sidebar"
+import { AppSidebarPermission as AppSidebar } from "@/components/app-sidebar-permission"
 import { SiteHeader } from "@/components/site-header"
 import { AnnouncementBanner } from "@/components/announcement-banner"
+import { PermissionsBootstrap } from "@/components/permissions/permissions-bootstrap"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import {
   getSession,
@@ -10,6 +11,7 @@ import {
   getMembersForOrg,
   getIsAdmin,
 } from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
 import { db } from "@/lib/db"
 import { announcement, member, user as userTable } from "@/lib/schema"
 import { isMaintenanceMode } from "@/lib/request-gate"
@@ -118,6 +120,17 @@ export default async function DashboardLayout({
     userRole: role,
   }
 
+  // [LAYOUT] Compute the effective permission set once per request and
+  // hydrate it to the client via PermissionsBootstrap. Every client
+  // component below this point can read the set with `usePermissions()`
+  // and gate UI on it. The set is rebuilt on every request, so a
+  // permission change made in another tab takes effect on next nav.
+  const permissionSet = await getEffectivePermissions(
+    session.user.id,
+    orgId
+  )
+  const permissions = Array.from(permissionSet)
+
   return (
     <SidebarProvider
       style={
@@ -128,27 +141,29 @@ export default async function DashboardLayout({
         } as React.CSSProperties
       }
     >
-      <AppSidebar
-        org={{
-          id: org.id,
-          name: org.name,
-          slug: org.slug,
-          logo: org.logo,
-          metadata: (org.metadata as Record<string, any> | null) ?? null,
-        }}
-        session={sidebarSession}
-        isImpersonating={!!impersonatedBy}
-      />
-      <SidebarInset className="bg-background">
-        <SiteHeader
-          userName={session.user.name ?? "User"}
-          userEmail={session.user.email}
-          userImage={session.user.image ?? null}
+      <PermissionsBootstrap permissions={permissions} role={role}>
+        <AppSidebar
+          org={{
+            id: org.id,
+            name: org.name,
+            slug: org.slug,
+            logo: org.logo,
+            metadata: (org.metadata as Record<string, any> | null) ?? null,
+          }}
+          session={sidebarSession}
           isImpersonating={!!impersonatedBy}
         />
-        <AnnouncementBanner initial={activeAnnouncements} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
-      </SidebarInset>
+        <SidebarInset className="bg-background">
+          <SiteHeader
+            userName={session.user.name ?? "User"}
+            userEmail={session.user.email}
+            userImage={session.user.image ?? null}
+            isImpersonating={!!impersonatedBy}
+          />
+          <AnnouncementBanner initial={activeAnnouncements} />
+          <main className="flex-1 overflow-y-auto">{children}</main>
+        </SidebarInset>
+      </PermissionsBootstrap>
     </SidebarProvider>
   )
 }
