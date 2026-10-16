@@ -301,22 +301,22 @@ export function DriverTodayCard({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button
-          asChild={false}
+          render={
+            <Link href={`/driver-portal/status?loadId=${nextPickup.loadId}`}>
+              Update status
+            </Link>
+          }
           className="h-9 flex-1 rounded-full bg-brand-ink text-brand-cream hover:bg-brand-ink-soft text-[13px]"
-        >
-          <Link href={`/driver-portal/status?loadId=${nextPickup.loadId}`}>
-            Update status
-          </Link>
-        </Button>
+        />
         <Button
-          asChild={false}
+          render={
+            <Link href={`/driver-portal/pod?loadId=${nextPickup.loadId}`}>
+              Upload POD
+            </Link>
+          }
           variant="outline"
           className="h-9 flex-1 rounded-full border-brand-rule text-[13px]"
-        >
-          <Link href={`/driver-portal/pod?loadId=${nextPickup.loadId}`}>
-            Upload POD
-          </Link>
-        </Button>
+        />
       </div>
     </Card>
   )

@@ -32,7 +32,7 @@ const OWNER_PRESET: Preset = {
   oneLiner: "Full control — trust anchor of the workspace.",
   description:
     "The Owner runs the company. Holds legal and financial responsibility, can delete the workspace, transfer ownership, and change bank info.",
-  keys: OWNER_KEYS,
+  keys: OWNER_KEYS as unknown as readonly string[],
 }
 
 const ADMIN_PRESET: Preset = {
@@ -457,7 +457,8 @@ export const PRESET_LIST: Preset[] = [
 export function presetKeys(role: RoleId, allKeys: string[]): Set<string> {
   const preset = PRESETS[role]
   if (!preset) return new Set()
-  if (preset.keys === OWNER_KEYS) return new Set(allKeys)
+  if (preset.keys === (OWNER_KEYS as unknown as readonly string[]))
+    return new Set(allKeys)
   return new Set(preset.keys as string[])
 }
 
