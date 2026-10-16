@@ -2,6 +2,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { Plus, Star, Truck, ArrowUpRight } from "lucide-react"
 import { getSession, getLoadsForOrg } from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/status-badge"
@@ -14,7 +15,12 @@ export default async function LoadsPage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
-  const loads = await getLoadsForOrg(tenantId)
+  const [loads, perms] = await Promise.all([
+    getLoadsForOrg(tenantId),
+    getEffectivePermissions(session.user.id, tenantId),
+  ])
+
+  const canCreate = perms.has("loads.create")
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto">
@@ -27,13 +33,15 @@ export default async function LoadsPage() {
             {loads.length} {loads.length === 1 ? "load" : "loads"} · {loads.filter((l) => l.status !== "delivered" && l.status !== "completed" && l.status !== "cancelled").length} active
           </p>
         </div>
-        <Button
-          render={<Link href="/loads/new" />}
-          className="h-10 gap-1.5 rounded-full bg-brand-ink px-5 text-sm font-medium text-brand-cream hover:bg-brand-ink-soft"
-        >
-          <Plus className="h-4 w-4" />
-          New load
-        </Button>
+        {canCreate && (
+          <Button
+            render={<Link href="/loads/new" />}
+            className="h-10 gap-1.5 rounded-full bg-brand-ink px-5 text-sm font-medium text-brand-cream hover:bg-brand-ink-soft"
+          >
+            <Plus className="h-4 w-4" />
+            New load
+          </Button>
+        )}
       </div>
 
       {loads.length === 0 ? (
@@ -43,15 +51,19 @@ export default async function LoadsPage() {
           </div>
           <p className="font-medium text-brand-ink">No loads yet</p>
           <p className="mt-1 text-sm text-brand-muted-soft">
-            Create your first load to start dispatching.
+            {canCreate
+              ? "Create your first load to start dispatching."
+              : "No loads have been dispatched to this workspace yet."}
           </p>
-          <Button
-            render={<Link href="/loads/new" />}
-            className="mt-4 h-9 px-4 rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Create your first load
-          </Button>
+          {canCreate && (
+            <Button
+              render={<Link href="/loads/new" />}
+              className="mt-4 h-9 px-4 rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Create your first load
+            </Button>
+          )}
         </Card>
       ) : (
         <Card className="border-brand-rule bg-brand-card overflow-hidden">

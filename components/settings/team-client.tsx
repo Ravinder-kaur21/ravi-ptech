@@ -24,6 +24,7 @@ import {
   SuspendMemberDialog,
   TransferOwnershipDialog,
 } from "@/components/settings/member-action-dialogs"
+import { TeamSubNav } from "@/components/settings/team-subnav"
 import {
   Select,
   SelectContent,
@@ -525,6 +526,9 @@ function TeamSettingsInner() {
   // ─── Render ──
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-6xl mx-auto">
+      {/* Subnav bridging Team, Invites, and Roles */}
+      <TeamSubNav activeTab="team" memberCount={members.length} />
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>

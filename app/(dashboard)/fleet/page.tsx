@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { Users } from "lucide-react"
 import { ModulePage } from "@/components/dashboard/module-page"
 import { getSession } from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
 
 export default async function FleetPage() {
   const session = await getSession()
@@ -9,12 +10,19 @@ export default async function FleetPage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
+  const perms = await getEffectivePermissions(session.user.id, tenantId)
+  if (!perms.has("fleet.module")) {
+    redirect("/")
+  }
+
+  const canCreate = perms.has("fleet.create")
+
   return (
     <ModulePage
       title="Fleet"
       description="Manage your trucks, trailers, and equipment in one place."
       icon={Users}
-      primaryAction={{ label: "Add truck", href: "/fleet/new" }}
+      primaryAction={canCreate ? { label: "Add truck", href: "/fleet/new" } : undefined}
       emptyStateTitle="No trucks yet"
       emptyStateDescription="Add your trucks and trailers to start dispatching. You can add them one at a time or import in bulk."
       nextSteps={[

@@ -4,6 +4,7 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { load, user as userTable } from "@/lib/schema"
 import { withTenant, requirePermission } from "@/lib/dal"
+import { requireCatalogPermission } from "@/lib/can"
 import { recordAuditEvent } from "@/lib/audit"
 import { randomUUID } from "crypto"
 
@@ -24,9 +25,9 @@ const createLoadSchema = z.object({
 // [API/LOADS] Create a load. tenantId comes from the session via
 // withTenant() — never from the request body.
 export const POST = withTenant(async (req: Request, { tenantId, userId }) => {
-  // Phase 2 (R-01): server-side RBAC gate. Driver / member roles do
-  // not have `load: ["create"]` in lib/auth-roles.ts → they are denied.
+  // Coarse Better Auth membership gate + Granular Catalog override gate
   await requirePermission({ resource: "load", action: "create" })
+  await requireCatalogPermission("loads.create")
 
   const body = await req.json().catch(() => null)
   const parsed = createLoadSchema.safeParse(body)

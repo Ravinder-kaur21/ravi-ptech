@@ -19,6 +19,7 @@ import { formatDistanceToNow } from "date-fns"
 import { authClient } from "@/lib/auth-client"
 import { resendInvitationAction } from "@/app/actions/invitation"
 import { ROLE_CATALOG, type RoleId } from "@/lib/auth-roles"
+import { TeamSubNav } from "@/components/settings/team-subnav"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -242,6 +243,9 @@ export function InvitationsClient() {
   return (
     <TooltipProvider delay={200}>
       <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+        {/* Subnav bridging Team, Invites, and Roles */}
+        <TeamSubNav activeTab="invitations" />
+
         {/* ─── Header ─── */}
         <div>
           <Link

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { getSession } from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
 import { NewLoadForm } from "@/components/new-load-form"
 
@@ -12,6 +13,11 @@ export default async function NewLoadPage() {
   if (!session?.user) redirect("/login")
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
+
+  const perms = await getEffectivePermissions(session.user.id, tenantId)
+  if (!perms.has("loads.create")) {
+    redirect("/loads")
+  }
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
