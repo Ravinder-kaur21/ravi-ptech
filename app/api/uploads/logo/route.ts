@@ -18,7 +18,6 @@ import { recordAuditEvent } from "@/lib/audit"
 import { randomUUID } from "crypto"
 
 export const instant = false
-export const dynamic = "force-dynamic"
 
 const BUCKET = process.env.S3_BUCKET ?? "muvx-app-storage"
 const REGION = process.env.S3_REGION ?? "ap-southeast-2"

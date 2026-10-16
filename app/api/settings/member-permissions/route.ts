@@ -43,11 +43,13 @@ export async function GET(req: NextRequest) {
     const preset = PRESETS[roleId]
     const presetKeySet = presetKeys(roleId, ALL_PERMISSION_KEYS)
     const effectiveSet = await getEffectivePermissions(userId, t.tenantId)
-
-    // Overrides = effective minus preset.
-    const overrides: string[] = []
+    const grants: string[] = []
+    const revokes: string[] = []
     for (const k of effectiveSet) {
-      if (!presetKeySet.has(k)) overrides.push(k)
+      if (!presetKeySet.has(k)) grants.push(k)
+    }
+    for (const k of presetKeySet) {
+      if (!effectiveSet.has(k)) revokes.push(k)
     }
 
     return NextResponse.json({
@@ -59,7 +61,9 @@ export async function GET(req: NextRequest) {
       presetOneLiner: preset?.oneLiner ?? "",
       presetKeys: Array.from(presetKeySet),
       effectiveKeys: Array.from(effectiveSet),
-      overrides,
+      grants,
+      revokes,
+      overrides: grants, // backward-compat
       modules: MODULE_GROUPS,
     })
   } catch (err) {
@@ -97,9 +101,17 @@ export async function PUT(req: NextRequest) {
     await requirePermission({ resource: "member", action: "update" })
     const body = (await req.json()) as {
       userId: string
-      action: "grant" | "revoke" | "reset" | "setRole"
+      action:
+        | "grant"
+        | "revoke"
+        | "reset"
+        | "setRole"
+        | "default"
+        | "inherit"
+        | "batch"
       key?: string
       role?: string
+      updates?: { key: string; action: "grant" | "revoke" | "default" }[]
     }
 
     if (!body.userId || !body.action) {
@@ -162,19 +174,16 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    const roleName = `member:${body.userId}`
+
     if (body.action === "reset") {
-      // Delete all per-member override rows for this user. We use
-      // a per-key row keyed by a synthetic role name + key, so we
-      // delete any row whose permission JSON contains this key.
-      // Simpler: delete all org-role rows whose role starts with
-      // "member:" — those are the per-member override bucket by
-      // convention.
+      // Delete per-member override row strictly for this member
       await db
         .delete(organizationRole)
         .where(
           and(
             eq(organizationRole.organizationId, t.tenantId),
-            like(organizationRole.role, "member:%")
+            eq(organizationRole.role, roleName)
           )
         )
       await recordAuditEvent({
@@ -186,18 +195,109 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    if ((body.action === "grant" || body.action === "revoke") && body.key) {
-      const [resource, action] = body.key.split(".")
-      if (!resource || !action) {
+    if (body.action === "batch" && Array.isArray((body as any).updates)) {
+      const updates = (body as any).updates as {
+        key: string
+        action: "grant" | "revoke" | "default"
+      }[]
+      const catalogKeySet = new Set(ALL_PERMISSION_KEYS)
+      const actorPerms = await getEffectivePermissions(t.userId, t.tenantId)
+
+      for (const update of updates) {
+        if (!catalogKeySet.has(update.key)) continue
+        if (update.action === "grant" && !actorPerms.has(update.key)) {
+          return NextResponse.json(
+            { error: `You cannot grant ${update.key} as you do not have it.` },
+            { status: 403 }
+          )
+        }
+      }
+
+      const [row] = await db
+        .select({
+          id: organizationRole.id,
+          permission: organizationRole.permission,
+        })
+        .from(organizationRole)
+        .where(
+          and(
+            eq(organizationRole.organizationId, t.tenantId),
+            eq(organizationRole.role, roleName)
+          )
+        )
+        .limit(1)
+
+      let current: Record<string, string[]> = {}
+      if (row) {
+        try {
+          current = JSON.parse(row.permission) as Record<string, string[]>
+        } catch {
+          current = {}
+        }
+      }
+
+      const grants = new Set(current.__grants ?? [])
+      const revokes = new Set(current.__revokes ?? [])
+
+      for (const u of updates) {
+        if (!catalogKeySet.has(u.key)) continue
+        if (u.action === "grant") {
+          grants.add(u.key)
+          revokes.delete(u.key)
+        } else if (u.action === "revoke") {
+          revokes.add(u.key)
+          grants.delete(u.key)
+        } else {
+          grants.delete(u.key)
+          revokes.delete(u.key)
+        }
+      }
+
+      current.__grants = Array.from(grants)
+      current.__revokes = Array.from(revokes)
+
+      if (row) {
+        await db
+          .update(organizationRole)
+          .set({
+            permission: JSON.stringify(current),
+            updatedAt: new Date(),
+          })
+          .where(eq(organizationRole.id, row.id))
+      } else {
+        await db.insert(organizationRole).values({
+          id: `orgrole_${crypto.randomUUID()}`,
+          organizationId: t.tenantId,
+          role: roleName,
+          permission: JSON.stringify(current),
+        })
+      }
+
+      await recordAuditEvent({
+        actor: { id: t.userId, email: actor?.email ?? t.userId },
+        action: "member.permissions.reset",
+        target: { type: "member", id: body.userId },
+        summary: `Batch updated ${updates.length} permissions for ${body.userId}`,
+      })
+
+      return NextResponse.json({ ok: true })
+    }
+
+    if (
+      (body.action === "grant" ||
+        body.action === "revoke" ||
+        body.action === "default" ||
+        body.action === "inherit") &&
+      body.key
+    ) {
+      // Validate the key is a known catalog key.
+      const catalogKeySet = new Set(ALL_PERMISSION_KEYS)
+      if (!catalogKeySet.has(body.key)) {
         return NextResponse.json(
-          { error: "Invalid permission key" },
+          { error: `Unknown permission key: ${body.key}` },
           { status: 400 }
         )
       }
-
-      // Per-member override rows are keyed by `role = "member:userId"`.
-      // We use the permission JSON to hold the key set.
-      const roleName = `member:${body.userId}`
 
       // Find or create the per-member row.
       const [row] = await db
@@ -223,16 +323,41 @@ export async function PUT(req: NextRequest) {
         }
       }
 
-      const list = current[resource] ?? []
-      const has = list.includes(action)
-      if (body.action === "grant" && !has) {
-        current[resource] = [...list, action]
-      } else if (body.action === "revoke" && has) {
-        current[resource] = list.filter((a) => a !== action)
+      // Ensure __grants and __revokes arrays exist.
+      const grants = new Set(current.__grants ?? [])
+      const revokes = new Set(current.__revokes ?? [])
+
+      if (body.action === "grant") {
+        grants.add(body.key)
+        revokes.delete(body.key)
+      } else if (body.action === "revoke") {
+        revokes.add(body.key)
+        grants.delete(body.key)
       } else {
-        // Idempotent: no change.
-        return NextResponse.json({ ok: true })
+        // default / inherit: remove any explicit override
+        grants.delete(body.key)
+        revokes.delete(body.key)
       }
+
+      // Also maintain backward-compatible BA resource:action format.
+      // Split on first dot only for simple keys, or reconstruct for nested.
+      const dotIdx = body.key.indexOf(".")
+      if (dotIdx > 0) {
+        const resource = body.key.slice(0, dotIdx)
+        const action = body.key.slice(dotIdx + 1)
+        if (body.action === "grant") {
+          const list = current[resource] ?? []
+          if (!list.includes(action)) {
+            current[resource] = [...list, action]
+          }
+        } else {
+          const list = current[resource] ?? []
+          current[resource] = list.filter((a) => a !== action)
+        }
+      }
+
+      current.__grants = Array.from(grants)
+      current.__revokes = Array.from(revokes)
 
       if (row) {
         await db
@@ -251,17 +376,21 @@ export async function PUT(req: NextRequest) {
         })
       }
 
+      const isGrant = body.action === "grant"
+      const isRevoke = body.action === "revoke"
       await recordAuditEvent({
         actor: { id: t.userId, email: actor?.email ?? t.userId },
-        action:
-          body.action === "grant"
-            ? "member.permission.grant"
-            : "member.permission.revoke",
+        action: isGrant
+          ? "member.permission.grant"
+          : isRevoke
+            ? "member.permission.revoke"
+            : "member.permissions.reset",
         target: { type: "member", id: body.userId },
-        summary:
-          body.action === "grant"
-            ? `Granted ${body.key} to ${body.userId}`
-            : `Revoked ${body.key} from ${body.userId}`,
+        summary: isGrant
+          ? `Granted ${body.key} to ${body.userId}`
+          : isRevoke
+            ? `Revoked ${body.key} from ${body.userId}`
+            : `Reset ${body.key} to role default for ${body.userId}`,
         metadata: { key: body.key },
       })
       return NextResponse.json({ ok: true })

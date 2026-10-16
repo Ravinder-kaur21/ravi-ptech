@@ -843,20 +843,20 @@ function TeamSettingsInner() {
                             <TooltipTrigger
                               render={
                                 <Button
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
-                                  className="h-7 px-2 text-[11px] text-brand-ink/70 hover:text-brand-ink"
+                                  className="h-7 px-2.5 text-[11px] font-medium text-brand-ink border-brand-rule hover:bg-brand-cream/40"
                                   onClick={() =>
                                     router.push(`/settings/team/${m.userId}`)
                                   }
                                 />
                               }
                             >
-                              <Eye className="mr-1 h-3 w-3" />
-                              View
+                              <ShieldCheck className="mr-1.5 size-3.5 text-brand-accent" />
+                              Manage Access
                             </TooltipTrigger>
                             <TooltipContent>
-                              View profile &amp; permissions
+                              Configure permissions &amp; role access
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

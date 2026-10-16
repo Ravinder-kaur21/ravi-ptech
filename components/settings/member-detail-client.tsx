@@ -4,14 +4,47 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { cn } from "cn"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Kbd } from "@/components/ui/kbd"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import { Progress } from "@/components/ui/progress"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
   Sheet,
   SheetContent,
@@ -45,6 +78,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { toast } from "sonner"
 import {
@@ -68,6 +107,9 @@ import {
   Trash2,
   Sparkles,
   History,
+  AlertTriangle,
+  Eye,
+  MoreHorizontal,
 } from "lucide-react"
 import { usePermissions } from "@/lib/permissions-context"
 import { PRESET_LIST } from "@/lib/role-presets"
@@ -78,6 +120,8 @@ import {
 } from "@/lib/permissions-catalog"
 import { buildSummary } from "@/lib/permission-summary"
 
+import { MemberPermissionsEditor } from "@/components/settings/member-permissions-editor"
+
 type MemberPermResponse = {
   userId: string
   email: string
@@ -87,8 +131,186 @@ type MemberPermResponse = {
   presetOneLiner: string
   presetKeys: string[]
   effectiveKeys: string[]
+  grants?: string[]
+  revokes?: string[]
   overrides: string[]
   modules: ModuleGroup[]
+}
+
+// ─── Role → colour mapping (powers the accent bar, badges, avatar ring) ──
+const ROLE_COLORS: Record<string, string> = {
+  owner: "amber",
+  admin: "blue",
+  operations_manager: "teal",
+  dispatcher: "green",
+  accounting: "purple",
+  safety: "rose",
+  driver: "sky",
+  member: "slate",
+}
+
+const roleColor = (role: string): string =>
+  ROLE_COLORS[role] ?? ROLE_COLORS.member
+
+const roleBadgeColor = (role: string): string => {
+  const c = roleColor(role)
+  const map: Record<string, string> = {
+    amber: "bg-amber-100 text-amber-800 border-amber-300",
+    blue: "bg-blue-100 text-blue-800 border-blue-300",
+    teal: "bg-teal-100 text-teal-800 border-teal-300",
+    green: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    purple: "bg-purple-100 text-purple-800 border-purple-300",
+    rose: "bg-rose-100 text-rose-800 border-rose-300",
+    sky: "bg-sky-100 text-sky-800 border-sky-300",
+    slate: "bg-slate-100 text-slate-800 border-slate-300",
+  }
+  return map[c] ?? map.slate
+}
+
+/** Permission coverage percentage (effective / total). */
+const coveragePct = (effective: number, total: number): number =>
+  total > 0 ? Math.round((effective / total) * 100) : 0
+
+/** Hex colours (for live style bindings — Tailwind can't do dynamic classes). */
+const ROLE_HEX: Record<string, string> = {
+  owner: "#F59E0B", // amber-500
+  admin: "#3B82F6", // blue-500
+  operations_manager: "#0D9488", // teal-500
+  dispatcher: "#22C55E", // emerald-500
+  accounting: "#A855F7", // purple-500
+  safety: "#F43F5E", // rose-500
+  driver: "#0EA5E9", // sky-500
+  member: "#6B7280", // slate-500
+}
+
+function roleHex(role: string): string {
+  return ROLE_HEX[role] ?? ROLE_HEX.member
+}
+
+/** Full-width shimmer skeleton that mirrors the real page layout. */
+function MemberDetailSkeleton({ role }: { role?: string }) {
+  const accent = roleHex(role ?? "")
+  return (
+    <div className="min-h-screen bg-brand-background">
+      <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+        <div className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
+          <Skeleton className="h-3 w-12" />
+          <ChevronRight className="size-3" />
+          <Skeleton className="h-3 w-20" />
+          <ChevronRight className="size-3" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+
+        <Card className="border-brand-rule bg-brand-card">
+          <div className="h-1.5 w-full" style={{ backgroundColor: accent }} />
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+              <Skeleton className="size-20 rounded-full" />
+              <div className="flex-1 min-w-0 space-y-2.5">
+                <Skeleton className="h-7 w-56" />
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-full max-w-xs" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card">
+          <CardHeader>
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-48 mt-1" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-2 w-full rounded-full" />
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border-brand-rule bg-brand-card">
+              <CardContent className="p-4 space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-7 w-12" />
+                <Skeleton className="h-3 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-2">
+            <Card className="border-brand-rule bg-brand-card">
+              <CardContent className="p-6 space-y-4">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </CardContent>
+            </Card>
+            <Card className="border-brand-rule bg-brand-card">
+              <CardContent className="p-6 space-y-4">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-4">
+            <Card className="border-brand-rule bg-brand-card">
+              <CardContent className="p-6 space-y-4">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </CardContent>
+            </Card>
+            <Card className="border-brand-rule bg-brand-card">
+              <CardContent className="p-6 space-y-3">
+                <Skeleton className="h-4 w-32" />
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex justify-between">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Centralised error state with retry — replaces the infinite-spinner bug. */
+function ErrorState({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-brand-background">
+      <Card className="border-destructive/20 bg-brand-card max-w-md">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="rounded-full bg-destructive/10 p-3">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-brand-ink">{title}</h3>
+              <p className="mt-1 text-sm text-brand-muted-soft">{message}</p>
+            </div>
+            <Button onClick={onRetry} variant="outline" size="sm">
+              Try again
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
 export function MemberDetailClient({ userId }: { userId: string }) {
@@ -96,33 +318,55 @@ export function MemberDetailClient({ userId }: { userId: string }) {
   const queryClient = useQueryClient()
   const perms = usePermissions()
   const canManage = perms.has("users.change_role")
-  const [grantOpen, setGrantOpen] = React.useState(false)
-  const [matrixOpen, setMatrixOpen] = React.useState(false)
   const [activityOpen, setActivityOpen] = React.useState(false)
   const [suspendOpen, setSuspendOpen] = React.useState(false)
   const [transferOpen, setTransferOpen] = React.useState(false)
   const [suspendTarget, setSuspendTarget] = React.useState<MemberTarget>(null)
   const [transferTarget, setTransferTarget] = React.useState<MemberTarget>(null)
 
-  const { data, isLoading } = useQuery<MemberPermResponse>({
-    queryKey: ["member-permissions", userId],
-    queryFn: async () => {
-      const r = await fetch(
-        `/api/settings/member-permissions?userId=${encodeURIComponent(userId)}`
-      )
-      if (!r.ok) throw new Error("Failed to load")
-      return r.json()
-    },
-  })
+  const { data, isLoading, isError, error } = useQuery<MemberPermResponse>(
+    {
+      queryKey: ["member-permissions", userId],
+      queryFn: async () => {
+        const r = await fetch(
+          `/api/settings/member-permissions?userId=${encodeURIComponent(userId)}`
+        )
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          // Surface a meaningful message instead of a generic "Failed to load"
+          throw new Error(j.error || `Request failed with status ${r.status}`)
+        }
+        return r.json() as Promise<MemberPermResponse>
+      },
+      staleTime: 30_000,
+    }
+  )
 
-  if (isLoading || !data) {
+  // ── Loading state: shimmer skeleton that mirrors the real layout ──
+  if (isLoading) {
+    return <MemberDetailSkeleton />
+  }
+
+  // ── Error state: clear message + retry (fixes the infinite-spinner bug) ──
+  if (isError) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-60 w-full" />
-      </div>
+      <ErrorState
+        title="Unable to load member details"
+        message={
+          (error as Error)?.message ||
+          "Something went wrong while fetching this member's permissions."
+        }
+        onRetry={() =>
+          queryClient.invalidateQueries({
+            queryKey: ["member-permissions", userId],
+          })
+        }
+      />
     )
+  }
+
+  if (!data) {
+    return <MemberDetailSkeleton />
   }
 
   const initials = (data.name || data.email || "?")
@@ -138,557 +382,406 @@ export function MemberDetailClient({ userId }: { userId: string }) {
   const summary = buildSummary(effectiveSet)
 
   return (
-    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
-      {/* ── Breadcrumb ──────────────────────────────────────── */}
-      <div className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
-        <Link
-          href="/settings/team"
-          className="hover:text-brand-ink transition-colors"
-        >
-          Team
-        </Link>
-        <ChevronRight className="size-3" />
-        <span className="text-brand-ink">{data.name || data.email}</span>
-      </div>
-
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <Card className="border-brand-rule bg-brand-card p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
-          <Avatar className="size-16 shrink-0">
-            <AvatarFallback className="bg-brand-accent-tint text-brand-accent text-xl font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-serif text-[28px] tracking-tight text-brand-ink">
+    <div className="min-h-screen bg-brand-background">
+      {/* ── Breadcrumb ── */}
+      <div className="border-b border-brand-rule">
+        <div className="max-w-6xl mx-auto px-4 lg:px-8 py-3">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/settings">Settings</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/settings/team">Team & members</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbPage>
                 {data.name || data.email}
-              </h1>
-              <Badge className="bg-brand-accent-tint text-brand-accent text-[11px] font-medium px-2.5 py-0.5">
-                {data.presetLabel}
-              </Badge>
-              {overrideSet.size > 0 && (
-                <Badge
-                  variant="outline"
-                  className="border-blue-300 bg-blue-50 text-blue-900 font-mono text-[10px] uppercase tracking-[0.04em]"
-                >
-                  <Sparkles className="mr-1 size-3" />
-                  {overrideSet.size} custom grant
-                  {overrideSet.size === 1 ? "" : "s"}
-                </Badge>
-              )}
-            </div>
-            <p className="mt-1 flex items-center gap-2 text-sm text-brand-muted-soft">
-              <Mail className="size-3.5" />
-              {data.email}
-            </p>
-            <p className="mt-3 max-w-prose text-sm text-brand-ink/80">
-              {data.presetOneLiner}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-            <Button
-              variant="outline"
-              onClick={() => setMatrixOpen(true)}
-              className="shrink-0"
-            >
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
-              Edit all permissions
-            </Button>
-            <p className="text-[11px] text-brand-muted-soft sm:text-right">
-              130 keys · {data.effectiveKeys.length} on
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── KPI strip ───────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi
-          label="Keys on"
-          value={`${data.effectiveKeys.length}`}
-          sub={`of ${ALL_PERMISSION_KEYS.length} total`}
-        />
-        <Kpi
-          label="Custom grants"
-          value={`${overrideSet.size}`}
-          sub={overrideSet.size > 0 ? "on top of role" : "none — role as-is"}
-        />
-        <Kpi
-          label="Can see"
-          value={`${summary.canView.length}`}
-          sub="modules in their view"
-        />
-        <Kpi
-          label="Can act"
-          value={`${summary.canAct.length}`}
-          sub="actions they can take"
-        />
-      </div>
-
-      {/* ── Main grid ────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* LEFT (2/3) — role + effective access */}
-        <div className="space-y-4 lg:col-span-2">
-          {/* Role */}
-          <Card className="border-brand-rule bg-brand-card p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                  Role
-                </p>
-                <p className="mt-1 text-sm text-brand-ink">
-                  {data.presetLabel} · {data.presetOneLiner}
-                </p>
-              </div>
-              {canManage ? (
-                <Select
-                  value={data.role}
-                  onValueChange={async (v) => {
-                    const r = await fetch("/api/settings/member-permissions", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        userId: data.userId,
-                        action: "setRole",
-                        role: v,
-                      }),
-                    })
-                    if (!r.ok) {
-                      const j = await r.json().catch(() => ({}))
-                      toast.error(j.error || "Failed to change role")
-                      return
-                    }
-                    toast.success(`Role changed to ${v}`)
-                    queryClient.invalidateQueries({
-                      queryKey: ["member-permissions", userId],
-                    })
-                    router.refresh()
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-[180px] border-brand-rule">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRESET_LIST.map((p) => (
-                      <SelectItem key={p.role} value={p.role}>
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Badge variant="secondary" className="h-7 px-3 text-xs">
-                  {data.presetLabel}
-                </Badge>
-              )}
-            </div>
-          </Card>
-
-          {/* Extra grants */}
-          <Card className="border-brand-rule bg-brand-card overflow-hidden">
-            <div className="flex items-center justify-between gap-3 p-5 border-b border-brand-rule">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-                  Extra grants on top of role
-                </p>
-                <p className="mt-1 text-sm text-brand-muted-soft">
-                  One-off permissions this person has that their role
-                  doesn&apos;t grant.
-                </p>
-              </div>
-              {canManage && (
-                <Button
-                  onClick={() => setGrantOpen(true)}
-                  className="shrink-0 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Grant a key
-                </Button>
-              )}
-            </div>
-            {overrideSet.size === 0 ? (
-              <p className="p-5 text-center text-sm text-brand-muted-soft">
-                No extra grants. This person gets exactly what their{" "}
-                {data.presetLabel} role grants.
-              </p>
-            ) : (
-              <ul className="divide-y divide-brand-rule">
-                {data.overrides.map((key) => {
-                  const entry = data.modules
-                    .flatMap((m) => m.keys)
-                    .find((k) => k.key === key)
-                  return (
-                    <li key={key} className="flex items-center gap-3 px-5 py-3">
-                      <CircleCheck className="size-4 shrink-0 text-emerald-700" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-brand-ink">
-                          {entry?.label ?? key}
-                        </p>
-                        <p className="font-mono text-[11px] text-brand-muted-soft">
-                          {key}
-                        </p>
-                      </div>
-                      {canManage && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 shrink-0 text-[11px] text-brand-muted-soft hover:text-red-600"
-                          onClick={async () => {
-                            if (
-                              !confirm(
-                                `Revoke ${key}? ${data.name || data.email} will lose this access.`,
-                              )
-                            )
-                              return
-                            const r = await fetch(
-                              "/api/settings/member-permissions",
-                              {
-                                method: "PUT",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  userId: data.userId,
-                                  action: "revoke",
-                                  key,
-                                }),
-                              },
-                            )
-                            if (!r.ok) {
-                              const j = await r.json().catch(() => ({}))
-                              toast.error(j.error || "Failed to revoke")
-                              return
-                            }
-                            toast.success(`Revoked ${key}`)
-                            queryClient.invalidateQueries({
-                              queryKey: ["member-permissions", userId],
-                            })
-                            router.refresh()
-                          }}
-                        >
-                          <Trash2 className="mr-1.5 h-3 w-3" />
-                          Revoke
-                        </Button>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Card>
-
-          {/* Effective access */}
-          <Card className="border-brand-rule bg-brand-card p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Effective access
-            </p>
-            <div className="mt-3 grid gap-4 sm:grid-cols-3">
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
-                  <Check className="size-3.5 text-emerald-700" />
-                  Can view
-                </p>
-                {summary.canView.length > 0 ? (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    {summary.canView.slice(0, 5).join(", ")}
-                    {summary.canView.length > 5 &&
-                      ` +${summary.canView.length - 5} more`}
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    Nothing.
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
-                  <Check className="size-3.5 text-emerald-700" />
-                  Can do
-                </p>
-                {summary.canAct.length > 0 ? (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    {summary.canAct.slice(0, 5).join(", ")}
-                    {summary.canAct.length > 5 &&
-                      ` +${summary.canAct.length - 5} more`}
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    Read-only access.
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
-                  <X className="size-3.5 text-brand-muted-soft" />
-                  Cannot see
-                </p>
-                {summary.cannotSee.length > 0 ? (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    {summary.cannotSee.slice(0, 5).join(", ")}
-                    {summary.cannotSee.length > 5 &&
-                      ` +${summary.cannotSee.length - 5} more`}
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-sm text-brand-muted-soft">
-                    Nothing is hidden.
-                  </p>
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* RIGHT (1/3) — actions */}
-        <div className="space-y-4">
-          <Card className="border-brand-rule bg-brand-card p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Actions
-            </p>
-            <div className="mt-3 space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => setMatrixOpen(true)}
-              >
-                <SlidersHorizontal className="mr-2 h-4 w-4" />
-                Edit all permissions
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => setActivityOpen(true)}
-              >
-                <History className="mr-2 h-4 w-4" />
-                View audit trail
-              </Button>
-              <Separator className="bg-brand-rule" />
-              {canManage && data.role !== "owner" && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-amber-700 hover:text-amber-800"
-                    onClick={() => {
-                      setSuspendTarget({
-                        id: data.userId,
-                        name: data.name ?? "",
-                        email: data.email,
-                      })
-                      setSuspendOpen(true)
-                    }}
-                  >
-                    <ShieldOff className="mr-2 h-4 w-4" />
-                    Suspend from workspace
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => {
-                      setTransferTarget({
-                        id: data.userId,
-                        name: data.name ?? "",
-                        email: data.email,
-                      })
-                      setTransferOpen(true)
-                    }}
-                  >
-                    <ArrowLeftRight className="mr-2 h-4 w-4" />
-                    Transfer ownership
-                  </Button>
-                </>
-              )}
-            </div>
-          </Card>
-
-          <Card className="border-brand-rule bg-brand-card p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-              Details
-            </p>
-            <dl className="mt-3 space-y-2.5 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-brand-muted-soft">User ID</dt>
-                <dd className="font-mono text-[11px] text-brand-ink truncate">
-                  {data.userId.slice(0, 12)}…
-                </dd>
-              </div>
-              <Separator className="bg-brand-rule" />
-              <div className="flex justify-between gap-3">
-                <dt className="text-brand-muted-soft">Role ID</dt>
-                <dd className="font-mono text-[11px] text-brand-ink">
-                  {data.role}
-                </dd>
-              </div>
-              <Separator className="bg-brand-rule" />
-              <div className="flex justify-between gap-3">
-                <dt className="text-brand-muted-soft">Permission keys</dt>
-                <dd className="font-mono text-[11px] text-brand-ink">
-                  {data.effectiveKeys.length} / {ALL_PERMISSION_KEYS.length}
-                </dd>
-              </div>
-            </dl>
-          </Card>
+              </BreadcrumbPage>
+            </BreadcrumbList>
+          </Breadcrumb>
         </div>
       </div>
 
-      {/* ── Danger zone ─────────────────────────────────────── */}
-      {canManage && data.role !== "owner" && (
-        <Card className="border-red-200 bg-red-50/40 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-900">
-              <ShieldAlert className="h-4 w-4" />
+      <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+        {/* ── Hero ── */}
+        <Card className="border-brand-rule bg-brand-card overflow-hidden">
+          <div
+            className="h-1.5 w-full"
+            style={{ backgroundColor: roleHex(data.role) }}
+          />
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+              {/* Avatar with role-coloured ring */}
+              <div className="relative shrink-0">
+                <Avatar className="size-20">
+                  <AvatarFallback
+                    className="text-2xl font-semibold"
+                    style={{
+                      backgroundColor: `${roleHex(data.role)}20`,
+                      color: roleHex(data.role),
+                    }}
+                  >
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div
+                  className="absolute -bottom-1 -right-1 rounded-full p-0.5"
+                  style={{ backgroundColor: roleHex(data.role) }}
+                >
+                  <ShieldCheck className="size-3.5 text-white" />
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-serif text-2xl lg:text-3xl tracking-tight text-brand-ink">
+                    {data.name || data.email}
+                  </h1>
+                  <Badge
+                    className={cn(
+                      "text-[11px] font-medium px-2.5 py-0.5",
+                      roleBadgeColor(data.role),
+                    )}
+                  >
+                    {data.presetLabel}
+                  </Badge>
+                  {data.role !== "owner" && overrideSet.size > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-blue-300 bg-blue-50 text-blue-900 font-mono text-[10px] uppercase tracking-[0.04em]"
+                    >
+                      <Sparkles className="mr-1 size-3" />
+                      {overrideSet.size} custom grant
+                      {overrideSet.size === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 flex items-center gap-2 text-sm text-brand-muted-soft">
+                  <Mail className="size-3.5" />
+                  {data.email}
+                </p>
+                <p className="mt-2 max-w-2xl text-sm text-brand-ink/70">
+                  {data.presetOneLiner}
+                </p>
+              </div>
+
+              {/* Header Right Actions */}
+              <div className="flex flex-col gap-2.5 sm:items-end shrink-0">
+                {canManage && (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={data.role}
+                      onValueChange={async (v) => {
+                        const r = await fetch(
+                          "/api/settings/member-permissions",
+                          {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              userId: data.userId,
+                              action: "setRole",
+                              role: v,
+                            }),
+                          },
+                        )
+                        if (!r.ok) {
+                          const j = await r.json().catch(() => ({}))
+                          toast.error(j.error || "Failed to change role")
+                          return
+                        }
+                        toast.success(`Role changed to ${v}`)
+                        queryClient.invalidateQueries({
+                          queryKey: ["member-permissions", userId],
+                        })
+                        router.refresh()
+                      }}
+                    >
+                      <SelectTrigger className="h-8.5 w-[160px] text-xs border-brand-rule bg-brand-card">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRESET_LIST.map((p) => (
+                          <SelectItem key={p.role} value={p.role} className="text-xs">
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActivityOpen(true)}
+                      className="h-8.5 text-xs border-brand-rule"
+                    >
+                      <History className="mr-1.5 size-3.5 text-brand-muted-soft" />
+                      Audit Trail
+                    </Button>
+
+                    {data.role !== "owner" && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8.5 border border-brand-rule"
+                              aria-label="Member options"
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          }
+                        />
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSuspendTarget({
+                                id: data.userId,
+                                name: data.name ?? "",
+                                email: data.email,
+                              })
+                              setSuspendOpen(true)
+                            }}
+                            className="text-xs text-amber-800"
+                          >
+                            <ShieldOff className="mr-2 size-3.5 text-amber-600" />
+                            Suspend from workspace
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setTransferTarget({
+                                id: data.userId,
+                                name: data.name ?? "",
+                                email: data.email,
+                              })
+                              setTransferOpen(true)
+                            }}
+                            className="text-xs"
+                          >
+                            <ArrowLeftRight className="mr-2 size-3.5" />
+                            Transfer ownership
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
-                Danger zone
-              </p>
-              <p className="mt-1 text-sm text-red-900/80">
-                Removing {data.name || data.email} ends their access to this
-                workspace immediately. Their driver records are detached, their
-                sessions in this workspace are killed, and the membership row is
-                deleted. The action is recorded in the audit log.
-              </p>
-            </div>
-            <RemoveMemberAction
-              memberId={data.userId}
-              name={data.name ?? data.email}
-              onDone={() => {
-                router.push("/settings/team")
-              }}
-            />
-          </div>
+          </CardContent>
         </Card>
-      )}
 
-      {/* ── Footer ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between text-xs text-brand-muted-soft">
-        <Link
-          href="/settings/team"
-          className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Back to members
-        </Link>
-        <Link
-          href="/settings/team/invitations"
-          className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
-        >
-          Invitations
-          <ChevronRight className="h-3 w-3" />
-        </Link>
-      </div>
-
-      {/* ── Dialogs & sheets ────────────────────────────────── */}
-      <Sheet open={matrixOpen} onOpenChange={setMatrixOpen}>
-        <SheetContent side="right" className="w-[560px] max-w-[90vw] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Permission matrix</SheetTitle>
-            <SheetDescription>
-              Every one of the {ALL_PERMISSION_KEYS.length} permission keys.
-              {overrideSet.size > 0 &&
-                ` ${overrideSet.size} custom grant${
-                  overrideSet.size === 1 ? "" : "s"
-                } will show as overrides.`}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-4">
-            <PermissionMatrix
-              data={data}
-              canManage={canManage}
-              userId={userId}
-              presetSet={presetSet}
-              overrideSet={overrideSet}
-              onChanged={() => {
-                queryClient.invalidateQueries({
-                  queryKey: ["member-permissions", userId],
-                })
-                router.refresh()
-              }}
+        {/* ── Permission Coverage ── */}
+        <Card className="border-brand-rule bg-brand-card">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-mono uppercase tracking-[0.04em] text-brand-muted-soft">
+                Permission coverage
+              </CardTitle>
+              <span className="text-sm font-medium text-brand-ink">
+                {data.effectiveKeys.length} / {ALL_PERMISSION_KEYS.length}{" "}
+                keys active ({coveragePct(data.effectiveKeys.length, ALL_PERMISSION_KEYS.length)}%)
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Progress
+              value={coveragePct(
+                data.effectiveKeys.length,
+                ALL_PERMISSION_KEYS.length,
+              )}
+              className="h-2"
+              style={
+                {
+                  "--progress-indicator-bg": roleHex(data.role),
+                } as React.CSSProperties
+              }
             />
-          </div>
-        </SheetContent>
-      </Sheet>
+            <div className="mt-3 flex items-center gap-6 text-[11px] text-brand-muted-soft">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: roleHex(data.role) }}
+                />
+                Preset layer: {data.presetKeys.length} keys
+              </span>
+              {overrideSet.size > 0 && (
+                <span className="flex items-center gap-1.5 text-brand-ink">
+                  <Sparkles className="size-3 text-blue-500" />
+                  {overrideSet.size} override
+                  {overrideSet.size === 1 ? "" : "s"} on top
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-      <Dialog open={activityOpen} onOpenChange={setActivityOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Audit trail</DialogTitle>
-            <DialogDescription>
-              Every recorded change to this member&apos;s access.
-            </DialogDescription>
-          </DialogHeader>
-          <ActivityList userId={userId} />
-        </DialogContent>
-      </Dialog>
+        {/* ── KPI strip ── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi
+            icon={ShieldCheck}
+            label="Effective Permissions"
+            value={`${data.effectiveKeys.length}`}
+            sub={`of ${ALL_PERMISSION_KEYS.length} total active`}
+          />
+          <Kpi
+            icon={Sparkles}
+            label="Custom Grants"
+            value={`+${data.grants?.length ?? 0}`}
+            sub="extra privileges added"
+          />
+          <Kpi
+            icon={ShieldOff}
+            label="Custom Blocked"
+            value={`-${data.revokes?.length ?? 0}`}
+            sub="role defaults revoked"
+          />
+          <Kpi
+            icon={Eye}
+            label="Base Preset"
+            value={data.presetLabel}
+            sub={`${data.presetKeys.length} default keys`}
+          />
+        </div>
 
-      <GrantDialog
-        open={grantOpen}
-        onOpenChange={setGrantOpen}
-        data={data}
-        userId={userId}
-        onGranted={() => {
-          queryClient.invalidateQueries({
-            queryKey: ["member-permissions", userId],
-          })
-          router.refresh()
-        }}
-      />
-
-      <SuspendMemberDialog
-        target={suspendTarget}
-        open={suspendOpen}
-        onOpenChange={setSuspendOpen}
-        onSubmit={async (memberId, reason, until) => {
-          const r = await suspendMemberAction({ memberId, reason, until })
-          if (r.ok) {
-            toast.success("Member suspended")
+        {/* ── Prominent Interactive Permission Matrix Control Center ── */}
+        <MemberPermissionsEditor
+          data={data}
+          canManage={canManage}
+          onChanged={() => {
             queryClient.invalidateQueries({
               queryKey: ["member-permissions", userId],
             })
             router.refresh()
-          } else {
-            toast.error("Failed to suspend")
-          }
-        }}
-        pending={false}
-      />
+          }}
+        />
 
-      <TransferOwnershipDialog
-        target={transferTarget}
-        open={transferOpen}
-        onOpenChange={setTransferOpen}
-        onConfirm={async (newOwnerMemberId) => {
-          try {
-            const r = await transferOwnershipAction({
-              newOwnerMemberId,
-            })
-            if (!r.ok) throw new Error("Failed")
-            toast.success("Ownership transferred", { duration: 5000 })
-            router.push("/settings/team")
-          } catch (e) {
-            toast.error((e as Error).message)
-          }
-        }}
-        pending={false}
-      />
+        {/* ── Danger zone ── */}
+        {canManage && data.role !== "owner" && (
+          <Alert variant="destructive" className="border-red-200 bg-red-50/40">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertTitle className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
+              Danger zone
+            </AlertTitle>
+            <AlertDescription className="mt-1 text-sm text-red-900/80">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <div className="flex-1">
+                  Removing {data.name || data.email} ends their access to this
+                  workspace immediately. Their driver records are detached,
+                  their sessions in this workspace are killed, and the membership
+                  row is deleted. The action is recorded in the audit log.
+                </div>
+                <RemoveMemberAction
+                  memberId={data.userId}
+                  name={data.name ?? data.email}
+                  onDone={() => {
+                    router.push("/settings/team")
+                  }}
+                />
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="flex items-center justify-between pt-2 text-xs text-brand-muted-soft">
+          <Link
+            href="/settings/team"
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Back to members
+          </Link>
+          <Link
+            href="/settings/team/invitations"
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
+          >
+            Invitations
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        {/* ── Dialogs & sheets ── */}
+        <Dialog open={activityOpen} onOpenChange={setActivityOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Audit trail</DialogTitle>
+              <DialogDescription>
+                Every recorded change to this member&apos;s access.
+              </DialogDescription>
+            </DialogHeader>
+            <ActivityList userId={userId} />
+          </DialogContent>
+        </Dialog>
+
+        <SuspendMemberDialog
+          target={suspendTarget}
+          open={suspendOpen}
+          onOpenChange={setSuspendOpen}
+          onSubmit={async (memberId, reason, until) => {
+            const r = await suspendMemberAction({ memberId, reason, until })
+            if (r.ok) {
+              toast.success("Member suspended")
+              queryClient.invalidateQueries({
+                queryKey: ["member-permissions", userId],
+              })
+              router.refresh()
+            } else {
+              toast.error("Failed to suspend")
+            }
+          }}
+          pending={false}
+        />
+
+        <TransferOwnershipDialog
+          target={transferTarget}
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          onConfirm={async (newOwnerMemberId) => {
+            try {
+              const r = await transferOwnershipAction({
+                newOwnerMemberId,
+              })
+              if (!r.ok) throw new Error("Failed")
+              toast.success("Ownership transferred", { duration: 5000 })
+              router.push("/settings/team")
+            } catch (e) {
+              toast.error((e as Error).message)
+            }
+          }}
+          pending={false}
+        />
+      </div>
     </div>
   )
 }
 
-/** One KPI tile. */
+/** One KPI tile — icon-led, with a subtle accent underline. */
 function Kpi({
+  icon: Icon,
   label,
   value,
   sub,
 }: {
+  icon: React.ComponentType<{ className?: string }>
   label: string
   value: string
   sub: string
 }) {
   return (
     <Card className="border-brand-rule bg-brand-card p-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-        {label}
-      </p>
-      <p className="mt-1 font-serif text-3xl text-brand-ink">{value}</p>
-      <p className="mt-1 text-[11px] text-brand-muted-soft">{sub}</p>
+      <div className="flex items-center gap-2">
+        <div className="rounded-md bg-brand-accent-tint/50 p-1.5">
+          <Icon className="h-4 w-4 text-brand-accent" />
+        </div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+          {label}
+        </p>
+      </div>
+      <p className="mt-2 font-serif text-3xl text-brand-ink">{value}</p>
+      <p className="mt-0.5 text-[11px] text-brand-muted-soft">{sub}</p>
     </Card>
   )
 }
@@ -830,375 +923,5 @@ function ActivityList({ userId }: { userId: string }) {
   )
 }
 
-/** "Grant a key" dialog — Owner only. Anti-escalation is enforced
- *  server-side: the actor must already have the key they are granting. */
-function GrantDialog({
-  open,
-  onOpenChange,
-  data,
-  userId,
-  onGranted,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  data: MemberPermResponse
-  userId: string
-  onGranted: () => void
-}) {
-  const [filter, setFilter] = React.useState("")
-  const [picked, setPicked] = React.useState<string>("")
-  const [reason, setReason] = React.useState("")
 
-  // All keys across modules, with their human label, marked OFF if the
-  // member already has them ON (so the default is to grant something new).
-  const allKeys = React.useMemo(
-    () =>
-      data.modules
-        .flatMap((m) => m.keys)
-        .slice()
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [data.modules],
-  )
-  const currentSet = new Set(data.effectiveKeys)
-  const candidates = allKeys.filter(
-    (k) =>
-      !currentSet.has(k.key) &&
-      (!filter ||
-        `${k.key} ${k.label} ${k.description}`
-          .toLowerCase()
-          .includes(filter.toLowerCase())),
-  )
 
-  const grant = useMutation({
-    mutationFn: async (key: string) => {
-      const r = await fetch("/api/settings/member-permissions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          action: "grant",
-          key,
-        }),
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        throw new Error(j.error || "Failed to grant")
-      }
-    },
-    onSuccess: (_d, key) => {
-      toast.success(`Granted ${key}`)
-      onGranted()
-      onOpenChange(false)
-      setPicked("")
-      setFilter("")
-      setReason("")
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const pickedEntry = allKeys.find((k) => k.key === picked)
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) {
-          setPicked("")
-          setFilter("")
-          setReason("")
-        }
-        onOpenChange(o)
-      }}
-    >
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Grant {data.name || data.email} a permission</DialogTitle>
-          <DialogDescription>
-            This adds a one-off grant on top of their {data.presetLabel}{" "}
-            role. The action is recorded in the audit log.
-          </DialogDescription>
-        </DialogHeader>
-
-        {!picked ? (
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-brand-muted-soft" />
-              <Input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="Search 130 permission keys…"
-                className="h-9 pl-9 text-[13px] bg-brand-card border-brand-rule"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-72 overflow-y-auto rounded-md border border-brand-rule divide-y divide-brand-rule">
-              {candidates.length === 0 ? (
-                <p className="p-4 text-center text-[13px] text-brand-muted-soft">
-                  No keys match — every matching permission is already ON.
-                </p>
-              ) : (
-                candidates.slice(0, 60).map((k) => (
-                  <button
-                    key={k.key}
-                    onClick={() => setPicked(k.key)}
-                    className="w-full text-left px-3 py-2.5 hover:bg-brand-cream/50 transition-colors"
-                  >
-                    <p className="text-[13px] text-brand-ink">{k.label}</p>
-                    <p className="text-[11px] text-brand-muted-soft font-mono">
-                      {k.key}
-                    </p>
-                  </button>
-                ))
-              )}
-            </div>
-            <p className="text-[11px] text-brand-muted-soft">
-              {candidates.length} key{candidates.length === 1 ? "" : "s"} can
-              still be granted. Already-ON keys are hidden.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded-md border border-brand-accent/30 bg-brand-accent-tint/40 p-3">
-              <p className="text-[13px] text-brand-ink">
-                {pickedEntry?.label}
-              </p>
-              <p className="text-[11px] text-brand-muted-soft font-mono mt-0.5">
-                {picked}
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
-                Reason (optional, recorded in audit log)
-              </label>
-              <Input
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. covering Sara's leave"
-                className="h-9 text-[13px] bg-brand-card border-brand-rule"
-              />
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          {picked ? (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => setPicked("")}
-                disabled={grant.isPending}
-              >
-                Back
-              </Button>
-              <Button
-                onClick={() => grant.mutate(picked)}
-                disabled={grant.isPending}
-                className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
-              >
-                {grant.isPending ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4 mr-2" />
-                )}
-                Grant access
-              </Button>
-            </>
-          ) : (
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function PermissionMatrix({
-  data,
-  canManage,
-  userId,
-  presetSet,
-  overrideSet,
-  onChanged,
-}: {
-  data: MemberPermResponse
-  canManage: boolean
-  userId: string
-  presetSet: Set<string>
-  overrideSet: Set<string>
-  onChanged?: () => void
-}) {
-  const [filter, setFilter] = React.useState("")
-  const [openModules, setOpenModules] = React.useState<Record<string, boolean>>(
-    () => Object.fromEntries(MODULE_GROUPS.map((m, i) => [m.module, i < 2]))
-  )
-  const [showFilter, setShowFilter] = React.useState<"all" | "on" | "off" | "overridden">(
-    "all"
-  )
-
-  const toggle = useMutation({
-    mutationFn: async (vars: { key: string; next: "grant" | "revoke" }) => {
-      const r = await fetch("/api/settings/member-permissions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          action: vars.next,
-          key: vars.key,
-        }),
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        throw new Error(j.error || "Failed")
-      }
-      return r.json()
-    },
-    onSuccess: (_d, vars) => {
-      toast.success(
-        vars.next === "grant"
-          ? `Granted ${vars.key}`
-          : `Revoked ${vars.key}`
-      )
-      onChanged?.()
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const filteredModules = data.modules
-    .map((m) => ({
-      ...m,
-      keys: m.keys.filter((k) => {
-        if (filter && !`${k.key} ${k.label} ${k.description}`.toLowerCase().includes(filter.toLowerCase())) {
-          return false
-        }
-        if (showFilter === "on" && !data.effectiveKeys.includes(k.key)) return false
-        if (showFilter === "off" && data.effectiveKeys.includes(k.key)) return false
-        if (showFilter === "overridden" && !overrideSet.has(k.key)) return false
-        return true
-      }),
-    }))
-    .filter((m) => m.keys.length > 0)
-
-  return (
-    <div className="rounded-lg border border-brand-rule bg-brand-card overflow-hidden">
-      <div className="border-b border-brand-rule p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p className="text-[14px] font-semibold text-brand-ink">
-            Edit permissions
-          </p>
-          <div className="flex items-center gap-2">
-            <Select value={showFilter} onValueChange={(v) => setShowFilter(v as "all" | "on" | "off" | "overridden")}>
-              <SelectTrigger className="h-8 text-[12px] w-[140px] bg-brand-card border-brand-rule">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Show all</SelectItem>
-                <SelectItem value="on">Only ON</SelectItem>
-                <SelectItem value="off">Only OFF</SelectItem>
-                <SelectItem value="overridden">Only overrides</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-brand-muted-soft" />
-          <Input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter permissions…"
-            className="h-9 pl-9 text-[13px] bg-brand-card border-brand-rule"
-          />
-        </div>
-      </div>
-
-      <ul className="divide-y divide-brand-rule">
-        {filteredModules.map((m) => {
-          const open = openModules[m.module] ?? false
-          return (
-            <li key={m.module}>
-              <button
-                onClick={() =>
-                  setOpenModules((s) => ({ ...s, [m.module]: !s[m.module] }))
-                }
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-brand-cream/40 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  {open ? <ChevronDown className="size-4 text-brand-muted-soft" /> : <ChevronRight className="size-4 text-brand-muted-soft" />}
-                  <span className="text-[13px] font-semibold text-brand-ink">
-                    {m.label}
-                  </span>
-                  <span className="text-[11px] text-brand-muted-soft">
-                    ({m.keys.filter((k) => data.effectiveKeys.includes(k.key)).length}/{m.keys.length} ON)
-                  </span>
-                </div>
-              </button>
-              {open && (
-                <ul className="px-4 pb-3 divide-y divide-brand-rule-soft">
-                  {m.keys.map((k) => {
-                    const isOn = data.effectiveKeys.includes(k.key)
-                    const isOverride = overrideSet.has(k.key)
-                    const isPreset = presetSet.has(k.key)
-                    const dimLabel = ["Module", "View", "Field", "Action"][
-                      ["a", "b", "c", "d"].indexOf(k.dimension)
-                    ]
-                    return (
-                      <li
-                        key={k.key}
-                        className="py-2 flex items-center gap-3"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] text-brand-ink flex items-center gap-1.5">
-                            {isOn ? (
-                              <CircleCheck className="size-3.5 text-emerald-700" />
-                            ) : (
-                              <Circle className="size-3.5 text-brand-muted-soft" />
-                            )}
-                            {k.label}
-                            {isOverride && (
-                              <span className="ml-1 text-[10px] font-mono uppercase tracking-wide text-brand-accent">
-                                override
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-[11px] text-brand-muted-soft ml-5">
-                            <span className="font-mono">{k.key}</span>
-                            <span className="mx-1.5">·</span>
-                            {dimLabel}
-                            {!isPreset && !isOverride && (
-                              <>
-                                <span className="mx-1.5">·</span>
-                                <span className="text-brand-muted-soft">OFF in preset</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        <label className="inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isOn}
-                            disabled={!canManage || toggle.isPending}
-                            onChange={async (e) => {
-                              try {
-                                await toggle.mutateAsync({
-                                  key: k.key,
-                                  next: e.target.checked ? "grant" : "revoke",
-                                })
-                              } catch {}
-                            }}
-                            className="sr-only peer"
-                          />
-                          <span className="w-9 h-5 bg-brand-rule rounded-full relative transition-colors peer-checked:bg-brand-accent peer-disabled:opacity-50 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:size-4 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-4" />
-                        </label>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
-}
