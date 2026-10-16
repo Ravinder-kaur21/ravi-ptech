@@ -29,9 +29,9 @@ export type RoleId = (typeof ROLE_IDS)[number]
 
 const statement = {
   ...defaultStatements,
-  // Member resource: BA defaults (create, update, delete) + TMS-specific
+  // Member resource: BA defaults (create, update, delete) + read + TMS-specific
   // suspend / lift-suspension actions for workspace-scoped member actions.
-  member: ["create", "update", "delete", "suspend", "lift-suspension"],
+  member: ["create", "read", "update", "delete", "suspend", "lift-suspension"],
   // TMS-specific resources. Declared now so the role model is
   // type-safe; per-module permission checks get wired up as the
   // Fleet/Drivers/Invoice modules land.
@@ -109,7 +109,7 @@ const FULL_TMS = {
   truck: ["create", "read", "update", "delete"],
   invoice: ["create", "read", "update", "delete"],
   payroll: ["create", "read", "update", "delete"],
-  member: ["create", "update", "delete", "suspend", "lift-suspension"],
+  member: ["create", "read", "update", "delete", "suspend", "lift-suspension"],
   workspace: ["read", "update"],
 } as const
 
@@ -128,20 +128,11 @@ export const administrator = ac.newRole({
 })
 
 /**
- * Bare "member" — no special TMS role. Can see TMS records (loads/trips/
- * drivers/trucks/invoices) but cannot mutate them. BA's `defaultStatements`
- * (`update`/`delete` on member/invitation/organization) doesn't include read;
- * per Better Auth's strict-typed access-control, attempting to grant
- * `["read"]` on those resources is a type error. We grant read on TMS
- * resources only; access to the BA member/invitation/organization
- * resources is intentionally empty (the default-deny policy applies).
- *
- * Note: earlier revisions used `ac: ["read"]` which was a typo (`ac`
- * is not a resource) — that role received zero effective permissions and
- * every `checkRolePermission` returned false. Documented here so the
- * mistake doesn't come back.
+ * Bare "member" — no special TMS role. Can see TMS records and workspace members
+ * but cannot mutate them.
  */
 export const member = ac.newRole({
+  member: ["read"],
   load: ["read"],
   trip: ["read"],
   driver: ["read"],
@@ -152,6 +143,7 @@ export const member = ac.newRole({
 
 /** Full ops access — loads, trips, fleet, drivers. */
 export const opsManager = ac.newRole({
+  member: ["read"],
   load: ["create", "read", "update", "delete"],
   trip: ["create", "read", "update", "delete"],
   driver: ["create", "read", "update", "delete"],
@@ -161,6 +153,7 @@ export const opsManager = ac.newRole({
 
 /** Assigns loads and trips, cannot create equipment. */
 export const dispatcher = ac.newRole({
+  member: ["read"],
   load: ["create", "read", "update"],
   trip: ["create", "read", "update"],
   driver: ["read", "update"],
@@ -170,6 +163,7 @@ export const dispatcher = ac.newRole({
 
 /** Money — invoices, payroll, reports. No dispatch access. */
 export const accounting = ac.newRole({
+  member: ["read"],
   invoice: ["create", "read", "update", "delete"],
   payroll: ["create", "read", "update", "delete"],
   load: ["read"],
@@ -178,6 +172,7 @@ export const accounting = ac.newRole({
 
 /** Driver — sees only what is assigned to them. */
 export const driverRole = ac.newRole({
+  member: ["read"],
   load: ["read"],
   trip: ["read"],
   workspace: ["read"],
@@ -185,6 +180,7 @@ export const driverRole = ac.newRole({
 
 /** Safety/compliance — driver records, read-only elsewhere. */
 export const safety = ac.newRole({
+  member: ["read"],
   driver: ["read", "update"],
   load: ["read"],
   truck: ["read"],

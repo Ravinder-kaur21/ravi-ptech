@@ -71,13 +71,16 @@ export default function RoleDetailPage() {
   const isStarter = roleId in PRESETS
   const preset = PRESETS[roleId as keyof typeof PRESETS]
 
-  const { data, isLoading } = useQuery<RolePermResponse>({
+  const { data, isLoading, isError, error, refetch } = useQuery<RolePermResponse>({
     queryKey: ["role-permissions", roleId],
     queryFn: async () => {
       const r = await fetch(
         `/api/settings/role-permissions?roleId=${encodeURIComponent(roleId)}`
       )
-      if (!r.ok) throw new Error("Failed to load role permissions")
+      if (!r.ok) {
+        const errJson = await r.json().catch(() => ({}))
+        throw new Error(errJson.error || "Failed to load role permissions")
+      }
       return r.json()
     },
   })
@@ -187,12 +190,48 @@ export default function RoleDetailPage() {
     },
   })
 
+  if (isError && !data) {
+    return (
+      <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
+        <Link
+          href="/settings/roles"
+          className="inline-flex items-center gap-1.5 text-xs text-brand-muted-soft hover:text-brand-ink transition-colors font-medium"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to Roles & Permissions
+        </Link>
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-8 text-center space-y-3">
+          <p className="font-semibold text-red-900 text-sm">Failed to load role permissions</p>
+          <p className="text-xs text-red-700 max-w-md mx-auto">{error?.message || "An unexpected error occurred while loading permissions."}</p>
+          <div className="pt-2">
+            <Button size="sm" variant="outline" onClick={() => refetch()} className="text-xs">
+              Try again
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (isLoading || !data) {
     return (
       <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
-        <Skeleton className="h-6 w-32" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-96 w-full rounded-xl" />
+        <Skeleton className="h-5 w-36 rounded-md" />
+        <div className="rounded-xl border border-brand-rule bg-brand-card p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-11 rounded-lg" />
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-3 w-60" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+        <div className="space-y-3">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     )
   }

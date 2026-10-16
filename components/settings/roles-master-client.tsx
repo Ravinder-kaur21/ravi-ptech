@@ -336,15 +336,13 @@ export function RolesMasterClient() {
                         <span>{r.memberCount} active member{r.memberCount === 1 ? "" : "s"}</span>
                       </Link>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.push(`/settings/roles/${r.role}`)}
-                        className="h-7 px-2 text-xs font-medium text-brand-accent hover:bg-brand-accent-tint hover:text-brand-accent gap-1"
+                      <Link
+                        href={`/settings/roles/${r.role}`}
+                        className="inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium text-brand-accent hover:bg-brand-accent-tint transition-colors gap-1"
                       >
                         Inspect Template
                         <ChevronRight className="size-3" />
-                      </Button>
+                      </Link>
                     </div>
                   </div>
                 )
@@ -395,15 +393,13 @@ export function RolesMasterClient() {
                       <span className="text-[11px] text-brand-muted-soft">
                         {r.memberCount} member{r.memberCount === 1 ? "" : "s"}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.push(`/settings/roles/${r.role}`)}
-                        className="h-7 px-2 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                      <Link
+                        href={`/settings/roles/${r.role}`}
+                        className="inline-flex items-center h-7 px-2.5 rounded-md text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors gap-1"
                       >
                         Edit Role
                         <ChevronRight className="size-3" />
-                      </Button>
+                      </Link>
                     </div>
                   </div>
                 ))}

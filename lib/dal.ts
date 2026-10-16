@@ -267,15 +267,18 @@ export async function requirePermission(opts: {
       body: { permissions: { [opts.resource]: [opts.action] } },
     })
     if (!result?.success) {
-      console.log(
-        `[DAL] requirePermission deny: ${opts.resource}.${opts.action}`,
+      console.warn(
+        `[DAL] requirePermission DENY: resource=${opts.resource} action=${opts.action} result=false`,
       )
       throw new TenantError("FORBIDDEN")
     }
+    console.log(
+      `[DAL] requirePermission ALLOW: resource=${opts.resource} action=${opts.action}`,
+    )
   } catch (err) {
     if (err instanceof TenantError) throw err
     console.error(
-      `[DAL] requirePermission error for ${opts.resource}.${opts.action}:`,
+      `[DAL] requirePermission ERROR: resource=${opts.resource} action=${opts.action}:`,
       err,
     )
     throw new TenantError("FORBIDDEN")

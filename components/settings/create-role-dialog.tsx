@@ -107,7 +107,12 @@ export function CreateRoleDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {trigger && <DialogTrigger render={trigger} />}
+      {trigger && (
+        <DialogTrigger
+          onClick={() => setOpen(true)}
+          render={trigger}
+        />
+      )}
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
