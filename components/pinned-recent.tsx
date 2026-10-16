@@ -101,9 +101,7 @@ export function PinnedRecent({ orgId }: { orgId: string }) {
           {!isLoading && pinned.length > 0 && (
             <>
               {pinned.map((l) => (
-                <SidebarMenuItem key={`p-${l.id}`}>
-                  <LoadRow load={l} pinned />
-                </SidebarMenuItem>
+                <LoadRow key={`p-${l.id}`} load={l} pinned />
               ))}
             </>
           )}
@@ -123,9 +121,7 @@ export function PinnedRecent({ orgId }: { orgId: string }) {
                 <div className="mx-2 my-1 h-px bg-sidebar-border" />
               </SidebarMenuItem>
               {recent.map((l) => (
-                <SidebarMenuItem key={`r-${l.id}`}>
-                  <LoadRow load={l} />
-                </SidebarMenuItem>
+                <LoadRow key={`r-${l.id}`} load={l} />
               ))}
             </>
           )}
