@@ -53,10 +53,31 @@ export async function GET(req: NextRequest) {
         .limit(1)
       if (row) {
         try {
-          const parsed = JSON.parse(row.permission) as Record<string, string[]>
-          for (const [resource, actions] of Object.entries(parsed)) {
-            for (const a of actions) effectiveKeys.push(`${resource}.${a}`)
+          const parsed = JSON.parse(row.permission) as Record<string, any>
+          if (Array.isArray(parsed.__grants)) {
+            effectiveKeys = parsed.__grants
+          } else {
+            for (const [resource, actions] of Object.entries(parsed)) {
+              if (resource.startsWith("__")) continue
+              if (Array.isArray(actions)) {
+                for (const a of actions) effectiveKeys.push(`${resource}.${a}`)
+              }
+            }
           }
+
+          if (Array.isArray(parsed.__label) && parsed.__label[0]) {
+            label = parsed.__label[0]
+          } else if (typeof parsed.label === "string") {
+            label = parsed.label
+          }
+
+          if (Array.isArray(parsed.__description) && parsed.__description[0]) {
+            description = parsed.__description[0]
+          } else if (typeof parsed.description === "string") {
+            description = parsed.description
+          }
+
+          oneLiner = description || "Custom workspace role"
         } catch {}
       }
     }

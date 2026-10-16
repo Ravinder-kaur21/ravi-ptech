@@ -73,17 +73,36 @@ export async function GET() {
       seen.add(roleName)
 
       let onCount = 0
+      let label = roleName
+      let description = "Custom role"
+      let clonedFrom: string | null = null
+
       try {
-        const parsed = JSON.parse(row.permission) as Record<string, string[]>
-        for (const actions of Object.values(parsed)) onCount += actions.length
+        const parsed = JSON.parse(row.permission) as Record<string, any>
+        if (Array.isArray(parsed.__grants)) {
+          onCount = parsed.__grants.length
+        } else {
+          for (const [k, actions] of Object.entries(parsed)) {
+            if (!k.startsWith("__") && Array.isArray(actions)) onCount += actions.length
+          }
+        }
+
+        if (Array.isArray(parsed.__label) && parsed.__label[0]) label = parsed.__label[0]
+        else if (typeof parsed.label === "string") label = parsed.label
+
+        if (Array.isArray(parsed.__description) && parsed.__description[0]) description = parsed.__description[0]
+        else if (typeof parsed.description === "string") description = parsed.description
+
+        if (Array.isArray(parsed.__clonedFrom) && parsed.__clonedFrom[0]) clonedFrom = parsed.__clonedFrom[0]
+        else if (typeof parsed.clonedFrom === "string") clonedFrom = parsed.clonedFrom
       } catch {}
 
       custom.push({
         id: row.id,
         role: roleName,
-        label: roleName,
-        description: "Custom role",
-        clonedFrom: null,
+        label,
+        description,
+        clonedFrom,
         onCount,
         memberCount: countByRole[roleName] ?? 0,
       })

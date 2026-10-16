@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { usePermissions } from "@/lib/permissions-context"
-import { PRESETS, presetKeys } from "@/lib/role-presets"
+import { PRESETS, presetKeys, PRESET_LIST, presetOnCount } from "@/lib/role-presets"
 import { ALL_PERMISSION_KEYS, MODULE_GROUPS, type PermissionEntry } from "@/lib/permissions-catalog"
 import { type RoleId } from "@/lib/auth-roles"
 import { Button } from "@/components/ui/button"
@@ -68,14 +68,29 @@ export function RolesMasterClient() {
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedModule, setSelectedModule] = React.useState<string>("all")
 
-  const { data, isLoading } = useQuery<RolesResponse>({
+  const { data, isLoading, isError } = useQuery<RolesResponse>({
     queryKey: ["roles-list"],
     queryFn: async () => {
       const r = await fetch("/api/settings/roles-summary")
-      if (!r.ok) throw new Error("Failed to load")
+      if (!r.ok) {
+        const errJson = await r.json().catch(() => ({}))
+        throw new Error(errJson.error || "Failed to load roles")
+      }
       return r.json()
     },
   })
+
+  // Ensure starter roles are ALWAYS available even before API returns or if network drops
+  const starterRoles = React.useMemo(() => {
+    if (data?.starter && data.starter.length > 0) return data.starter
+    return PRESET_LIST.map((preset) => ({
+      role: preset.role,
+      label: preset.label,
+      description: preset.description,
+      onCount: presetOnCount(preset.role, ALL_PERMISSION_KEYS),
+      memberCount: 0,
+    }))
+  }, [data?.starter])
 
   // Pre-calculate preset sets for each comparison role
   const rolePresetSets = React.useMemo(() => {
@@ -276,7 +291,7 @@ export function RolesMasterClient() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(data?.starter ?? []).map((r) => {
+              {starterRoles.map((r) => {
                 const preset = PRESETS[r.role as RoleId]
                 const icon = getRoleIcon(r.role)
                 return (

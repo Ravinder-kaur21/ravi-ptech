@@ -43,9 +43,10 @@ export const getEffectivePermissions = cache(
     if (!m) return new Set()
 
     const role = (m.role ?? "member") as RoleId
-    const base = presetKeys(role, ALL_PERMISSION_KEYS)
+    const isStarterPreset = role in PRESETS
+    let base = isStarterPreset ? presetKeys(role, ALL_PERMISSION_KEYS) : new Set<string>()
 
-    // 2. Layer per-member override rows from organizationRole.
+    // 2. Fetch overrides & custom role definitions from organizationRole.
     const overrides = await db
       .select({ role: organizationRole.role, permission: organizationRole.permission })
       .from(organizationRole)
@@ -57,9 +58,29 @@ export const getEffectivePermissions = cache(
 
     if (overrides.length === 0) return base
 
-    // Per-member overrides: a row whose `role` field starts with
-    // "member:" is a per-member grant bucket, scoped by user id.
-    // We only apply overrides whose role string names the current user.
+    // If member has a custom role, resolve its baseline from organizationRole first
+    if (!isStarterPreset) {
+      const customRoleRow = overrides.find((r) => r.role === m.role)
+      if (customRoleRow) {
+        try {
+          const parsed = JSON.parse(customRoleRow.permission) as Record<string, string[]>
+          if (Array.isArray(parsed.__grants)) {
+            for (const key of parsed.__grants) base.add(key)
+          }
+          // Also ingest any direct BA resource:action mappings
+          for (const [resource, actions] of Object.entries(parsed)) {
+            if (resource.startsWith("__")) continue
+            if (Array.isArray(actions)) {
+              for (const action of actions) base.add(`${resource}.${action}`)
+            }
+          }
+        } catch {
+          // malformed custom role row
+        }
+      }
+    }
+
+    // 3. Layer per-member overrides: row where role === `member:${userId}`
     for (const row of overrides) {
       const roleName = (row.role ?? "").toString()
       if (!roleName.startsWith("member:")) continue
