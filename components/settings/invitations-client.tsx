@@ -22,6 +22,7 @@ import { ROLE_CATALOG, type RoleId } from "@/lib/auth-roles"
 import { TeamSubNav } from "@/components/settings/team-subnav"
 import { usePermissions } from "@/lib/permissions-context"
 import { useWorkspaceRoles } from "@/lib/use-workspace-roles"
+import { cn } from "@/lib/utils"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -85,6 +86,7 @@ import {
   MoreHorizontal,
   RefreshCcw,
   Send,
+  Sparkles,
   UserPlus,
   X,
 } from "lucide-react"
@@ -582,26 +584,67 @@ export function InvitationsClient() {
                 <FieldLabel>Role</FieldLabel>
                 <Select
                   value={inviteRole}
-                  onValueChange={(v) => setInviteRole(v as Role)}
+                  onValueChange={(v) => setInviteRole(v ?? "member")}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        <div>
-                          <div>{r.label}</div>
-                          <div className="text-xs text-brand-muted-soft">
-                            {r.description}
+                  <SelectContent className="max-h-80">
+                    <SelectGroup>
+                      <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft px-2 py-1.5">
+                        Standard Presets ({starterRoles.length})
+                      </SelectLabel>
+                      {starterRoles.map((r) => (
+                        <SelectItem key={r.value} value={r.value} className="py-2">
+                          <div className="flex flex-col text-left">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-brand-ink">{r.label}</span>
+                              <span className="text-[10px] font-mono text-brand-muted-soft px-1.5 py-0.2 rounded bg-brand-cream/60">
+                                {r.onCount} ON
+                              </span>
+                            </div>
+                            {r.description && (
+                              <span className="text-[11px] text-brand-muted-soft line-clamp-1 mt-0.5">
+                                {r.description}
+                              </span>
+                            )}
                           </div>
-                        </div>
-                      </SelectItem>
-                    ))}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+
+                    {customRoles.length > 0 && (
+                      <>
+                        <SelectSeparator className="my-1 bg-brand-rule" />
+                        <SelectGroup>
+                          <SelectLabel className="text-[10px] font-mono uppercase tracking-wider text-blue-700 px-2 py-1.5 flex items-center justify-between">
+                            <span>Workspace Custom Roles ({customRoles.length})</span>
+                            <span className="text-[9px] bg-blue-100 text-blue-800 px-1 rounded">Custom</span>
+                          </SelectLabel>
+                          {customRoles.map((r) => (
+                            <SelectItem key={r.value} value={r.value} className="py-2">
+                              <div className="flex flex-col text-left">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium text-brand-ink">{r.label}</span>
+                                  <span className="text-[10px] font-mono text-blue-700 px-1.5 py-0.2 rounded bg-blue-50 border border-blue-200">
+                                    {r.onCount} ON
+                                  </span>
+                                </div>
+                                {r.description && (
+                                  <span className="text-[11px] text-brand-muted-soft line-clamp-1 mt-0.5">
+                                    {r.description}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <FieldDescription>
-                  The role determines what this person can see and do.
+                  The role sets baseline access. You can grant or revoke individual actions later.
                 </FieldDescription>
               </Field>
             </div>

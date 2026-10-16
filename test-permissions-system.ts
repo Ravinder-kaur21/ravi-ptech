@@ -73,7 +73,7 @@ assert(member.statements.member?.includes("read") === true, "Member has member:r
 
 assert(owner.statements.load?.includes("create") === true, "Owner can create loads");
 assert(dispatcher.statements.load?.includes("create") === true, "Dispatcher can create loads");
-assert(driverRole.statements.load?.includes("create") !== true, "Driver CANNOT create loads");
+assert((driverRole.statements.load as readonly string[] | undefined)?.includes("create") !== true, "Driver CANNOT create loads");
 
 // ─── TEST SUITE 3: Preset Blueprints & Wildcard Expansion ───────────────────
 console.log("\n▶ SUITE 3: Preset Role Grants & Granular Blueprints");

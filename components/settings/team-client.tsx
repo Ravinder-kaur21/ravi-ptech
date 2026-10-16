@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select"
 import { usePermissions } from "@/lib/permissions-context"
 import { useWorkspaceRoles } from "@/lib/use-workspace-roles"
+import { cn } from "@/lib/utils"
 import { Sparkles } from "lucide-react"
 import {
   AlertDialog,
