@@ -20,7 +20,10 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+import {
+  SuspendMemberDialog,
+  TransferOwnershipDialog,
+} from "@/components/settings/member-action-dialogs"
 import {
   Select,
   SelectContent,
@@ -56,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Table,
   TableBody,
@@ -78,6 +82,9 @@ import {
   ShieldCheck,
   Search,
   MoreHorizontal,
+  Eye,
+  Clock,
+  ChevronRight,
   ArrowLeftRight,
   Ban,
 } from "lucide-react"
@@ -504,6 +511,7 @@ function TeamSettingsInner() {
 
   const members = membersQuery.data?.members ?? []
   const invitations = invitesQuery.data ?? []
+  const pendingCount = invitations.filter((i) => i.status === "pending").length
   const recentEvents = recentEventsQuery.data?.events ?? []
 
   /**
@@ -516,7 +524,7 @@ function TeamSettingsInner() {
 
   // ─── Render ──
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
+    <div className="p-4 lg:p-8 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -829,7 +837,30 @@ function TeamSettingsInner() {
                       className="py-3 text-right"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {canManage && !isMe && (
+                      <div className="flex items-center justify-end gap-1">
+                        <TooltipProvider delay={200}>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px] text-brand-ink/70 hover:text-brand-ink"
+                                  onClick={() =>
+                                    router.push(`/settings/team/${m.userId}`)
+                                  }
+                                />
+                              }
+                            >
+                              <Eye className="mr-1 h-3 w-3" />
+                              View
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              View profile &amp; permissions
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {canManage && !isMe && (
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
@@ -900,7 +931,8 @@ function TeamSettingsInner() {
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      )}
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -910,133 +942,37 @@ function TeamSettingsInner() {
         )}
       </Card>
 
-      {/* ─── Invitations (WS-19, WS-20) ─── */}
-      <Card className="border-brand-rule bg-brand-card p-6">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <div>
-            <h2 className="font-medium text-brand-ink">Invitations</h2>
-            <p className="text-xs text-brand-muted-soft mt-0.5">
-              {invitations.length === 0
-                ? inviteStatus === "pending"
-                  ? "No pending invites."
-                  : `No ${inviteStatus} invites.`
-                : `${invitations.length} ${invitations.length === 1 ? "invite" : "invites"} · ${inviteStatus}`}
+      {/* ─── Invitations — dedicated page (WS-19, WS-20) ─── */}
+      <Link
+        href="/settings/team/invitations"
+        className="block rounded-xl border border-brand-rule bg-brand-card p-5 transition-colors hover:bg-brand-cream/40"
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+            <Mail className="h-4 w-4" strokeWidth={1.8} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-brand-ink">Invitations</p>
+              {pendingCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-900 font-mono text-[10px] uppercase tracking-[0.04em]"
+                >
+                  <Clock className="mr-1 size-3" />
+                  {pendingCount} pending
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-brand-muted-soft">
+              {pendingCount > 0
+                ? "Track, re-send, or cancel the invites sent to this workspace."
+                : "Track every invite sent to this workspace — pending, accepted, rejected, canceled."}
             </p>
           </div>
-          <Tabs
-            value={inviteStatus}
-            onValueChange={(v) =>
-              setInviteStatus(
-                v as "pending" | "accepted" | "rejected" | "canceled" | "all",
-              )
-            }
-          >
-            <TabsList className="h-9">
-              <TabsTrigger value="pending" className="text-xs">
-                Pending
-              </TabsTrigger>
-              <TabsTrigger value="accepted" className="text-xs">
-                Accepted
-              </TabsTrigger>
-              <TabsTrigger value="rejected" className="text-xs">
-                Rejected
-              </TabsTrigger>
-              <TabsTrigger value="canceled" className="text-xs">
-                Canceled
-              </TabsTrigger>
-              <TabsTrigger value="all" className="text-xs">
-                All
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <ChevronRight className="h-4 w-4 text-brand-muted-soft shrink-0" />
         </div>
-
-        {invitesQuery.isLoading ? (
-          <div className="py-8 flex justify-center text-brand-muted-soft">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        ) : invitations.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-brand-rule p-6 text-center">
-            <Mail className="mx-auto h-5 w-5 text-brand-muted-soft" />
-            <p className="mt-2 text-sm text-brand-muted-soft">
-              {inviteStatus === "pending"
-                ? "No invitations out. Invite your first teammate above."
-                : `No ${inviteStatus} invitations.`}
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-brand-rule">
-            {invitations.map((inv) => (
-              <li
-                key={inv.id}
-                className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-              >
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-accent-tint text-brand-accent">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="truncate text-sm font-medium text-brand-ink">
-                      {inv.email}
-                    </p>
-                    <Badge
-                      variant="secondary"
-                      className="h-5 text-[10px] uppercase"
-                    >
-                      {inv.status}
-                    </Badge>
-                  </div>
-                  <p className="truncate text-xs text-brand-muted-soft">
-                    {ROLES.find((r) => r.value === inv.role)?.label ?? inv.role}
-                    {inv.expiresAt && (
-                      <>
-                        {" · expires "}
-                        {formatDate(new Date(inv.expiresAt))}
-                      </>
-                    )}
-                    {inv.inviterEmail && (
-                      <>
-                        {" · invited by "}
-                        {inv.inviterEmail}
-                      </>
-                    )}
-                  </p>
-                </div>
-                {canManage && inv.status === "pending" && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => resendInviteMutation.mutate(inv.id)}
-                      disabled={resendInviteMutation.isPending}
-                      className="text-brand-muted-soft hover:text-brand-ink"
-                    >
-                      {resendInviteMutation.isPending &&
-                      resendInviteMutation.variables === inv.id ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Resend
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => cancelInviteMutation.mutate(inv.id)}
-                      disabled={cancelInviteMutation.isPending}
-                      className="text-brand-muted-soft hover:text-destructive"
-                    >
-                      <X className="h-3.5 w-3.5 mr-1" />
-                      Revoke
-                    </Button>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
+      </Link>
       {/* ─── Recent access changes (WS-30) ─── */}
       <Card className="border-brand-rule bg-brand-card p-6">
         <div className="flex items-center justify-between mb-4">
@@ -1326,188 +1262,6 @@ function RemoveMemberDropdown({
               <Trash2 className="mr-2 h-4 w-4" />
             )}
             Remove {typed === "REMOVE" ? "forever" : ""}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-
-/**
- * SuspendMemberDialog — Phase 1 (WS-26). Confirms a workspace-scoped
- * suspension with optional reason + optional until date. Does NOT
- * touch platform-level user.suspendedAt.
- */
-function SuspendMemberDialog({
-  target,
-  open,
-  onOpenChange,
-  onSubmit,
-  pending,
-}: {
-  target: { id: string; name: string; email: string } | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSubmit: (
-    memberId: string,
-    reason: string | undefined,
-    until: string | undefined,
-  ) => void
-  pending: boolean
-}) {
-  const [reason, setReason] = useState("")
-  const [until, setUntil] = useState("")
-  // Reset state whenever the dialog re-opens with a new target.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (open) {
-      setReason("")
-      setUntil("")
-    }
-  }, [open, target?.id])
-  /* eslint-enable react-hooks/set-state-in-effect */
-  if (!target) return null
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Suspend {target.name || target.email}?</DialogTitle>
-          <DialogDescription>
-            Suspends them from <b>this workspace only</b>. They keep their
-            account and other workspace memberships. Their active sessions
-            in this workspace will be revoked.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="suspend-reason">Reason (optional)</Label>
-            <Textarea
-              id="suspend-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Why is this member being suspended?"
-              className="min-h-[64px]"
-              maxLength={500}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="suspend-until">Suspend until (optional)</Label>
-            <Input
-              id="suspend-until"
-              type="datetime-local"
-              value={until}
-              onChange={(e) => setUntil(e.target.value)}
-              className="h-10"
-            />
-            <p className="text-[11px] text-brand-muted-soft">
-              Leave blank for indefinite suspension.
-            </p>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              let iso: string | undefined = undefined
-              if (until) {
-                const d = new Date(until)
-                if (Number.isNaN(d.getTime())) {
-                  toast.error("Invalid date")
-                  return
-                }
-                iso = d.toISOString()
-              }
-              onSubmit(target.id, reason.trim() || undefined, iso)
-            }}
-            disabled={pending}
-            className="bg-amber-600 text-white hover:bg-amber-700"
-          >
-            {pending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <ShieldOff className="h-4 w-4 mr-2" />
-            )}
-            Suspend
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/**
- * TransferOwnershipDialog — Phase 1 (WS-28). Type-to-confirm dialog
- * for ownership transfer. Single-transaction demote-self + promote-target
- * guarantees the workspace never has zero owners.
- */
-function TransferOwnershipDialog({
-  target,
-  open,
-  onOpenChange,
-  onConfirm,
-  pending,
-}: {
-  target: { id: string; name: string; email: string } | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onConfirm: (newOwnerMemberId: string) => void
-  pending: boolean
-}) {
-  const [typed, setTyped] = useState("")
-  // Reset typed state when re-opened with new target
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (open) {
-      setTyped("")
-    }
-  }, [open, target?.id])
-  /* eslint-enable react-hooks/set-state-in-effect */
-  if (!target) return null
-  return (
-    <AlertDialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o)
-        if (!o) setTyped("")
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            Transfer ownership to {target.name || target.email}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            You will be demoted to <b>admin</b>. They will become the new
-            <b> owner</b> of this workspace. There is no undo — they can
-            transfer it back manually.
-            <br />
-            <br />
-            Type <code className="font-mono">TRANSFER</code> to confirm.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <Input
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder="TRANSFER"
-          className="h-10 font-mono"
-          autoFocus
-        />
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => onConfirm(target.id)}
-            disabled={typed !== "TRANSFER" || pending}
-            className="bg-brand-ink text-brand-cream hover:bg-brand-ink-soft"
-          >
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Transfer
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

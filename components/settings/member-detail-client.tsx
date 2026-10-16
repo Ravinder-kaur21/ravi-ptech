@@ -9,7 +9,27 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Card } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Kbd } from "@/components/ui/kbd"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { formatDistanceToNow } from "date-fns"
+import {
+  suspendMemberAction,
+  transferOwnershipAction,
+} from "@/app/actions/invitation"
+import { removeMemberAction } from "@/app/actions/remove-member"
+import {
+  SuspendMemberDialog,
+  TransferOwnershipDialog,
+  type MemberTarget,
+} from "@/components/settings/member-action-dialogs"
 import {
   Select,
   SelectContent,
@@ -25,6 +45,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { toast } from "sonner"
 import {
   ArrowLeft,
@@ -36,6 +57,10 @@ import {
   CircleCheck,
   Mail,
   ShieldCheck,
+  ShieldAlert,
+  ShieldOff,
+  ArrowLeftRight,
+  SlidersHorizontal,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -72,6 +97,12 @@ export function MemberDetailClient({ userId }: { userId: string }) {
   const perms = usePermissions()
   const canManage = perms.has("users.change_role")
   const [grantOpen, setGrantOpen] = React.useState(false)
+  const [matrixOpen, setMatrixOpen] = React.useState(false)
+  const [activityOpen, setActivityOpen] = React.useState(false)
+  const [suspendOpen, setSuspendOpen] = React.useState(false)
+  const [transferOpen, setTransferOpen] = React.useState(false)
+  const [suspendTarget, setSuspendTarget] = React.useState<MemberTarget>(null)
+  const [transferTarget, setTransferTarget] = React.useState<MemberTarget>(null)
 
   const { data, isLoading } = useQuery<MemberPermResponse>({
     queryKey: ["member-permissions", userId],
@@ -107,84 +138,113 @@ export function MemberDetailClient({ userId }: { userId: string }) {
   const summary = buildSummary(effectiveSet)
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Link
-        href="/settings/team"
-        className="inline-flex items-center gap-1.5 text-[13px] text-brand-muted-soft hover:text-brand-ink"
-      >
-        <ArrowLeft className="size-3.5" />
-        Team / Members
-      </Link>
+    <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-6">
+      {/* ── Breadcrumb ──────────────────────────────────────── */}
+      <div className="flex items-center gap-1.5 text-xs text-brand-muted-soft">
+        <Link
+          href="/settings/team"
+          className="hover:text-brand-ink transition-colors"
+        >
+          Team
+        </Link>
+        <ChevronRight className="size-3" />
+        <span className="text-brand-ink">{data.name || data.email}</span>
+      </div>
 
-      {/* Header card */}
-      <div className="rounded-xl border border-brand-rule bg-brand-card p-5">
-        <div className="flex items-start gap-4">
-          <Avatar className="size-14 shrink-0">
-            {data.name && (
-              <AvatarImage src="" alt={data.name} />
-            )}
-            <AvatarFallback className="bg-brand-accent-tint text-brand-accent text-[18px] font-semibold">
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <Card className="border-brand-rule bg-brand-card p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+          <Avatar className="size-16 shrink-0">
+            <AvatarFallback className="bg-brand-accent-tint text-brand-accent text-xl font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h1 className="font-serif text-[24px] tracking-tight text-brand-ink">
-                  {data.name || data.email}
-                </h1>
-                <p className="text-[13px] text-brand-muted-soft mt-0.5 flex items-center gap-2">
-                  <Mail className="size-3.5" />
-                  {data.email}
-                </p>
-              </div>
-              <Badge className="bg-brand-accent-tint text-brand-accent text-[12px] font-medium px-2.5 py-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-serif text-[28px] tracking-tight text-brand-ink">
+                {data.name || data.email}
+              </h1>
+              <Badge className="bg-brand-accent-tint text-brand-accent text-[11px] font-medium px-2.5 py-0.5">
                 {data.presetLabel}
               </Badge>
+              {overrideSet.size > 0 && (
+                <Badge
+                  variant="outline"
+                  className="border-blue-300 bg-blue-50 text-blue-900 font-mono text-[10px] uppercase tracking-[0.04em]"
+                >
+                  <Sparkles className="mr-1 size-3" />
+                  {overrideSet.size} custom grant
+                  {overrideSet.size === 1 ? "" : "s"}
+                </Badge>
+              )}
             </div>
-            <p className="mt-3 text-[13px] text-brand-ink/80">
+            <p className="mt-1 flex items-center gap-2 text-sm text-brand-muted-soft">
+              <Mail className="size-3.5" />
+              {data.email}
+            </p>
+            <p className="mt-3 max-w-prose text-sm text-brand-ink/80">
               {data.presetOneLiner}
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <Tabs defaultValue="permissions">
-        <TabsList>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="profile" className="mt-6 space-y-4">
-          <div className="rounded-lg border border-brand-rule bg-brand-card p-5">
-            <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
-              Profile
-            </p>
-            <p className="mt-1 text-[13px] text-brand-ink/80">
-              Detailed profile fields live in the next phase. For now, the
-              member&apos;s role and effective permissions are managed on the
-              <strong> Permissions </strong>
-              tab.
+          <div className="flex items-center gap-2 sm:flex-col sm:items-end">
+            <Button
+              variant="outline"
+              onClick={() => setMatrixOpen(true)}
+              className="shrink-0"
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              Edit all permissions
+            </Button>
+            <p className="text-[11px] text-brand-muted-soft sm:text-right">
+              130 keys · {data.effectiveKeys.length} on
             </p>
           </div>
-        </TabsContent>
+        </div>
+      </Card>
 
-        <TabsContent value="permissions" className="mt-6 space-y-6">
-          {/* Role + summary */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-brand-rule bg-brand-card p-5 space-y-3">
-              <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
-                Role
-              </p>
-              <div className="flex items-center gap-2">
+      {/* ── KPI strip ───────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          label="Keys on"
+          value={`${data.effectiveKeys.length}`}
+          sub={`of ${ALL_PERMISSION_KEYS.length} total`}
+        />
+        <Kpi
+          label="Custom grants"
+          value={`${overrideSet.size}`}
+          sub={overrideSet.size > 0 ? "on top of role" : "none — role as-is"}
+        />
+        <Kpi
+          label="Can see"
+          value={`${summary.canView.length}`}
+          sub="modules in their view"
+        />
+        <Kpi
+          label="Can act"
+          value={`${summary.canAct.length}`}
+          sub="actions they can take"
+        />
+      </div>
+
+      {/* ── Main grid ────────────────────────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* LEFT (2/3) — role + effective access */}
+        <div className="space-y-4 lg:col-span-2">
+          {/* Role */}
+          <Card className="border-brand-rule bg-brand-card p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+                  Role
+                </p>
+                <p className="mt-1 text-sm text-brand-ink">
+                  {data.presetLabel} · {data.presetOneLiner}
+                </p>
+              </div>
+              {canManage ? (
                 <Select
                   value={data.role}
                   onValueChange={async (v) => {
-                    if (!canManage) return
                     const r = await fetch("/api/settings/member-permissions", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
@@ -200,13 +260,13 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                       return
                     }
                     toast.success(`Role changed to ${v}`)
-                    queryClient.invalidateQueries({ queryKey: ["member-permissions", userId] })
-                    queryClient.invalidateQueries({ queryKey: ["members-list-v2"] })
+                    queryClient.invalidateQueries({
+                      queryKey: ["member-permissions", userId],
+                    })
                     router.refresh()
                   }}
-                  disabled={!canManage}
                 >
-                  <SelectTrigger className="h-9 bg-brand-card border-brand-rule">
+                  <SelectTrigger className="h-9 w-[180px] border-brand-rule">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -217,127 +277,41 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <p className="text-[12px] text-brand-muted-soft">
-                {data.effectiveKeys.length} of {ALL_PERMISSION_KEYS.length} permissions ON
-              </p>
-              <div className="rounded-md border border-brand-rule bg-brand-cream/50 p-3 text-[12px] text-brand-ink/90">
-                <p>
-                  Using the <strong>{data.presetLabel}</strong> preset as the
-                  starting point. Any extra grants below are layered on top.
-                </p>
-                {data.overrides.length > 0 && (
-                  <div className="mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        if (
-                          !confirm(
-                            "Reset this member's permissions to the preset? All extra grants will be removed."
-                          )
-                        )
-                          return
-                        const r = await fetch(
-                          "/api/settings/member-permissions",
-                          {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              userId: data.userId,
-                              action: "reset",
-                            }),
-                          }
-                        )
-                        if (!r.ok) {
-                          toast.error("Failed to reset")
-                          return
-                        }
-                        toast.success("Reset to preset")
-                        queryClient.invalidateQueries({
-                          queryKey: ["member-permissions", userId],
-                        })
-                        router.refresh()
-                      }}
-                      disabled={!canManage}
-                      className="h-7 text-[12px] border-brand-rule"
-                    >
-                      <RotateCcw className="size-3" />
-                      <span className="ml-1">Reset to preset</span>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick summary */}
-            <div className="rounded-lg border border-brand-rule bg-brand-card p-5 space-y-2">
-              <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
-                What this person can do
-              </p>
-              {summary.canView.length > 0 && (
-                <p className="text-[13px] text-brand-ink leading-relaxed">
-                  <Check className="inline size-3.5 text-emerald-700 mr-1.5" />
-                  Can view {summary.canView.slice(0, 3).join(", ")}
-                  {summary.canView.length > 3 && `, and ${summary.canView.length - 3} more`}.
-                </p>
-              )}
-              {summary.canAct.length > 0 && (
-                <p className="text-[13px] text-brand-ink leading-relaxed">
-                  <Check className="inline size-3.5 text-emerald-700 mr-1.5" />
-                  Can {summary.canAct.slice(0, 3).join(", ")}
-                  {summary.canAct.length > 3 && `, and ${summary.canAct.length - 3} more`}.
-                </p>
-              )}
-              {summary.cannotSee.length > 0 && (
-                <p className="text-[13px] text-brand-ink/80 leading-relaxed">
-                  <X className="inline size-3.5 text-brand-muted-soft mr-1.5" />
-                  Cannot see {summary.cannotSee.slice(0, 2).join("; ")}.
-                </p>
+              ) : (
+                <Badge variant="secondary" className="h-7 px-3 text-xs">
+                  {data.presetLabel}
+                </Badge>
               )}
             </div>
-          </div>
+          </Card>
 
-          {/* ─── Extra grants on top of role ─── */}
-          <div className="rounded-lg border border-brand-rule bg-brand-card overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-brand-rule">
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-4 text-brand-accent" />
-                <p className="text-[14px] font-semibold text-brand-ink">
+          {/* Extra grants */}
+          <Card className="border-brand-rule bg-brand-card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 p-5 border-b border-brand-rule">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
                   Extra grants on top of role
                 </p>
-                {data.overrides.length > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="border-brand-accent/30 text-brand-accent text-[10px] h-4 px-1.5"
-                  >
-                    {data.overrides.length}
-                  </Badge>
-                )}
-                <span className="text-[11px] text-brand-muted-soft">
-                  {canManage
-                    ? "You can extend this member's access with one-off grants."
-                    : "Owner only."}
-                </span>
+                <p className="mt-1 text-sm text-brand-muted-soft">
+                  One-off permissions this person has that their role
+                  doesn&apos;t grant.
+                </p>
               </div>
               {canManage && (
                 <Button
                   onClick={() => setGrantOpen(true)}
-                  size="sm"
-                  className="h-8 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+                  className="shrink-0 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
                 >
-                  <Plus className="size-3.5 mr-1" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Grant a key
                 </Button>
               )}
             </div>
-
-            {data.overrides.length === 0 ? (
-              <div className="px-5 py-6 text-center">
-                <p className="text-[13px] text-brand-muted-soft">
-                  No extra grants yet. {canManage ? "Click “Grant a key” to extend this person's access." : ""}
-                </p>
-              </div>
+            {overrideSet.size === 0 ? (
+              <p className="p-5 text-center text-sm text-brand-muted-soft">
+                No extra grants. This person gets exactly what their{" "}
+                {data.presetLabel} role grants.
+              </p>
             ) : (
               <ul className="divide-y divide-brand-rule">
                 {data.overrides.map((key) => {
@@ -345,15 +319,13 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                     .flatMap((m) => m.keys)
                     .find((k) => k.key === key)
                   return (
-                    <li
-                      key={key}
-                      className="px-5 py-3 flex items-center gap-3"
-                    >
+                    <li key={key} className="flex items-center gap-3 px-5 py-3">
+                      <CircleCheck className="size-4 shrink-0 text-emerald-700" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] text-brand-ink">
+                        <p className="text-sm text-brand-ink">
                           {entry?.label ?? key}
                         </p>
-                        <p className="text-[11px] text-brand-muted-soft font-mono">
+                        <p className="font-mono text-[11px] text-brand-muted-soft">
                           {key}
                         </p>
                       </div>
@@ -361,10 +333,11 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-7 shrink-0 text-[11px] text-brand-muted-soft hover:text-red-600"
                           onClick={async () => {
                             if (
                               !confirm(
-                                `Revoke ${key}? ${data.name || data.email} will lose this access.`
+                                `Revoke ${key}? ${data.name || data.email} will lose this access.`,
                               )
                             )
                               return
@@ -378,7 +351,7 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                                   action: "revoke",
                                   key,
                                 }),
-                              }
+                              },
                             )
                             if (!r.ok) {
                               const j = await r.json().catch(() => ({}))
@@ -391,9 +364,8 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                             })
                             router.refresh()
                           }}
-                          className="h-7 text-[12px] text-brand-muted-soft hover:text-red-600"
                         >
-                          <Trash2 className="size-3 mr-1" />
+                          <Trash2 className="mr-1.5 h-3 w-3" />
                           Revoke
                         </Button>
                       )}
@@ -402,42 +374,249 @@ export function MemberDetailClient({ userId }: { userId: string }) {
                 })}
               </ul>
             )}
-          </div>
+          </Card>
 
-          {/* Permission matrix */}
-          <PermissionMatrix
-            data={data}
-            canManage={canManage}
-            userId={userId}
-            presetSet={presetSet}
-            overrideSet={overrideSet}
-            onChanged={() => {
-              queryClient.invalidateQueries({
-                queryKey: ["member-permissions", userId],
-              })
-              router.refresh()
-            }}
-          />
-        </TabsContent>
-
-        <TabsContent value="activity" className="mt-6">
-          <div className="rounded-lg border border-brand-rule bg-brand-card p-5 text-center">
-            <History className="size-6 mx-auto text-brand-muted-soft" />
-            <p className="mt-2 text-[13px] text-brand-muted-soft">
-              Recent activity appears here in the next phase.
+          {/* Effective access */}
+          <Card className="border-brand-rule bg-brand-card p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+              Effective access
             </p>
-          </div>
-        </TabsContent>
+            <div className="mt-3 grid gap-4 sm:grid-cols-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
+                  <Check className="size-3.5 text-emerald-700" />
+                  Can view
+                </p>
+                {summary.canView.length > 0 ? (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    {summary.canView.slice(0, 5).join(", ")}
+                    {summary.canView.length > 5 &&
+                      ` +${summary.canView.length - 5} more`}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    Nothing.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
+                  <Check className="size-3.5 text-emerald-700" />
+                  Can do
+                </p>
+                {summary.canAct.length > 0 ? (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    {summary.canAct.slice(0, 5).join(", ")}
+                    {summary.canAct.length > 5 &&
+                      ` +${summary.canAct.length - 5} more`}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    Read-only access.
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-medium text-brand-ink">
+                  <X className="size-3.5 text-brand-muted-soft" />
+                  Cannot see
+                </p>
+                {summary.cannotSee.length > 0 ? (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    {summary.cannotSee.slice(0, 5).join(", ")}
+                    {summary.cannotSee.length > 5 &&
+                      ` +${summary.cannotSee.length - 5} more`}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-sm text-brand-muted-soft">
+                    Nothing is hidden.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
 
-        <TabsContent value="sessions" className="mt-6">
-          <div className="rounded-lg border border-brand-rule bg-brand-card p-5 text-center">
-            <ShieldCheck className="size-6 mx-auto text-brand-muted-soft" />
-            <p className="mt-2 text-[13px] text-brand-muted-soft">
-              Active sessions appear here in the next phase.
+        {/* RIGHT (1/3) — actions */}
+        <div className="space-y-4">
+          <Card className="border-brand-rule bg-brand-card p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+              Actions
             </p>
+            <div className="mt-3 space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => setMatrixOpen(true)}
+              >
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                Edit all permissions
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => setActivityOpen(true)}
+              >
+                <History className="mr-2 h-4 w-4" />
+                View audit trail
+              </Button>
+              <Separator className="bg-brand-rule" />
+              {canManage && data.role !== "owner" && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-amber-700 hover:text-amber-800"
+                    onClick={() => {
+                      setSuspendTarget({
+                        id: data.userId,
+                        name: data.name ?? "",
+                        email: data.email,
+                      })
+                      setSuspendOpen(true)
+                    }}
+                  >
+                    <ShieldOff className="mr-2 h-4 w-4" />
+                    Suspend from workspace
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setTransferTarget({
+                        id: data.userId,
+                        name: data.name ?? "",
+                        email: data.email,
+                      })
+                      setTransferOpen(true)
+                    }}
+                  >
+                    <ArrowLeftRight className="mr-2 h-4 w-4" />
+                    Transfer ownership
+                  </Button>
+                </>
+              )}
+            </div>
+          </Card>
+
+          <Card className="border-brand-rule bg-brand-card p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+              Details
+            </p>
+            <dl className="mt-3 space-y-2.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-brand-muted-soft">User ID</dt>
+                <dd className="font-mono text-[11px] text-brand-ink truncate">
+                  {data.userId.slice(0, 12)}…
+                </dd>
+              </div>
+              <Separator className="bg-brand-rule" />
+              <div className="flex justify-between gap-3">
+                <dt className="text-brand-muted-soft">Role ID</dt>
+                <dd className="font-mono text-[11px] text-brand-ink">
+                  {data.role}
+                </dd>
+              </div>
+              <Separator className="bg-brand-rule" />
+              <div className="flex justify-between gap-3">
+                <dt className="text-brand-muted-soft">Permission keys</dt>
+                <dd className="font-mono text-[11px] text-brand-ink">
+                  {data.effectiveKeys.length} / {ALL_PERMISSION_KEYS.length}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+        </div>
+      </div>
+
+      {/* ── Danger zone ─────────────────────────────────────── */}
+      {canManage && data.role !== "owner" && (
+        <Card className="border-red-200 bg-red-50/40 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-900">
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-red-900">
+                Danger zone
+              </p>
+              <p className="mt-1 text-sm text-red-900/80">
+                Removing {data.name || data.email} ends their access to this
+                workspace immediately. Their driver records are detached, their
+                sessions in this workspace are killed, and the membership row is
+                deleted. The action is recorded in the audit log.
+              </p>
+            </div>
+            <RemoveMemberAction
+              memberId={data.userId}
+              name={data.name ?? data.email}
+              onDone={() => {
+                router.push("/settings/team")
+              }}
+            />
           </div>
-        </TabsContent>
-      </Tabs>
+        </Card>
+      )}
+
+      {/* ── Footer ──────────────────────────────────────────── */}
+      <div className="flex items-center justify-between text-xs text-brand-muted-soft">
+        <Link
+          href="/settings/team"
+          className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
+        >
+          <ArrowLeft className="h-3 w-3" />
+          Back to members
+        </Link>
+        <Link
+          href="/settings/team/invitations"
+          className="inline-flex items-center gap-1.5 transition-colors hover:text-brand-ink"
+        >
+          Invitations
+          <ChevronRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      {/* ── Dialogs & sheets ────────────────────────────────── */}
+      <Sheet open={matrixOpen} onOpenChange={setMatrixOpen}>
+        <SheetContent side="right" className="w-[560px] max-w-[90vw] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Permission matrix</SheetTitle>
+            <SheetDescription>
+              Every one of the {ALL_PERMISSION_KEYS.length} permission keys.
+              {overrideSet.size > 0 &&
+                ` ${overrideSet.size} custom grant${
+                  overrideSet.size === 1 ? "" : "s"
+                } will show as overrides.`}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4">
+            <PermissionMatrix
+              data={data}
+              canManage={canManage}
+              userId={userId}
+              presetSet={presetSet}
+              overrideSet={overrideSet}
+              onChanged={() => {
+                queryClient.invalidateQueries({
+                  queryKey: ["member-permissions", userId],
+                })
+                router.refresh()
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={activityOpen} onOpenChange={setActivityOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Audit trail</DialogTitle>
+            <DialogDescription>
+              Every recorded change to this member&apos;s access.
+            </DialogDescription>
+          </DialogHeader>
+          <ActivityList userId={userId} />
+        </DialogContent>
+      </Dialog>
 
       <GrantDialog
         open={grantOpen}
@@ -451,7 +630,203 @@ export function MemberDetailClient({ userId }: { userId: string }) {
           router.refresh()
         }}
       />
+
+      <SuspendMemberDialog
+        target={suspendTarget}
+        open={suspendOpen}
+        onOpenChange={setSuspendOpen}
+        onSubmit={async (memberId, reason, until) => {
+          const r = await suspendMemberAction({ memberId, reason, until })
+          if (r.ok) {
+            toast.success("Member suspended")
+            queryClient.invalidateQueries({
+              queryKey: ["member-permissions", userId],
+            })
+            router.refresh()
+          } else {
+            toast.error("Failed to suspend")
+          }
+        }}
+        pending={false}
+      />
+
+      <TransferOwnershipDialog
+        target={transferTarget}
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
+        onConfirm={async (newOwnerMemberId) => {
+          try {
+            const r = await transferOwnershipAction({
+              newOwnerMemberId,
+            })
+            if (!r.ok) throw new Error("Failed")
+            toast.success("Ownership transferred", { duration: 5000 })
+            router.push("/settings/team")
+          } catch (e) {
+            toast.error((e as Error).message)
+          }
+        }}
+        pending={false}
+      />
     </div>
+  )
+}
+
+/** One KPI tile. */
+function Kpi({
+  label,
+  value,
+  sub,
+}: {
+  label: string
+  value: string
+  sub: string
+}) {
+  return (
+    <Card className="border-brand-rule bg-brand-card p-4">
+      <p className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+        {label}
+      </p>
+      <p className="mt-1 font-serif text-3xl text-brand-ink">{value}</p>
+      <p className="mt-1 text-[11px] text-brand-muted-soft">{sub}</p>
+    </Card>
+  )
+}
+
+/** Typed-confirmation remove, rendered as a button (danger zone pattern). */
+function RemoveMemberAction({
+  memberId,
+  name,
+  onDone,
+}: {
+  memberId: string
+  name: string
+  onDone: () => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [typed, setTyped] = React.useState("")
+  const mutation = useMutation({
+    mutationFn: () => removeMemberAction({ memberId }),
+    onSuccess: (r) => {
+      toast.success(
+        r.userDeleted
+          ? "Member removed and their account was deleted (last workspace)."
+          : "Member removed from this workspace.",
+        { duration: 5000 },
+      )
+      setOpen(false)
+      onDone()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+  return (
+    <>
+      <Button
+        variant="destructive"
+        className="shrink-0 gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 className="h-4 w-4" />
+        Remove from workspace
+      </Button>
+      <Kbd>type REMOVE to confirm</Kbd>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (!o) setTyped("")
+          setOpen(o)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove {name}?</DialogTitle>
+            <DialogDescription>
+              They lose access to this workspace immediately. Their account is
+              kept so you can re-invite them later.
+            </DialogDescription>
+          </DialogHeader>
+          <Field className="my-2">
+            <FieldLabel>
+              Type <span className="font-mono">REMOVE</span> to confirm
+            </FieldLabel>
+            <Input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder="REMOVE"
+              className="font-mono"
+            />
+          </Field>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mutation.mutate()}
+              disabled={typed !== "REMOVE" || mutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {mutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+/** Audit events that reference this member. */
+function ActivityList({ userId }: { userId: string }) {
+  const q = useQuery({
+    queryKey: ["member-audit", userId],
+    queryFn: async () => {
+      const r = await fetch("/api/settings/workspace-recent-events")
+      if (!r.ok) throw new Error("Failed to load")
+      const j = (await r.json()) as {
+        events: Array<{
+          id: string
+          action: string
+          actorEmail: string
+          targetLabel: string | null
+          createdAt: string
+        }>
+      }
+      // Filter to events that name this member.
+      return j.events.filter(
+        (e) => e.targetLabel?.includes(userId) || e.targetLabel === userId,
+      )
+    },
+  })
+  if (q.isLoading) {
+    return (
+      <div className="flex justify-center py-8 text-brand-muted-soft">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    )
+  }
+  const events = q.data ?? []
+  if (events.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-brand-muted-soft">
+        No recorded access changes for this member yet.
+      </p>
+    )
+  }
+  return (
+    <ul className="divide-y divide-brand-rule max-h-[50vh] overflow-y-auto">
+      {events.map((e) => (
+        <li key={e.id} className="py-3">
+          <p className="text-sm text-brand-ink">
+            {e.action.replace(/^user\./, "").replace(/-/g, " ")}
+          </p>
+          <p className="mt-0.5 text-[11px] text-brand-muted-soft">
+            by {e.actorEmail} · {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+          </p>
+        </li>
+      ))}
+    </ul>
   )
 }
 
