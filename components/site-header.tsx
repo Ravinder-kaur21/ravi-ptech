@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { usePermissions } from "@/lib/permissions-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -59,6 +60,9 @@ export function SiteHeader({
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
 
+  const perms = usePermissions()
+  const canCreateLoad = perms.has("loads.create")
+
   // [SITE-HEADER] ⌘K / Ctrl+K to open command palette
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -74,6 +78,7 @@ export function SiteHeader({
   // [SITE-HEADER] "C" to quick-create a load (when not in an input)
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (!canCreateLoad) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = (e.target as HTMLElement)?.tagName
       if (t === "INPUT" || t === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return
@@ -84,7 +89,7 @@ export function SiteHeader({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
+  }, [canCreateLoad])
 
   const handleStopImpersonating = async () => {
     console.log("[SITE-HEADER] stopping impersonation")
@@ -129,13 +134,15 @@ export function SiteHeader({
           </Button>
 
           {/* + New load */}
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New load</span>
-          </Button>
+          {canCreateLoad && (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">New load</span>
+            </Button>
+          )}
 
           {/* Bell */}
           <Button

@@ -84,6 +84,9 @@ export type AuditAction =
   | "member.permission.grant"
   | "member.permission.revoke"
   | "member.remove"
+  | "role.create"
+  | "role.update"
+  | "role.delete"
 
 export type AuditTargetType =
   | "user"
@@ -104,6 +107,7 @@ export type AuditTargetType =
   | "driver"
   | "truck"
   | "workspace"
+  | "role"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }

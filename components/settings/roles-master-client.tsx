@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TeamSubNav } from "@/components/settings/team-subnav"
+import { CreateRoleDialog } from "@/components/settings/create-role-dialog"
 import {
   KeyRound,
   Plus,
@@ -135,13 +136,14 @@ export function RolesMasterClient() {
         </div>
 
         {canManage && (
-          <Button
-            onClick={() => router.push("/settings/roles/new")}
-            className="h-10 gap-1.5 rounded-full bg-brand-ink px-5 text-sm font-medium text-brand-cream hover:bg-brand-ink-soft shrink-0 self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            Create custom role
-          </Button>
+          <CreateRoleDialog
+            trigger={
+              <Button className="h-10 gap-1.5 rounded-full bg-brand-ink px-5 text-sm font-medium text-brand-cream hover:bg-brand-ink-soft shrink-0 self-start sm:self-auto">
+                <Plus className="h-4 w-4" />
+                Create custom role
+              </Button>
+            }
+          />
         )}
       </div>
 
