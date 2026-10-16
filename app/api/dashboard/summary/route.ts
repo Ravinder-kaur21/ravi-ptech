@@ -15,7 +15,6 @@ import { load, driver, invoice } from "@/lib/schema"
 import { requireTenant, TenantError } from "@/lib/dal"
 
 export const instant = false
-export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {

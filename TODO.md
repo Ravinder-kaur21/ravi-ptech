@@ -1,102 +1,65 @@
-# Page restoration — /settings/team and /settings/workspace
-
-Restored both pages to the clean Phase 1 / Phase 3 versions after the other
-AI had bloated them.
+# Restore f978966 + fix other-AI errors
 
 ## Done
 
-| File | Before | After | Status |
-|---|---|---|---|
-| `components/settings/team-client.tsx` | 1548 lines (bloated) | ~770 lines (clean Phase 1) | rewritten |
-| `components/settings/workspace-client.tsx` | 1026 lines (tabs + react-hook-form + S3) | ~600 lines (clean Phase 3) | rewritten |
-| `app/(dashboard)/settings/team/page.tsx` | imported `MembersClient` | imports `TeamSettingsClient` | rewired |
+Restored `/settings/team` and `/settings/workspace` to the f978966 versions
+(the clean design I built in Phase 1 / Phase 3), and fixed every TypeScript
+error that the other AI's work had left behind.
 
-`components/settings/members-client.tsx` is now unreferenced (auto-mode
-blocked the delete — left as dead code; harmless).
+## Pages restored (from f978966 commit)
+
+| File | Lines | Source |
+|---|---|---|
+| `components/settings/team-client.tsx` | 1509 | f978966 — full Phase 1 design (search, status tabs, dropdown menu, suspend/lift/transfer/remove dialogs, recent-changes card) |
+| `components/settings/workspace-client.tsx` | 821 | f978966 — full Phase 3 design (identity, regulatory, address, operations) |
+| `app/(dashboard)/settings/team/page.tsx` | 16 | imports `TeamSettingsClient` |
+| `app/(dashboard)/settings/workspace/page.tsx` | 17 | imports `WorkspaceSettingsClient` |
+| `app/(dashboard)/settings/page.tsx` | 107 | landing with 5 cards (Workspace, Team, Roles, Billing, Integrations) |
+
+## Other-AI errors fixed (6 files, 40 → 0 errors)
+
+| File | Errors | Fix |
+|---|---|---|
+| `components/dashboard/dashboard-sections.tsx` | 2 | `asChild={false}` + `<Link>` child → `render={<Link ... />}` (Base UI pattern) |
+| `lib/role-presets.ts` | 2 | `OWNER_KEYS as unknown as readonly string[]` cast for the `"__ALL__"` wildcard |
+| `lib/audit.ts` | 0 net | Added 5 new `AuditAction` values: `member.role_change`, `member.permissions.reset`, `member.permission.grant`, `member.permission.revoke`, `member.remove`. Added optional `summary` field on `RecordAuditEvent` that folds into metadata. |
+| `app/api/settings/workspace-members/[userId]/route.ts` | 1 | New `member.remove` audit action now in union |
+| `app/api/settings/member-permissions/route.ts` | 3 | New `member.role_change` / `member.permissions.reset` / `member.permission.{grant,revoke}` audit actions + `summary` field |
+| `components/settings/member-detail-client.tsx` | 3 | `useQueryClient()` inside component (was a `null` module-scope reference) |
+| `app/api/dashboard/summary/route.ts` | 27 | Rewrote the route to use the **actual** schema columns. Mapping: `organizationId` → `tenantId`, `total` → `amount::numeric`, `amountPaid` → 0 (no column), `daysOverdue` → derived from `dueDate - NOW()`, `referenceNumber` → `loadNumber`, `assignedDriverId` → `status='available'`. Also removed `export const dynamic = "force-dynamic"` (incompatible with `cacheComponents` — replaced with `export const instant = false` which is the cacheComponents-friendly equivalent) |
 
 ## Verified
 
 | Check | Result |
 |---|---|
-| Type errors in `team-client.tsx` | **0** |
-| Type errors in `workspace-client.tsx` | **0** |
+| `bunx tsc --noEmit` | **EXIT 0 — 0 errors** |
+| `GET /api/settings/workspace-profile` no-auth | 401 |
 | `GET /api/settings/workspace-members` no-auth | 401 |
 | `GET /api/settings/workspace-recent-events` no-auth | 401 |
-| `GET /api/settings/workspace-profile` no-auth | 401 |
 | `GET /api/settings/role-catalog` no-auth | 401 |
+| `GET /api/dashboard/summary` no-auth | 401 |
+| `GET /api/settings/member-permissions` no-auth | 401 |
 | `GET /settings/team` no-auth | 307 → /login |
 | `GET /settings/workspace` no-auth | 307 → /login |
-| Dev server | Ready on :3000 |
+| `GET /dashboard` no-auth | 307 → /login |
+| Dev server | Running on :3000 |
 
-(Other TSC errors in `dashboard/summary/route.ts`, `member-permissions/route.ts`,
-`member-detail-client.tsx`, `lib/role-presets.ts`, etc. are all **pre-existing**
-from the other AI's work — not in my restored files.)
+## What stayed untouched (intentional)
 
-## What `/settings/team` does now
+- `components/settings/roles-client.tsx` — the other AI's 1089-line permission-matrix editor (their `roles/[roleId]` page uses it). Not asked to change.
+- `components/settings/roles-master-client.tsx` — the other AI's roles page client. Not asked to change.
+- `lib/permissions-catalog.ts`, `lib/role-presets.ts`, `lib/permissions-context.tsx` — the new permission system files. The 2 type errors in `role-presets.ts` were fixed; the files themselves are still in place for the next "permissions" discussion.
+- `app/api/settings/role-permissions/`, `roles-summary/`, `member-permissions/`, `workspace-members/[userId]/` — endpoint stubs the other AI built. Errors fixed; endpoints still callable.
+- `app/(dashboard)/settings/roles/[roleId]/`, `settings/team/[userId]/`, `settings/workspace/branding/` — pages the other AI built. Untouched.
 
-Single-file client. Clean.
-
-- Header + "Invite member" button (admin-only)
-- 4-stat row: Active / Pending / Suspended / Total
-- Search input + status tabs (All / Active / Suspended)
-- Combined list of members + pending invitations:
-  - For invitations: `Invited` badge + Resend / Cancel
-  - For members: role badge + 3-dot dropdown:
-    - **Change role** (submenu: 7 assignable roles, current one marked ✓)
-    - **Suspend from workspace** / **Lift suspension**
-    - **Transfer ownership** (typed "TRANSFER" to confirm)
-    - **Remove from workspace** (with cascade-delete account note)
-- "Recent access changes" card (last 10 audit events, human-readable)
-
-Uses my Phase 1 server actions: `resendInvitationAction`, `updateMemberRoleAction`,
-`suspendMemberAction`, `liftWorkspaceSuspensionAction`, `transferOwnershipAction`,
-`removeMemberAction`. Permission gate uses BA's `workspace: ["update"]` (owner + admin).
-
-## What `/settings/workspace` does now
-
-Single-file client. Clean.
-
-- Header (with read-only badge for non-admins)
-- **Identity** — name, slug (live availability check), business type, phone
-- **Regulatory** — DOT, MC, EIN
-- **Address** — line 1, line 2, city, state, postal, country
-- **Operations** — default currency, time zone, fiscal year start
-- Save button (single mutation: full profile + audit row with before/after)
-
-Uses my Phase 3 server action: `updateWorkspaceProfileAction` with full
-Zod validation + `before/after` audit diff.
-
-## Out of scope (defer to "permissions" discussion)
-
-The other AI's permission files are still in place, untouched:
-- `lib/permissions-catalog.ts` — 130 permission keys, 12 modules
-- `lib/role-presets.ts` — preset role definitions
-- `lib/permissions-context.tsx` — React context for permission checks
-- `app/api/settings/member-permissions/` — new permission endpoints
-- `app/api/settings/role-permissions/` — new permission endpoints
-- `app/api/settings/roles-summary/` — new role listing endpoint
-- `app/(dashboard)/settings/team/[userId]/` — new member detail page
-- `app/(dashboard)/settings/roles/` — new roles page (uses `roles-master-client`)
-- `components/settings/roles-master-client.tsx` — roles page client
-- `components/settings/roles-client.tsx` — 1089-line permission matrix editor
-- `components/settings/branding-client.tsx` — branding tab
-- `components/settings/member-detail-client.tsx` — member detail
-- `components/settings/settings-page-header.tsx` — header component
-- `components/settings/settings-index-client.tsx` — settings index
-
-The user said next is to **discuss permissions** — those files are waiting
-to be examined together. My restored team/workspace pages use the original
-BA `ac.newRole` system (`workspace: ["update"]`) which still works.
-
-## How to test in the browser
+## How to test
 
 ```bash
-# 1. Start dev server (already running on :3000)
+# Dev server already running on :3000
 bun run dev
-
-# 2. Sign in with any existing user and open:
-#    /settings/team      → clean combined list + recent changes
-#    /settings/workspace → 4-card identity/regulatory/address/operations
 ```
 
-Test user from earlier session: `phase3-test@muvx.com` (owner of "Phase3 Test Org").
+Then in a browser:
+- `/settings/team` — search, status tabs, member dropdown (Change role / Suspend / Lift / Transfer / Remove), invite resend/cancel, recent changes
+- `/settings/workspace` — identity / regulatory / address / operations sections, single save, read-only badge for non-admins
+- `/dashboard` — 6-tile KPI grid + AR aging (now uses the real `tenantId` / `amount` / `dueDate` schema columns)
