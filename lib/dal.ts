@@ -390,6 +390,41 @@ export const getTripsForOrg = async (tenantId: string) => {
     .orderBy(desc(trip.createdAt))
 }
 
+export const getTripsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      totalMiles: trip.totalMiles,
+      totalRevenue: trip.totalRevenue,
+      createdAt: trip.createdAt,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      driverId: trip.driverId,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      truckId: trip.truckId,
+      truckUnitNumber: truck.unitNumber,
+      trailerId: trip.trailerId,
+      trailerUnitNumber: trailer.unitNumber,
+    })
+    .from(trip)
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .where(eq(trip.tenantId, tenantId))
+    .orderBy(desc(trip.createdAt))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DRIVERS
 // ─────────────────────────────────────────────────────────────────────────────

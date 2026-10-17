@@ -1,11 +1,20 @@
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, Truck, MapPin, Calendar, DollarSign, User } from "lucide-react"
-import { getSession, getLoadById, getWorkspaceProfile } from "@/lib/dal"
+import { ChevronLeft, Truck, MapPin, Calendar, DollarSign, User, Send, Navigation, ArrowUpRight } from "lucide-react"
+import {
+  getSession,
+  getLoadById,
+  getWorkspaceProfile,
+  getDriversForOrg,
+  getTrucksForOrg,
+  getTrailersForOrg,
+} from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
 import { formatWorkspaceDate } from "@/lib/timezone"
 import { Card } from "@/components/ui/card"
 import { StarButton } from "@/components/load-star-button"
 import { StatusBadge } from "@/components/status-badge"
+import { DispatchLoadDialog } from "@/components/tms/dispatch-load-dialog"
 
 export const instant = false
 
@@ -20,10 +29,22 @@ export default async function LoadDetailPage({
   if (!tenantId) redirect("/onboarding")
 
   const { id } = await params
-  const load = await getLoadById(id, tenantId)
+  const [load, profile, perms, drivers, trucks, trailers] = await Promise.all([
+    getLoadById(id, tenantId),
+    getWorkspaceProfile(tenantId),
+    getEffectivePermissions(session.user.id, tenantId),
+    getDriversForOrg(tenantId),
+    getTrucksForOrg(tenantId),
+    getTrailersForOrg(tenantId),
+  ])
+
   if (!load) notFound()
 
-  const profile = await getWorkspaceProfile(tenantId)
+  const canDispatch =
+    perms.has("loads.dispatch") &&
+    (load.status === "booked")
+
+  const isDispatched = load.status === "dispatched" || load.status === "in_transit" || load.status === "delivered"
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
@@ -48,13 +69,35 @@ export default async function LoadDetailPage({
             {formatWorkspaceDate(load.createdAt, profile?.timeZone)}
           </p>
         </div>
-        <StarButton loadId={load.id} initial={load.isStarred ?? false} />
+
+        <div className="flex items-center gap-2">
+          {canDispatch && (
+            <DispatchLoadDialog
+              loadId={load.id}
+              loadNumber={load.loadNumber}
+              availableDrivers={drivers}
+              availableTrucks={trucks}
+              availableTrailers={trailers}
+            />
+          )}
+          {isDispatched && (
+            <Link
+              href="/trips"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors"
+            >
+              <Navigation className="size-3.5 text-brand-accent" />
+              Track in Trips
+              <ArrowUpRight className="size-3 text-brand-muted-soft" />
+            </Link>
+          )}
+          <StarButton loadId={load.id} initial={load.isStarred ?? false} />
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-brand-rule bg-brand-card p-5">
           <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft mb-3">
-            Route
+            Route & Locations
           </h2>
           <div className="space-y-3">
             <RouteRow
@@ -82,13 +125,13 @@ export default async function LoadDetailPage({
 
         <Card className="border-brand-rule bg-brand-card p-5">
           <h2 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] text-brand-muted-soft mb-3">
-            Details
+            Load Specifications
           </h2>
           <div className="space-y-3">
             <DetailRow
               icon={Truck}
-              label="Load type"
-              value={load.loadType || "—"}
+              label="Commodity"
+              value={load.commodity || "General Freight"}
             />
             <DetailRow
               icon={Calendar}
