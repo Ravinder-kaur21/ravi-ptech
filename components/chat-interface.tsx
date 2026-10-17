@@ -283,18 +283,18 @@ function renderPart(
     const toolCategory = toolName.includes("rate")
       ? "rate_auditor"
       : toolName.includes("driver") || toolName.includes("fleet")
-      ? "fleet"
-      : toolName.includes("plan")
-      ? "plan"
-      : toolName.includes("draft")
-      ? "dispatch"
-      : toolName.includes("email")
-      ? "gmail"
-      : toolName.includes("calendar")
-      ? "calendar"
-      : toolName.includes("search")
-      ? "search"
-      : "general";
+        ? "fleet"
+        : toolName.includes("plan")
+          ? "plan"
+          : toolName.includes("draft")
+            ? "dispatch"
+            : toolName.includes("email")
+              ? "gmail"
+              : toolName.includes("calendar")
+                ? "calendar"
+                : toolName.includes("search")
+                  ? "search"
+                  : "general";
 
     const entry: ToolCallEntry = {
       tool_name: toolName,
@@ -303,8 +303,8 @@ function renderPart(
         toolName === "delegateSubtask"
           ? `Sub-agent (${input?.agentRole || "Specialist"}): ${input?.subtaskTitle || "Task Execution"}`
           : toolName === "checkFleetAvailability"
-          ? `Checked fleet trucks in ${input?.location || "target corridor"}`
-          : `Executed ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}`,
+            ? `Checked fleet trucks in ${input?.location || "target corridor"}`
+            : `Executed ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}`,
       inputs: input,
       output:
         output?.findings || output?.result || output?.message || output,
@@ -460,7 +460,7 @@ export default function ChatInterface() {
       {/* Message list with auto-scroll */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <Conversation>
-          <ConversationContent className="max-w-3xl mx-auto w-full px-4 py-4 gap-4">
+          <ConversationContent className="max-w-4xl mx-auto w-full px-4 py-4 gap-4">
             {messages.map((message, mIdx) => {
               const isLastMessage = mIdx === messages.length - 1;
               const isAssistant = message.role === "assistant";
@@ -472,7 +472,7 @@ export default function ChatInterface() {
                         size="xs"
                         state={
                           isLastMessage &&
-                          (status === "submitted" || status === "streaming")
+                            (status === "submitted" || status === "streaming")
                             ? "streaming"
                             : "idle"
                         }
