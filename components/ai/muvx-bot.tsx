@@ -252,6 +252,7 @@ export const MuvxBot = memo(function MuvxBot({
             opacity="0.16"
             style={{
               transformOrigin: "160px 292px",
+              transition: "fill 600ms ease-in-out",
               animation:
                 mood === "happy"
                   ? "mote-shadow-fast 0.7s ease-in-out infinite"
@@ -284,8 +285,9 @@ export const MuvxBot = memo(function MuvxBot({
                   d="M160 68 C158 48, 138 40, 130 44 C124 47, 128 60, 146 63 C154 64, 158 66, 160 68 Z"
                   fill={palette.blush}
                   opacity="0.95"
+                  style={{ transition: "fill 600ms ease-in-out" }}
                 />
-                <circle cx="160" cy="68" r="3.5" fill={palette.blush} />
+                <circle cx="160" cy="68" r="3.5" fill={palette.blush} style={{ transition: "fill 600ms ease-in-out" }} />
               </g>
             )}
 
@@ -295,6 +297,7 @@ export const MuvxBot = memo(function MuvxBot({
               cy={isChild ? "160" : "156"}
               r={isChild ? "92" : "108"}
               fill={palette.body}
+              style={{ transition: "fill 600ms ease-in-out" }}
             />
 
             {/* Cheek Blushes (overlapping outer bottom edge of eyes) */}
@@ -305,6 +308,7 @@ export const MuvxBot = memo(function MuvxBot({
               ry={isChild ? "9" : "11"}
               fill={palette.blush}
               opacity="0.75"
+              style={{ transition: "fill 600ms ease-in-out" }}
             />
             <ellipse
               cx="212"
@@ -313,6 +317,7 @@ export const MuvxBot = memo(function MuvxBot({
               ry={isChild ? "9" : "11"}
               fill={palette.blush}
               opacity="0.75"
+              style={{ transition: "fill 600ms ease-in-out" }}
             />
 
             {/* Eyes Group */}
@@ -324,6 +329,7 @@ export const MuvxBot = memo(function MuvxBot({
                 rx={smile ? 22 : 26}
                 ry={smile ? 14 : sleepy ? 8 : 30}
                 fill={palette.eye}
+                style={{ transition: "fill 600ms ease-in-out" }}
               />
               <ellipse
                 cx="198"
@@ -331,6 +337,7 @@ export const MuvxBot = memo(function MuvxBot({
                 rx={smile ? 22 : 26}
                 ry={smile ? 14 : sleepy ? 8 : 30}
                 fill={palette.eye}
+                style={{ transition: "fill 600ms ease-in-out" }}
               />
 
               {/* Pupils and Catchlights - smoothly tracking mouse */}
@@ -347,12 +354,14 @@ export const MuvxBot = memo(function MuvxBot({
                     cy="154"
                     r={mood === "wow" ? 12 : 8}
                     fill={palette.pupil}
+                    style={{ transition: "fill 600ms ease-in-out" }}
                   />
                   <circle
                     cx="204"
                     cy="154"
                     r={mood === "wow" ? 12 : 8}
                     fill={palette.pupil}
+                    style={{ transition: "fill 600ms ease-in-out" }}
                   />
 
                   {/* Catchlight highlights */}
@@ -446,3 +455,61 @@ export const MuvxBot = memo(function MuvxBot({
 });
 
 export default MuvxBot;
+
+/**
+ * Animated Copilot Agent Bot for the sidebar navigation.
+ * Cycles dynamically through Muvx brand coats every 5 seconds.
+ */
+export const SIDEBAR_BOT_COATS: BotCoat[] = [
+  "ink",
+  "amber",
+  "emerald",
+  "indigo",
+  "rose",
+  "peach",
+  "grove",
+];
+
+export const SIDEBAR_BOT_COATS_ACTIVE: BotCoat[] = [
+  "cream",
+  "amber",
+  "emerald",
+  "indigo",
+  "rose",
+  "peach",
+];
+
+export function SidebarCopilotBot({
+  className,
+  isActive = false,
+}: {
+  className?: string;
+  isActive?: boolean;
+}) {
+  const [coatIndex, setCoatIndex] = useState(0);
+
+  const coats = isActive ? SIDEBAR_BOT_COATS_ACTIVE : SIDEBAR_BOT_COATS;
+
+  useEffect(() => {
+    // Automatically transition color every 4.5 seconds
+    const interval = setInterval(() => {
+      setCoatIndex((prev) => (prev + 1) % coats.length);
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, [coats.length]);
+
+  const currentCoat = coats[coatIndex % coats.length];
+
+  return (
+    <div
+      className={cn(
+        "size-[26px] flex items-center justify-center shrink-0 -my-0.5 [&_svg]:size-full! [&>div]:w-full! [&>div]:h-full!",
+        className
+      )}
+    >
+      <MuvxBot size="xs" coat={currentCoat} mood="idle" />
+    </div>
+  );
+}
+

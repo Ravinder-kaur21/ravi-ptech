@@ -51,7 +51,7 @@ import {
 import { PinnedRecent } from "@/components/pinned-recent"
 
 import { NavUser } from "@/components/nav-user"
-import { MuvxBot } from "@/components/ai/muvx-bot"
+import { SidebarCopilotBot } from "@/components/ai/muvx-bot"
 import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
@@ -332,9 +332,7 @@ export function AppSidebar({
                       )}
                     >
                       {item.href === "/copilot" ? (
-                        <div className="size-[26px] flex items-center justify-center shrink-0 -my-0.5 [&_svg]:size-full! [&>div]:w-full! [&>div]:h-full!">
-                          <MuvxBot size="xs" coat="ink" mood="idle" />
-                        </div>
+                        <SidebarCopilotBot isActive={isActive} />
                       ) : (
                         <item.icon className="size-5 shrink-0" />
                       )}
