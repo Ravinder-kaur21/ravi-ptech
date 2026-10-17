@@ -118,7 +118,7 @@ import {
   Route,
   HelpCircle,
 } from "lucide-react";
-import { MuvxBot, type BotMood } from "@/components/ai/muvx-bot";
+import { MuvxBot, type BotMood, type BotCoat } from "@/components/ai/muvx-bot";
 
 /** Default provider (OpenRouter preferred when API key is present). */
 const DEFAULT_PROVIDER = "openrouter";
@@ -641,6 +641,7 @@ export default function ChatInterface() {
   const [availableModels, setAvailableModels] = useState<AIModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [interactiveMood, setInteractiveMood] = useState<BotMood>("idle");
+  const [botCoat, setBotCoat] = useState<BotCoat>("ink");
 
   const { messages, sendMessage, status, error, addToolApprovalResponse } = useChat({
     id: "ai-chat",
@@ -716,7 +717,7 @@ export default function ChatInterface() {
           {/* Muvx Copilot Master Bot with Pointer Tracking and Mood Expressions */}
           <MuvxBot
             size="lg"
-            coat="ink"
+            coat={botCoat}
             mood={
               status === "submitted"
                 ? "think"
@@ -728,25 +729,54 @@ export default function ChatInterface() {
             className="mb-1 mx-auto"
           />
 
-          {/* Interactive Mood Selector - allows immediate live mood testing */}
-          <div className="flex items-center justify-center gap-1.5 pt-1">
-            {(["idle", "listen", "think", "happy", "wow", "sleep"] as BotMood[]).map(
-              (m) => (
+          {/* Interactive Mood Selector & Color Swatches */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <div className="flex items-center gap-1">
+              {(["idle", "listen", "think", "happy", "wow", "sleep"] as BotMood[]).map(
+                (m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setInteractiveMood(m)}
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all capitalize",
+                      interactiveMood === m && status !== "submitted" && status !== "streaming"
+                        ? "bg-brand-ink text-brand-cream shadow-2xs"
+                        : "bg-brand-card/80 border border-brand-rule text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40"
+                    )}
+                  >
+                    {m}
+                  </button>
+                )
+              )}
+            </div>
+
+            <div className="h-4 w-px bg-brand-rule hidden sm:block" />
+
+            {/* Coat Palette Swatches */}
+            <div className="flex items-center gap-1.5">
+              {[
+                { id: "ink", label: "Obsidian Ink", bg: "#141414" },
+                { id: "cream", label: "Warm Cream", bg: "#fff6ea" },
+                { id: "peach", label: "Coral Peach", bg: "#ffb199" },
+                { id: "grove", label: "Forest Grove", bg: "#163d36" },
+              ].map((c) => (
                 <button
-                  key={m}
+                  key={c.id}
                   type="button"
-                  onClick={() => setInteractiveMood(m)}
+                  title={c.label}
+                  aria-label={c.label}
+                  onClick={() => setBotCoat(c.id as BotCoat)}
                   className={cn(
-                    "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all capitalize",
-                    interactiveMood === m && status !== "submitted" && status !== "streaming"
-                      ? "bg-brand-ink text-brand-cream shadow-2xs"
-                      : "bg-brand-card/80 border border-brand-rule text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40"
+                    "size-4 rounded-full border transition-transform",
+                    botCoat === c.id
+                      ? "ring-2 ring-brand-accent ring-offset-1 scale-110 border-transparent"
+                      : "border-brand-rule hover:scale-105 opacity-80"
                   )}
-                >
-                  {m}
-                </button>
-              )
-            )}
+                  style={{ backgroundColor: c.bg }}
+                />
+              ))}
+            </div>
           </div>
 
           <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink pt-1">

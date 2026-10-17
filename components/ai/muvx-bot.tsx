@@ -281,34 +281,36 @@ export const MuvxBot = memo(function MuvxBot({
             {isChild && (
               <g className="child-sprout">
                 <path
-                  d="M160 52 C158 32, 138 24, 130 28 C124 31, 128 44, 146 47 C154 48, 158 50, 160 52 Z"
+                  d="M160 68 C158 48, 138 40, 130 44 C124 47, 128 60, 146 63 C154 64, 158 66, 160 68 Z"
                   fill={palette.blush}
                   opacity="0.95"
                 />
-                <circle cx="160" cy="52" r="3.5" fill={palette.blush} />
+                <circle cx="160" cy="68" r="3.5" fill={palette.blush} />
               </g>
             )}
 
-            {/* Main Blob Silhouette */}
-            <path
-              d="M160 46c62 0 112 46 118 108 6 58-28 112-86 128-18 5-28 8-32 8s-14-3-32-8c-58-16-92-70-86-128C48 92 98 46 160 46z"
+            {/* Mathematically Perfect Round Body Silhouette */}
+            <circle
+              cx="160"
+              cy={isChild ? "160" : "156"}
+              r={isChild ? "92" : "108"}
               fill={palette.body}
             />
 
             {/* Cheek Blushes (overlapping outer bottom edge of eyes) */}
             <ellipse
               cx="108"
-              cy="168"
-              rx="16"
-              ry="10"
+              cy={isChild ? "170" : "166"}
+              rx={isChild ? "14" : "17"}
+              ry={isChild ? "9" : "11"}
               fill={palette.blush}
               opacity="0.75"
             />
             <ellipse
-              cx="214"
-              cy="168"
-              rx="16"
-              ry="10"
+              cx="212"
+              cy={isChild ? "170" : "166"}
+              rx={isChild ? "14" : "17"}
+              ry={isChild ? "9" : "11"}
               fill={palette.blush}
               opacity="0.75"
             />
