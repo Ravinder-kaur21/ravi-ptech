@@ -66,7 +66,7 @@ type NavItem = {
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "AI Copilot", href: "/copilot", icon: Bot },
+  { label: "Copilot", href: "/copilot", icon: Bot },
   {
     label: "Loads",
     href: "/loads",
@@ -240,7 +240,7 @@ export function AppSidebar({
                 <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
                   <span className="truncate font-semibold text-brand-ink">
                     {org.name}
-                </span>
+                  </span>
                   <span className="truncate font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
                     /{org.slug}
                   </span>

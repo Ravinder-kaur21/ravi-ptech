@@ -71,7 +71,7 @@ export const SIDEBAR_NAV: NavGroup[] = [
       },
       {
         id: "copilot",
-        label: "AI Copilot",
+        label: "Copilot",
         href: "/copilot",
         icon: Bot,
         requiresKey: "workspace.profile.view",
