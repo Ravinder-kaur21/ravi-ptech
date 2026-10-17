@@ -136,6 +136,13 @@ export default async function LoadDetailPage({
             <DispatchLoadDialog
               loadId={load.id}
               loadNumber={load.loadNumber}
+              shipperRate={load.rate}
+              laneSummary={
+                load.originCity && load.destCity
+                  ? `${load.originCity}, ${load.originState} → ${load.destCity}, ${load.destState}`
+                  : undefined
+              }
+              equipmentRequirement={load.loadType || undefined}
               availableDrivers={drivers}
               availableTrucks={trucks}
               availableTrailers={trailers}
