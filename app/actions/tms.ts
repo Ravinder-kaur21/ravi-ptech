@@ -417,3 +417,100 @@ export async function updateTripStatusAction(raw: z.infer<typeof updateTripStatu
     return { ok: false, error: err.message || "Failed to update trip status" }
   }
 }
+
+// ─── 6. UPDATE LOAD STATUS ───────────────────────────────────────────────────
+
+const updateLoadStatusSchema = z.object({
+  loadId: z.string().min(1),
+  status: z.enum([
+    "available",
+    "booked",
+    "dispatched",
+    "in_transit",
+    "delivered",
+    "completed",
+    "cancelled",
+  ]),
+})
+
+export async function updateLoadStatusAction(raw: z.infer<typeof updateLoadStatusSchema>) {
+  try {
+    const ctx = await requireTenant()
+    await requireCatalogPermission("loads.update_status")
+
+    const parsed = updateLoadStatusSchema.safeParse(raw)
+    if (!parsed.success) {
+      return { ok: false, error: "Validation error" }
+    }
+
+    const { loadId, status } = parsed.data
+
+    const [existingLoad] = await db
+      .select()
+      .from(load)
+      .where(and(eq(load.id, loadId), eq(load.tenantId, ctx.tenantId)))
+      .limit(1)
+
+    if (!existingLoad) {
+      return { ok: false, error: "Load not found" }
+    }
+
+    await db
+      .update(load)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(load.id, loadId), eq(load.tenantId, ctx.tenantId)))
+
+    // If load is marked delivered or completed, and has an active trip, update trip to completed and release equipment
+    if (status === "delivered" || status === "completed") {
+      const [linkedTrip] = await db
+        .select()
+        .from(trip)
+        .where(and(eq(trip.loadId, loadId), eq(trip.tenantId, ctx.tenantId)))
+        .limit(1)
+
+      if (linkedTrip && linkedTrip.status !== "completed") {
+        await db
+          .update(trip)
+          .set({ status: "completed", endDate: new Date(), updatedAt: new Date() })
+          .where(and(eq(trip.id, linkedTrip.id), eq(trip.tenantId, ctx.tenantId)))
+
+        if (linkedTrip.truckId) {
+          await db
+            .update(truck)
+            .set({ status: "available", updatedAt: new Date() })
+            .where(and(eq(truck.id, linkedTrip.truckId), eq(truck.tenantId, ctx.tenantId)))
+        }
+        if (linkedTrip.trailerId) {
+          await db
+            .update(trailer)
+            .set({ status: "available", updatedAt: new Date() })
+            .where(and(eq(trailer.id, linkedTrip.trailerId), eq(trailer.tenantId, ctx.tenantId)))
+        }
+      }
+    }
+
+    // Audit log
+    const [actor] = await db
+      .select({ email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, ctx.userId))
+      .limit(1)
+
+    await recordAuditEvent({
+      actor: { id: ctx.userId, email: actor?.email ?? "(unknown)" },
+      action: "load.update",
+      target: { type: "load", id: loadId, label: existingLoad.loadNumber },
+      metadata: { tenantId: ctx.tenantId, previousStatus: existingLoad.status, newStatus: status },
+    })
+
+    revalidatePath("/loads")
+    revalidatePath(`/loads/${loadId}`)
+    revalidatePath("/trips")
+
+    return { ok: true, status }
+  } catch (err: any) {
+    if (err instanceof TenantError) return { ok: false, error: err.code }
+    return { ok: false, error: err.message || "Failed to update load status" }
+  }
+}
+

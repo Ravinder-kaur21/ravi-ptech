@@ -14,6 +14,10 @@ import {
   Printer,
   Clock,
   Phone,
+  ExternalLink,
+  ShieldCheck,
+  CreditCard,
+  TrendingUp,
 } from "lucide-react"
 import {
   getSession,
@@ -31,6 +35,9 @@ import { Badge } from "@/components/ui/badge"
 import { StarButton } from "@/components/load-star-button"
 import { StatusBadge } from "@/components/status-badge"
 import { DispatchLoadDialog } from "@/components/tms/dispatch-load-dialog"
+import { LoadStatusStepper } from "@/components/tms/load-status-stepper"
+import { GenerateInvoiceDialog } from "@/components/tms/generate-invoice-dialog"
+import { RecordExpenseDialog } from "@/components/tms/record-expense-dialog"
 import type { LoadStop } from "@/lib/tms-tax"
 
 export const instant = false
@@ -69,13 +76,29 @@ export default async function LoadDetailPage({
   }
 
   const canDispatch = perms.has("loads.dispatch") && load.status === "available"
+  const canUpdateStatus = perms.has("loads.update_status")
+  const canInvoice = perms.has("billing.create") && load.status === "delivered"
 
   const isDispatched =
     load.status === "dispatched" ||
     load.status === "in_transit" ||
-    load.status === "delivered"
+    load.status === "delivered" ||
+    load.status === "completed"
 
   const currencySymbol = load.currency === "CAD" ? "C$" : "$"
+
+  // Financial spread calculations
+  const shipperRateNum = parseFloat(load.rate || "0")
+  const carrierRateNum = parseFloat(load.carrierRate || "0")
+  const grossMargin = shipperRateNum > 0 ? shipperRateNum - carrierRateNum : 0
+  const marginPercentage = shipperRateNum > 0 ? (grossMargin / shipperRateNum) * 100 : 0
+
+  // Google Maps directions deep-link
+  const mapOrigin = load.originAddress || `${load.originCity}, ${load.originState}`
+  const mapDest = load.destAddress || `${load.destCity}, ${load.destState}`
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
+    mapOrigin
+  )}&destination=${encodeURIComponent(mapDest)}`
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-5xl mx-auto">
@@ -115,10 +138,10 @@ export default async function LoadDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Printable Documents */}
+          {/* Printable Documents with Thermal Receipt animation */}
           <Link
             href={`/loads/${load.id}/bol`}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors shadow-2xs"
           >
             <Printer className="size-3.5 text-brand-muted-soft" />
             Print BOL
@@ -126,12 +149,28 @@ export default async function LoadDetailPage({
 
           <Link
             href={`/loads/${load.id}/rate-con`}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors shadow-2xs"
           >
             <FileText className="size-3.5 text-brand-muted-soft" />
             Rate Con
           </Link>
 
+          {/* Quick Expense Logging on active trip */}
+          {load.trip && (
+            <RecordExpenseDialog
+              trips={[
+                {
+                  id: load.trip.id,
+                  tripNumber: load.trip.tripNumber,
+                  loadNumber: load.loadNumber,
+                },
+              ]}
+              defaultTripId={load.trip.id}
+              drivers={drivers}
+            />
+          )}
+
+          {/* Dispatch Dialog when Available */}
           {canDispatch && (
             <DispatchLoadDialog
               loadId={load.id}
@@ -151,12 +190,31 @@ export default async function LoadDetailPage({
             />
           )}
 
+          {/* Quick Invoice Dialog when Delivered */}
+          {canInvoice && (
+            <GenerateInvoiceDialog
+              deliveredLoads={[
+                {
+                  id: load.id,
+                  loadNumber: load.loadNumber,
+                  customerName: load.customerName,
+                  rate: load.rate,
+                  originCity: load.originCity,
+                  originState: load.originState,
+                  destCity: load.destCity,
+                  destState: load.destState,
+                },
+              ]}
+              preselectedLoadId={load.id}
+            />
+          )}
+
           {isDispatched && (
             <Link
               href="/trips"
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full border border-brand-rule text-xs font-medium text-brand-ink hover:bg-brand-cream-soft transition-colors shadow-2xs"
             >
-              <Navigation className="size-3.5 text-brand-accent" />
+              <Navigation className="size-3.5 text-[#d9622b]" />
               Track in Trips
               <ArrowUpRight className="size-3 text-brand-muted-soft" />
             </Link>
@@ -165,6 +223,114 @@ export default async function LoadDetailPage({
           <StarButton loadId={load.id} initial={load.isStarred ?? false} />
         </div>
       </div>
+
+      {/* ─── FREIGHT LIFECYCLE PROGRESS STEPPER ─── */}
+      <LoadStatusStepper
+        loadId={load.id}
+        currentStatus={load.status}
+        canUpdateStatus={canUpdateStatus}
+      />
+
+      {/* ─── ASSIGNED FLEET & DRIVER COCKPIT (When Dispatched) ─── */}
+      {load.trip && (
+        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-5 shadow-xs">
+          <div className="flex items-center justify-between border-b border-[#eee9df] dark:border-zinc-800/80 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Truck className="size-4 text-[#d9622b]" />
+              <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a8b8f]">
+                Active Dispatch Assignment · Trip {load.trip.tripNumber}
+              </h2>
+            </div>
+            <Link
+              href="/trips"
+              className="font-mono text-xs text-[#d9622b] hover:underline inline-flex items-center gap-1"
+            >
+              <span>View Trip Details</span>
+              <ArrowUpRight className="size-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Driver Card */}
+            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 flex items-start gap-3">
+              <div className="size-9 rounded-full bg-[#f7f3ec] dark:bg-zinc-800 flex items-center justify-center text-[#d9622b] shrink-0 font-bold text-xs">
+                {load.trip.driverFirstName?.[0] || "D"}
+                {load.trip.driverLastName?.[0] || ""}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Assigned Driver</p>
+                <p className="text-sm font-semibold text-[#16181d] dark:text-zinc-100 truncate">
+                  {load.trip.driverFirstName
+                    ? `${load.trip.driverFirstName} ${load.trip.driverLastName}`
+                    : "Unassigned Driver"}
+                </p>
+                {load.trip.driverLicenseNumber && (
+                  <p className="text-[11px] font-mono text-[#73757a] mt-0.5">
+                    CDL: {load.trip.driverLicenseNumber}
+                  </p>
+                )}
+                {load.trip.driverPhone && (
+                  <a
+                    href={`tel:${load.trip.driverPhone}`}
+                    className="inline-flex items-center gap-1 text-[11px] text-[#d9622b] hover:underline font-mono mt-1"
+                  >
+                    <Phone className="size-3" />
+                    <span>{load.trip.driverPhone}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Power Unit & Trailer */}
+            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 space-y-2">
+              <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Assigned Fleet Units</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#73757a]">Tractor Unit:</span>
+                <span className="font-mono font-semibold text-[#16181d] dark:text-zinc-100">
+                  {load.trip.truckUnitNumber ? `Unit #${load.trip.truckUnitNumber}` : "Outside Power"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#73757a]">Trailer:</span>
+                <span className="font-mono font-semibold text-[#16181d] dark:text-zinc-100">
+                  {load.trip.trailerUnitNumber
+                    ? `Trailer #${load.trip.trailerUnitNumber}`
+                    : "Carrier Trailer"}
+                </span>
+              </div>
+            </div>
+
+            {/* Financial Spread & Margin */}
+            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 space-y-2">
+              <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Gross Spread & Yield</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#73757a]">Shipper Revenue:</span>
+                <span className="font-mono font-bold text-[#16181d] dark:text-zinc-100">
+                  ${shipperRateNum.toFixed(2)}
+                </span>
+              </div>
+              {carrierRateNum > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#73757a]">Carrier Cost:</span>
+                  <span className="font-mono font-semibold text-[#8a8b8f]">
+                    - ${carrierRateNum.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              <div className="border-t border-[#eee9df] dark:border-zinc-800 pt-1.5 flex items-center justify-between text-xs font-semibold">
+                <span className="text-[#16181d] dark:text-zinc-200">Gross Margin:</span>
+                <span
+                  className={`font-mono ${
+                    grossMargin >= 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  ${grossMargin.toFixed(2)} ({marginPercentage.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ─── ROUTE & STOPS TIMELINE ─── */}
       <Card className="border-brand-rule bg-brand-card p-6">
@@ -175,11 +341,22 @@ export default async function LoadDetailPage({
               Route & Itinerary ({stops.length > 0 ? `${stops.length} Stops` : "Direct Route"})
             </h2>
           </div>
-          {load.miles && (
-            <span className="text-xs font-mono text-brand-muted-soft">
-              {load.miles} Miles
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {load.miles && (
+              <span className="text-xs font-mono text-brand-muted-soft">
+                {load.miles} Miles
+              </span>
+            )}
+            <a
+              href={googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-mono text-[#d9622b] hover:underline"
+            >
+              <span>Google Maps</span>
+              <ExternalLink className="size-3" />
+            </a>
+          </div>
         </div>
 
         {stops.length > 0 ? (
@@ -237,7 +414,12 @@ export default async function LoadDetailPage({
                         <p className="flex items-center gap-1 text-brand-muted-soft pt-1">
                           <Phone className="size-3" />
                           {stop.contactName ? `${stop.contactName} · ` : ""}
-                          {stop.contactPhone}
+                          <a
+                            href={`tel:${stop.contactPhone}`}
+                            className="hover:underline text-[#d9622b]"
+                          >
+                            {stop.contactPhone}
+                          </a>
                         </p>
                       )}
                       {stop.notes && (
