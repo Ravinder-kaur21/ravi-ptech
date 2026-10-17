@@ -239,7 +239,7 @@ export const QuestionOption = ({
   const handleClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       question.toggleValue(value);
-      onClick?.(event);
+      onClick?.(event as any);
     },
     [onClick, question, value]
   );

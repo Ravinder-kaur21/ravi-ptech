@@ -231,6 +231,7 @@ export default function ChatInterface() {
           </div>
         )}
 
+        <div className="w-full max-w-2xl text-center mb-6 space-y-1.5">
           <AgentOrb
             size="lg"
             state={status === "submitted" || status === "streaming" ? "thinking" : "idle"}
