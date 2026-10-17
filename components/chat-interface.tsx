@@ -153,31 +153,37 @@ function renderPart(
   return null;
 }
 
+import type { AIModelItem } from "@/components/ai/model-picker";
+
 export default function ChatInterface() {
   const [provider, setProvider] = useState<string>(DEFAULT_PROVIDER);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<AIModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
 
   const { messages, sendMessage, status, error } = useChat({
     id: "ai-chat",
   });
 
-  // Fetch available models on mount
+  // Fetch all dynamically available models from provider on mount
   useEffect(() => {
     fetch("/api/models")
       .then((r) => r.json())
-      .then((data: { provider?: string; models: { id: string }[] }) => {
+      .then((data: { provider?: string; models: AIModelItem[] }) => {
         if (data.provider) {
           setProvider(data.provider);
         }
-        const ids = data.models.map((m) => m.id);
-        setAvailableModels(ids);
-        if (ids.length > 0) {
-          setSelectedModel(ids[0]);
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setAvailableModels(data.models);
+          // Default to Claude 3.5 Sonnet, GPT-4o Mini, or first model in list
+          const preferred =
+            data.models.find((m) => m.id.includes("claude-3.5-sonnet"))?.id ||
+            data.models.find((m) => m.id.includes("gpt-4o-mini"))?.id ||
+            data.models[0].id;
+          setSelectedModel(preferred);
         }
       })
-      .catch(() => {
-        /* models will be empty — UI shows placeholder */
+      .catch((err) => {
+        console.error("Failed to load models:", err);
       });
   }, []);
 

@@ -14,13 +14,7 @@ import { Globe, Paperclip, Send } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ModelPicker, type AIModelItem } from "@/components/ai/model-picker";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 
@@ -36,8 +30,8 @@ function formatModelLabel(model: string): string {
 export interface AIInputSearchProps {
   placeholder?: string;
   searchLabel?: string;
-  /** Available model IDs to show in the selector. */
-  models: string[];
+  /** Available models (IDs or rich items) to show in the selector. */
+  models: (string | AIModelItem)[];
   /** Currently selected model (controlled). */
   selectedModel: string;
   /** Called when the user picks a different model. */
@@ -142,28 +136,15 @@ export default function AI_Input_Search({
 
           <div className="flex items-center justify-between rounded-b-xl bg-black/5 px-3 pt-1 pb-3 dark:bg-white/5">
             <div className="flex items-center gap-2">
-              {/* Model selector */}
-              <Select
-                value={selectedModel}
-                onValueChange={(v) => v && onModelChange(v)}
+              {/* Model selector with authentic Lobehub icons */}
+              <ModelPicker
+                models={models.map((m) =>
+                  typeof m === "string" ? { id: m, name: formatModelLabel(m) } : m
+                )}
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
                 disabled={models.length === 0}
-              >
-                <SelectTrigger className="h-8 w-[180px] border-none bg-transparent text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((model) => (
-                    <SelectItem key={model} value={model}>
-                      <div className="flex flex-col">
-                        <span>{formatModelLabel(model)}</span>
-                        <span className="text-xs text-muted-foreground/60">
-                          {model}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
 
               <label className="group/attach cursor-pointer rounded-lg bg-black/5 p-2 transition-transform has-focus-visible:ring-2 has-focus-visible:ring-sky-600 motion-safe:active:scale-[0.97] dark:bg-white/5 dark:has-focus-visible:ring-sky-500">
                 <input

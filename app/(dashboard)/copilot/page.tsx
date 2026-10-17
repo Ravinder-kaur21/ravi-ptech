@@ -4,7 +4,7 @@ import ChatInterface from "@/components/chat-interface";
 import { Sparkles, Bot, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-export const dynamic = "force-dynamic";
+export const instant = false;
 
 export default async function CopilotPage() {
   const session = await getSession();

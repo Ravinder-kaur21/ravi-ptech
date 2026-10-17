@@ -1,83 +1,121 @@
 import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
+export const instant = false;
 
-/** Curated list of verified, high-performance models available on OpenRouter */
-const DEFAULT_OPENROUTER_MODELS = [
-  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini (Fast)", provider: "openrouter" },
-  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "openrouter" },
-  { id: "deepseek/deepseek-chat", name: "DeepSeek V3", provider: "openrouter" },
-  { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "openrouter" },
-  { id: "openai/gpt-4o", name: "GPT-4o", provider: "openrouter" },
-];
-
-const DEFAULT_NIM_MODELS = [
-  { id: "meta/llama-3.3-70b-instruct", name: "NIM Llama 3.3 70B", provider: "nim" },
-  { id: "mistralai/mistral-large-2-instruct", name: "NIM Mistral Large 2", provider: "nim" },
-];
+// In-memory cache for models (10 minutes TTL)
+let cachedModels: any[] | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export async function GET() {
   const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
   const hasNim = !!process.env.NIM_API_KEY;
+  const now = Date.now();
+
+  // Return cached models if still valid
+  if (cachedModels && now - lastCacheTime < CACHE_TTL_MS) {
+    return NextResponse.json({
+      provider: hasOpenRouter ? "openrouter" : "nim",
+      models: cachedModels,
+    });
+  }
 
   try {
-    // If OpenRouter API key is available, attempt to fetch live model list or return curated models
     if (hasOpenRouter) {
-      try {
-        const res = await fetch("https://openrouter.ai/api/v1/models", {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          },
-          next: { revalidate: 3600 },
-        });
+      const res = await fetch("https://openrouter.ai/api/v1/models", {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://app.muvx.com",
+          "X-Title": "Muvx TMS",
+        },
+      });
 
-        if (res.ok) {
-          const data = await res.json();
-          // Filter to top popular/relevant models
-          const allModels = Array.isArray(data.data) ? data.data : [];
-          const popularIds = new Set(DEFAULT_OPENROUTER_MODELS.map((m) => m.id));
-          
-          const filtered = allModels
-            .filter((m: any) => popularIds.has(m.id) || m.id.startsWith("anthropic/") || m.id.startsWith("openai/gpt-4") || m.id.startsWith("deepseek/"))
-            .slice(0, 15)
-            .map((m: any) => ({
-              id: m.id,
-              name: m.name || m.id,
-              provider: "openrouter",
-            }));
-
-          if (filtered.length > 0) {
-            return NextResponse.json({
-              provider: "openrouter",
-              models: filtered,
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("[API/MODELS] Failed to fetch live OpenRouter models, using defaults:", e);
+      if (!res.ok) {
+        throw new Error(`OpenRouter API responded with status ${res.status}`);
       }
+
+      const data = await res.json();
+      const rawList = Array.isArray(data.data) ? data.data : [];
+
+      // Priority prefixes for ranking models cleanly in UI
+      const priorityOrder = [
+        "anthropic/",
+        "openai/",
+        "deepseek/",
+        "google/",
+        "meta-llama/",
+        "mistralai/",
+        "qwen/",
+        "cohere/",
+        "x-ai/",
+      ];
+
+      const mapped = rawList.map((m: any) => ({
+        id: m.id as string,
+        name: (m.name as string) || m.id,
+        description: (m.description as string) || "",
+        context_length: m.context_length ? Number(m.context_length) : undefined,
+        pricing: m.pricing,
+        provider: "openrouter",
+      }));
+
+      // Sort: prioritize major flagship models, then alphabetical
+      mapped.sort((a: any, b: any) => {
+        const aIndex = priorityOrder.findIndex((p) => a.id.startsWith(p));
+        const bIndex = priorityOrder.findIndex((p) => b.id.startsWith(p));
+        if (aIndex !== -1 && bIndex !== -1) {
+          if (aIndex !== bIndex) return aIndex - bIndex;
+          return a.name.localeCompare(b.name);
+        }
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      cachedModels = mapped;
+      lastCacheTime = now;
 
       return NextResponse.json({
         provider: "openrouter",
-        models: DEFAULT_OPENROUTER_MODELS,
+        models: mapped,
       });
     }
 
     if (hasNim) {
-      return NextResponse.json({
-        provider: "nim",
-        models: DEFAULT_NIM_MODELS,
+      const res = await fetch("https://integrate.api.nvidia.com/v1/models", {
+        headers: {
+          Authorization: `Bearer ${process.env.NIM_API_KEY}`,
+        },
       });
+
+      if (res.ok) {
+        const data = await res.json();
+        const rawList = Array.isArray(data.data) ? data.data : [];
+        const mapped = rawList.map((m: any) => ({
+          id: m.id,
+          name: m.id.replace(/^meta\//, "Meta ").replace(/-/g, " "),
+          provider: "nim",
+        }));
+
+        cachedModels = mapped;
+        lastCacheTime = now;
+
+        return NextResponse.json({
+          provider: "nim",
+          models: mapped,
+        });
+      }
     }
 
-    // Fallback: return default models even if keys aren't loaded yet in dev
     return NextResponse.json({
       provider: "openrouter",
-      models: DEFAULT_OPENROUTER_MODELS,
+      models: [],
+      error: "No AI provider API key configured",
     });
   } catch (err: any) {
+    console.error("[API/MODELS] Failed to fetch live models from provider:", err);
     return NextResponse.json(
-      { error: err.message || "Failed to retrieve models" },
+      { error: err.message || "Failed to retrieve models from provider" },
       { status: 500 }
     );
   }
