@@ -460,7 +460,7 @@ export default function ChatInterface() {
       {/* Message list with auto-scroll */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <Conversation>
-          <ConversationContent className="max-w-2xl mx-auto w-full px-4 py-4 gap-4">
+          <ConversationContent className="max-w-3xl mx-auto w-full px-4 py-4 gap-4">
             {messages.map((message, mIdx) => {
               const isLastMessage = mIdx === messages.length - 1;
               const isAssistant = message.role === "assistant";
