@@ -287,3 +287,154 @@
 .animate-counter { animation: counter 0.5s ease-out forwards; }
 .animate-float { animation: float 3s ease-in-out infinite; }
 .animate-spin-slow { animation: spin-slow 4s linear infinite; }
+
+/* ─── Muvx Bot (Organic Vector Agent with Pointer Physics) ────── */
+.muvx-bot {
+  --pupil-x: 0px;
+  --pupil-y: 0px;
+  position: relative;
+  aspect-ratio: 1;
+}
+
+.muvx-bot svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.muvx-bot .bot-body {
+  transform-origin: 160px 168px;
+  animation: mote-idle 3.6s ease-in-out infinite;
+}
+
+.muvx-bot .bot-shadow {
+  transform-origin: 160px 292px;
+  animation: mote-shadow 3.6s ease-in-out infinite;
+}
+
+.muvx-bot .bot-lid {
+  transform-origin: center;
+  transform: scaleY(0);
+  transition: transform 200ms ease;
+}
+
+.muvx-bot .bot-pupil {
+  transform: translate(var(--pupil-x), var(--pupil-y));
+  transition: transform 180ms ease;
+}
+
+.muvx-bot[data-mood="listen"] .bot-body {
+  animation: mote-listen 2.4s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="happy"] .bot-body {
+  animation: mote-happy 0.7s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="happy"] .bot-shadow {
+  animation: mote-shadow-fast 0.7s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="wow"] .bot-body {
+  animation: mote-wow 0.9s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="sleep"] .bot-body {
+  animation: mote-sleep 4.8s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="sleep"] .bot-lid {
+  transform: scaleY(1);
+}
+
+.muvx-bot[data-mood="think"] .bot-body {
+  animation: mote-think 2.2s ease-in-out infinite;
+}
+
+.muvx-bot[data-mood="think"] .bot-pupil {
+  transform: translate(2px, -6px);
+}
+
+.bot-dots {
+  display: flex;
+  gap: 6px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+}
+
+.bot-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.25;
+  transform: translateY(0);
+}
+
+.muvx-bot-wrap[data-mood="think"] .bot-dots span {
+  animation: dot-pulse 1.05s ease-in-out infinite;
+}
+
+.muvx-bot-wrap[data-mood="think"] .bot-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.muvx-bot-wrap[data-mood="think"] .bot-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes mote-idle {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(-8px) scale(1.02, 0.98); }
+}
+
+@keyframes mote-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 0.18; }
+  50% { transform: scaleX(0.86); opacity: 0.12; }
+}
+
+@keyframes mote-listen {
+  0%, 100% { transform: translateY(4px) scale(1.04, 0.96); }
+  50% { transform: translateY(0) scale(1.06, 0.94); }
+}
+
+@keyframes mote-happy {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  40% { transform: translateY(-16px) scale(0.94, 1.08); }
+  70% { transform: translateY(2px) scale(1.08, 0.92); }
+}
+
+@keyframes mote-shadow-fast {
+  0%, 100% { transform: scaleX(1); opacity: 0.16; }
+  40% { transform: scaleX(0.72); opacity: 0.08; }
+}
+
+@keyframes mote-wow {
+  0%, 100% { transform: scale(1, 1); }
+  40% { transform: scale(0.92, 1.1); }
+}
+
+@keyframes mote-sleep {
+  0%, 100% { transform: translateY(6px) scale(1.06, 0.92) rotate(-2deg); }
+  50% { transform: translateY(2px) scale(1.08, 0.9) rotate(2deg); }
+}
+
+@keyframes mote-think {
+  0%, 100% { transform: rotate(-3deg) scale(1, 1); }
+  50% { transform: rotate(3deg) scale(1.01, 0.99); }
+}
+
+@keyframes dot-pulse {
+  0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .muvx-bot .bot-body,
+  .muvx-bot .bot-shadow,
+  .bot-dots span {
+    animation: none !important;
+  }
+}
+

@@ -50,7 +50,7 @@ import {
 import { PinnedRecent } from "@/components/pinned-recent"
 
 import { NavUser } from "@/components/nav-user"
-import { AgentOrb } from "@/components/ai/agent-orb"
+import { MuvxBot } from "@/components/ai/muvx-bot"
 import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
@@ -318,7 +318,7 @@ export function AppSidebar({
                       )}
                     >
                       {item.href === "/copilot" ? (
-                        <AgentOrb size="sm" className="mr-0.5" />
+                        <MuvxBot size="xs" coat="grove" mood="idle" className="mr-0.5" />
                       ) : (
                         <item.icon className="size-[18px]" />
                       )}

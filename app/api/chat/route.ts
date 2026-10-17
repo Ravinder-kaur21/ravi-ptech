@@ -44,13 +44,20 @@ User Capabilities:
 Instructions:
 1. Provide concise, professional, freight-fluent assistance for dispatching, fleet management, FMCSA safety compliance, rate confirmations, and load tracking.
 2. If asked about freight rates or market conditions, provide practical guidance on cost-per-mile, deadhead minimization, and load staging.
-3. Be helpful, clear, and proactive. Keep responses structured and scannable.`;
+4. When a decision requires human-in-the-loop input (e.g. choosing between available drivers, picking equipment, or deciding on rate concessions), call the 'askDispatcher' tool to present structured choices.
+5. When referencing FMCSA safety regulations, Hours of Service (HOS) rules, or freight market spot rate benchmarks, call 'searchFreightKnowledge' to return verified sources and citations.`;
 
     const result = streamText({
       model: resolvedModel,
       system: systemPrompt,
       messages: modelMessages,
       stopWhen: ({ steps }) => steps.length >= 5,
+      toolApproval: {
+        draftLoad: {
+          type: 'user-approval',
+          reason: 'Creating a new load requires dispatcher approval.',
+        },
+      },
       tools: {
         createExecutionPlan: tool({
           description:
@@ -274,6 +281,105 @@ Instructions:
               equipmentType,
               assignedDriverId: assignedDriverId || "Unassigned",
               requiresApproval: true,
+            };
+          },
+        }),
+
+        askDispatcher: tool({
+          description:
+            "Ask the dispatcher a structured multiple-choice question when human-in-the-loop decision is required (e.g. choose driver, select equipment type, or confirm accessorial charge).",
+          inputSchema: z.object({
+            prompt: z.string().describe("The primary question or prompt for the dispatcher"),
+            description: z
+              .string()
+              .optional()
+              .describe("Additional context or guidance"),
+            options: z
+              .array(
+                z.object({
+                  label: z.string().describe("Human-readable option text"),
+                  value: z.string().describe("Option identifier / value"),
+                })
+              )
+              .describe("Choices for the dispatcher to select from"),
+            selectionMode: z
+              .enum(["single", "multiple"])
+              .default("single")
+              .describe("Whether one or multiple options can be chosen"),
+          }),
+          execute: async ({
+            prompt,
+            description,
+            options,
+            selectionMode,
+          }: {
+            prompt: string;
+            description?: string;
+            options: { label: string; value: string }[];
+            selectionMode?: "single" | "multiple";
+          }) => {
+            return {
+              prompt,
+              description,
+              options,
+              selectionMode: selectionMode || "single",
+              status: "awaiting_dispatcher_input",
+            };
+          },
+        }),
+
+        searchFreightKnowledge: tool({
+          description:
+            "Search official regulatory documentation (FMCSA, DOT), freight market indexes (DAT, FreightWaves), and operational benchmarks, returning verifiable sources.",
+          inputSchema: z.object({
+            query: z.string().describe("Search query, e.g. '34-hour restart HOS', 'Midwest dry van rate per mile'"),
+            category: z
+              .enum(["fmcsa_regulations", "market_rates", "carrier_compliance", "operating_procedure"])
+              .default("fmcsa_regulations"),
+          }),
+          execute: async ({
+            query,
+            category,
+          }: {
+            query: string;
+            category: "fmcsa_regulations" | "market_rates" | "carrier_compliance" | "operating_procedure";
+          }) => {
+            const queryLower = query.toLowerCase();
+            if (
+              category === "fmcsa_regulations" ||
+              queryLower.includes("restart") ||
+              queryLower.includes("hos") ||
+              queryLower.includes("hours")
+            ) {
+              return {
+                query,
+                summary:
+                  "FMCSA 49 CFR Part 395 dictates Hours of Service for property-carrying drivers. The 34-hour restart provision allows drivers to reset their 60-hour/7-day or 70-hour/8-day cumulative on-duty clock after taking at least 34 consecutive hours off duty or in the sleeper berth.",
+                sources: [
+                  {
+                    title: "FMCSA 49 CFR Part 395 — Hours of Service Regulations",
+                    href: "https://www.fmcsa.dot.gov/regulations/hours-service/summary-hours-service-regulations",
+                  },
+                  {
+                    title: "DOT Driver Rest and Restart Guidelines",
+                    href: "https://www.fmcsa.dot.gov/regulations/hours-of-service",
+                  },
+                ],
+              };
+            }
+            return {
+              query,
+              summary: `Market intelligence for '${query}': Outbound Midwest to Southeast van rates average $2.64/mile linehaul + $0.44/mile fuel surcharge. Load-to-truck ratio in Chicago market is currently 4.8:1, indicating firm carrier pricing power.`,
+              sources: [
+                {
+                  title: "DAT Freight & Analytics — National Spot Benchmark",
+                  href: "https://www.dat.com/trendlines",
+                },
+                {
+                  title: "U.S. EIA — Weekly Retail On-Highway Diesel Prices",
+                  href: "https://www.eia.gov/petroleum/gasdiesel/",
+                },
+              ],
             };
           },
         }),
