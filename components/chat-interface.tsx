@@ -39,7 +39,7 @@ import {
 import { Attachments, Attachment } from "@/components/ai-elements/attachments";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Sparkles } from "lucide-react";
 
 /** Default provider (OpenRouter preferred when API key is present). */
 const DEFAULT_PROVIDER = "openrouter";
@@ -221,26 +221,76 @@ export default function ChatInterface() {
     sendWithProvider(text, { webSearch: false, model: selectedModel });
   };
 
+  if (messages.length === 0) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        {error && (
+          <div className="mb-4 w-full max-w-2xl rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
+            {error.message}
+          </div>
+        )}
+
+        <div className="w-full max-w-2xl text-center mb-6 space-y-1.5">
+          <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-brand-accent-tint text-brand-accent mb-2 shadow-2xs border border-brand-accent/15">
+            <Sparkles className="size-5" />
+          </div>
+          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
+            What can I help you dispatch today?
+          </h1>
+          <p className="text-xs text-brand-muted-soft max-w-md mx-auto">
+            Autonomous freight intelligence, rate confirmation analysis, FMCSA safety checks, and load dispatching.
+          </p>
+        </div>
+
+        {/* Centered AI Input with Live Model Picker */}
+        <div className="w-full max-w-2xl">
+          <AI_Input_Search
+            models={availableModels}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            onSubmit={sendWithProvider}
+            onFilesSelected={handleFiles}
+            placeholder="Ask anything, draft a load, or paste rate con details..."
+            searchLabel="Web Search"
+          />
+        </div>
+
+        {/* Suggestion Chips */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2 max-w-2xl px-2">
+          {[
+            "Draft load from rate confirmation",
+            "FMCSA HOS 34-hour restart rules",
+            "Calculate break-even cost per mile",
+            "Find available trucks in Midwest",
+          ].map((promptText) => (
+            <button
+              key={promptText}
+              type="button"
+              onClick={() => handleSuggestionClick(promptText)}
+              className="rounded-full border border-brand-rule bg-brand-card px-3 py-1.5 text-xs text-brand-muted-soft transition-colors hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
+            >
+              {promptText}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 text-sm text-destructive">
+        <div className="px-4 py-2 text-sm text-destructive shrink-0">
           {error.message}
         </div>
       )}
 
       {/* Message list with auto-scroll */}
-      <Conversation>
-        <ConversationContent>
-          {messages.length === 0 ? (
-            <ConversationEmptyState
-              icon={<MessageSquare className="size-12" />}
-              title="Start a conversation"
-              description="Choose a model, then ask a question."
-            />
-          ) : (
-            messages.map((message) => (
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Conversation>
+          <ConversationContent>
+            {messages.map((message) => (
               <Message key={message.id} from={message.role}>
                 <MessageContent>
                   {message.parts.map((part, i) =>
@@ -248,51 +298,30 @@ export default function ChatInterface() {
                   )}
                 </MessageContent>
               </Message>
-            ))
-          )}
+            ))}
 
-          {/* Thinking indicator while the model is preparing a response */}
-          {status === "submitted" && (
-            <Message from="assistant">
-              <MessageContent>
-                <Shimmer duration={2}>Thinking…</Shimmer>
-              </MessageContent>
-            </Message>
-          )}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
+            {/* Thinking indicator while the model is preparing a response */}
+            {status === "submitted" && (
+              <Message from="assistant">
+                <MessageContent>
+                  <Shimmer duration={2}>Thinking…</Shimmer>
+                </MessageContent>
+              </Message>
+            )}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+      </div>
 
-      {/* Suggestions + input */}
-      <div className="border-t bg-muted/10 p-4">
-        {messages.length > 0 && status !== "streaming" && (
-          <div className="mb-3">
-            <Suggestions>
-              <Suggestion
-                suggestion="What are the key features of the AI SDK?"
-                onClick={() =>
-                  handleSuggestionClick(
-                    "What are the key features of the AI SDK?"
-                  )
-                }
-              />
-              <Suggestion
-                suggestion="Calculate 2 + 2 * 3"
-                onClick={() =>
-                  handleSuggestionClick("Calculate 2 + 2 * 3")
-                }
-              />
-            </Suggestions>
-          </div>
-        )}
-
+      {/* Input container: clean, floating, NO border-t */}
+      <div className="shrink-0 p-4 max-w-3xl mx-auto w-full">
         <AI_Input_Search
           models={availableModels}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
           onSubmit={sendWithProvider}
           onFilesSelected={handleFiles}
-          placeholder="Ask me anything..."
+          placeholder="Ask a follow up question..."
           searchLabel="Web Search"
         />
       </div>

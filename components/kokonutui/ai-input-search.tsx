@@ -102,19 +102,19 @@ export default function AI_Input_Search({
   const canSubmit = value.trim().length > 0;
 
   return (
-    <div className={cn("w-full py-4", className)}>
-      <div className="relative mx-auto w-full max-w-xl">
+    <div className={cn("w-full", className)}>
+      <div className="relative mx-auto w-full max-w-2xl px-4 sm:px-0">
         {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents lint/a11y/noNoninteractiveElementInteractions: pointer-only shortcut; the textarea and buttons inside are keyboard reachable */}
         <div
           className={cn(
-            "relative flex w-full cursor-text flex-col rounded-xl text-left transition-shadow duration-200",
-            "has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-sky-600 dark:has-[textarea:focus-visible]:ring-sky-500"
+            "relative flex w-full cursor-text flex-col rounded-2xl text-left transition-all duration-200 border border-brand-rule bg-brand-card shadow-xs",
+            "has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-brand-accent/20 has-[textarea:focus-visible]:border-brand-accent/40"
           )}
           onClick={(e) => handleContainerClick(e.target)}
         >
           <Textarea
             aria-label={placeholder}
-            className="min-h-[52px] w-full resize-none rounded-xl rounded-b-none border-none bg-black/5 px-4 py-3 leading-[1.2] placeholder:text-black/70 focus-visible:ring-0 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+            className="min-h-[56px] w-full resize-none rounded-2xl rounded-b-none border-none bg-transparent px-4 py-3.5 text-sm leading-relaxed placeholder:text-brand-muted-soft focus-visible:ring-0 text-brand-ink outline-none"
             onChange={(e) => {
               setValue(e.target.value);
               adjustHeight();
@@ -134,7 +134,7 @@ export default function AI_Input_Search({
             value={value}
           />
 
-          <div className="flex items-center justify-between rounded-b-xl bg-black/5 px-3 pt-1 pb-3 dark:bg-white/5">
+          <div className="flex items-center justify-between rounded-b-2xl bg-brand-cream/30 px-3 pt-1.5 pb-2.5 border-t border-brand-rule/60">
             <div className="flex items-center gap-2">
               {/* Model selector with authentic Lobehub icons */}
               <ModelPicker
