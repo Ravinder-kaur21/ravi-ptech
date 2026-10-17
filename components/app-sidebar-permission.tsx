@@ -40,6 +40,7 @@ import { usePermissions } from "@/lib/permissions-context"
 import { SIDEBAR_NAV, filterNavByPermissions } from "@/lib/nav-config"
 import { PinnedRecent } from "@/components/pinned-recent"
 import { NavUser } from "@/components/nav-user"
+import { MuvxBot } from "@/components/ai/muvx-bot"
 import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
@@ -229,13 +230,20 @@ export function AppSidebarPermission({
                           isActive={isActive}
                           tooltip={item.label}
                           className={cn(
+                            "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                             isActive
                               ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                               : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                           )}
                         >
-                          <item.icon className="size-[18px]" />
-                          <span className="text-[15px] font-medium">
+                          {item.href === "/copilot" ? (
+                            <div className="size-[26px] flex items-center justify-center shrink-0 -my-0.5 [&_svg]:size-full! [&>div]:w-full! [&>div]:h-full!">
+                              <MuvxBot size="xs" coat="ink" mood="idle" />
+                            </div>
+                          ) : (
+                            <item.icon className="size-5 shrink-0" />
+                          )}
+                          <span className="text-[15px] font-medium leading-none">
                             {item.label}
                           </span>
                         </SidebarMenuButton>
@@ -267,13 +275,14 @@ export function AppSidebarPermission({
                   isActive={pathname === "/settings/workspace"}
                   tooltip="Workspace"
                   className={cn(
+                    "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                     pathname === "/settings/workspace"
                       ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                       : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                   )}
                 >
-                  <Building2 className="size-[18px]" />
-                  <span className="text-[15px] font-medium">Workspace</span>
+                  <Building2 className="size-5 shrink-0" />
+                  <span className="text-[15px] font-medium leading-none">Workspace</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -283,13 +292,14 @@ export function AppSidebarPermission({
                   isActive={pathname === "/settings/billing"}
                   tooltip="Billing"
                   className={cn(
+                    "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                     pathname === "/settings/billing"
                       ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                       : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                   )}
                 >
-                  <CreditCard className="size-[18px]" />
-                  <span className="text-[15px] font-medium">Billing</span>
+                  <CreditCard className="size-5 shrink-0" />
+                  <span className="text-[15px] font-medium leading-none">Billing</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
@@ -304,6 +314,7 @@ export function AppSidebarPermission({
                   }
                   tooltip="Settings"
                   className={cn(
+                    "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                     pathname === "/settings" ||
                       (pathname.startsWith("/settings/") &&
                         pathname !== "/settings/workspace" &&
@@ -312,8 +323,8 @@ export function AppSidebarPermission({
                       : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                   )}
                 >
-                  <Settings className="size-[18px]" />
-                  <span className="text-[15px] font-medium">Settings</span>
+                  <Settings className="size-5 shrink-0" />
+                  <span className="text-[15px] font-medium leading-none">Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

@@ -325,17 +325,20 @@ export function AppSidebar({
                       isActive={isActive}
                       tooltip={item.label}
                       className={cn(
+                        "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                         isActive
                           ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
                       {item.href === "/copilot" ? (
-                        <MuvxBot size="xs" coat="ink" mood="idle" className="mr-0.5" />
+                        <div className="size-[26px] flex items-center justify-center shrink-0 -my-0.5 [&_svg]:size-full! [&>div]:w-full! [&>div]:h-full!">
+                          <MuvxBot size="xs" coat="ink" mood="idle" />
+                        </div>
                       ) : (
-                        <item.icon className="size-[18px]" />
+                        <item.icon className="size-5 shrink-0" />
                       )}
-                      <span className="text-[15px] font-medium">{item.label}</span>
+                      <span className="text-[15px] font-medium leading-none">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
@@ -373,13 +376,14 @@ export function AppSidebar({
                       isActive={isActive}
                       tooltip={item.label}
                       className={cn(
+                        "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                         isActive
                           ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-[18px]" />
-                      <span className="text-[15px] font-medium">{item.label}</span>
+                      <item.icon className="size-5 shrink-0" />
+                      <span className="text-[15px] font-medium leading-none">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
