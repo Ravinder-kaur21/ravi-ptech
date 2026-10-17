@@ -15,6 +15,7 @@
 
 import {
   LayoutDashboard,
+  Bot,
   Truck,
   Map,
   Users,
@@ -67,6 +68,14 @@ export const SIDEBAR_NAV: NavGroup[] = [
         icon: LayoutDashboard,
         requiresKey: "workspace.profile.view",
         hint: "Your home for the workspace.",
+      },
+      {
+        id: "copilot",
+        label: "AI Copilot",
+        href: "/copilot",
+        icon: Bot,
+        requiresKey: "workspace.profile.view",
+        hint: "Autonomous dispatch, rate negotiation & fleet agent.",
       },
     ],
   },

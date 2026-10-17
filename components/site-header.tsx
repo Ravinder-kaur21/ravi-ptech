@@ -219,12 +219,6 @@ export function SiteHeader({
                   <CreditCard className="mr-2 size-4 text-brand-muted-soft" />
                   Billing
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  render={<Link href="/admin" className="rounded-md cursor-pointer" />}
-                >
-                  <ShieldCheck className="mr-2 size-4 text-brand-accent" />
-                  Admin console
-                </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator className="bg-brand-rule" />
               <DropdownMenuItem

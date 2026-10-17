@@ -147,8 +147,20 @@ export function SettingsIndexClient({
 
   const visibleCards = CARDS.filter((c) => perms.has(c.requiresKey))
 
-  // Group the cards so the most-actionable ones are at the top.
-  const priority = ["members", "roles", "invitations", "workspace", "branding"]
+  // Exact requested order:
+  // 1. Workspace -> 2. Team & members -> 3. Roles & permissions -> 4. Invitations
+  // -> 5. Integrations -> 6. Billing -> 7. Sessions -> 8. Audit log -> 9. Branding
+  const priority = [
+    "workspace",
+    "members",
+    "roles",
+    "invitations",
+    "integrations",
+    "billing",
+    "sessions",
+    "audit",
+    "branding",
+  ]
   const sorted = [...visibleCards].sort((a, b) => {
     const ai = priority.indexOf(a.id)
     const bi = priority.indexOf(b.id)

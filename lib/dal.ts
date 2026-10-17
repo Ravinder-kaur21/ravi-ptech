@@ -651,12 +651,51 @@ export const getWorkspaceProfile = async (orgId: string) => {
         defaultCurrency: organization.defaultCurrency,
         timeZone: organization.timeZone,
         fiscalYearStart: organization.fiscalYearStart,
+        metadata: organization.metadata,
       })
       .from(organization)
       .where(eq(organization.id, orgId))
       .limit(1)
-    console.log("[DAL] getWorkspaceProfile result:", row ? "found" : "null")
-    return row ?? null
+
+    if (!row) return null
+
+    let parsedMeta: Record<string, any> = {}
+    if (row.metadata) {
+      try {
+        parsedMeta =
+          typeof row.metadata === "string"
+            ? JSON.parse(row.metadata)
+            : row.metadata
+      } catch (err) {
+        console.warn("[DAL] failed to parse org metadata:", err)
+      }
+    }
+
+    const merged = {
+      ...row,
+      // Fallback to onboarding metadata if direct columns were empty
+      businessType: row.businessType || parsedMeta.businessType || null,
+      dotNumber: row.dotNumber || parsedMeta.dotNumber || null,
+      mcNumber: row.mcNumber || parsedMeta.mcNumber || null,
+      // Operational properties collected during onboarding
+      fleetSize: parsedMeta.fleetSize || null,
+      teamSize: parsedMeta.teamSize || null,
+      geographicScope: parsedMeta.geographicScope || null,
+      currentTool: parsedMeta.currentTool || null,
+      freightTypes: Array.isArray(parsedMeta.freightTypes)
+        ? parsedMeta.freightTypes
+        : [],
+      primaryGoals: Array.isArray(parsedMeta.primaryGoals)
+        ? parsedMeta.primaryGoals
+        : [],
+      supportEmail: parsedMeta.supportEmail || null,
+      website: parsedMeta.website || null,
+      onboardingCompletedAt: parsedMeta.onboardingCompletedAt || null,
+      metadata: parsedMeta,
+    }
+
+    console.log("[DAL] getWorkspaceProfile result: found with onboarding fields")
+    return merged
   } catch (e) {
     console.error("[DAL] getWorkspaceProfile FAILED:", e)
     throw e

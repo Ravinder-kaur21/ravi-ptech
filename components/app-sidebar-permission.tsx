@@ -9,6 +9,7 @@ import {
   ChevronsUpDown,
   Building2,
   Plus,
+  Settings,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -100,11 +101,14 @@ export function AppSidebarPermission({
   }
 
   // Filter every group; drop groups that have zero visible items.
+  // Settings is rendered as the dedicated bottom item.
   const visibleGroups = React.useMemo(() => {
-    return SIDEBAR_NAV.map((g) => ({
-      ...g,
-      items: filterNavByPermissions(g.items, perms),
-    })).filter((g) => g.items.length > 0)
+    return SIDEBAR_NAV
+      .filter((g) => g.id !== "settings")
+      .map((g) => ({
+        ...g,
+        items: filterNavByPermissions(g.items, perms),
+      })).filter((g) => g.items.length > 0)
   }, [perms])
 
   return (
@@ -246,6 +250,31 @@ export function AppSidebarPermission({
 
         {/* Pinned + recent — kept as-is for continuity */}
         <PinnedRecent orgId={org.id} />
+
+        {/* Bottom option: Settings */}
+        <div className="mt-auto" />
+        <SidebarSeparator className="bg-sidebar-border" />
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={<Link href="/settings" />}
+                  isActive={pathname === "/settings" || pathname.startsWith("/settings/")}
+                  tooltip="Settings"
+                  className={cn(
+                    pathname === "/settings" || pathname.startsWith("/settings/")
+                      ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
+                      : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
+                  )}
+                >
+                  <Settings className="size-[18px]" />
+                  <span className="text-[15px] font-medium">Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>

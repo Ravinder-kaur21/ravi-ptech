@@ -90,6 +90,20 @@ const profileSchema = z.object({
     .nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
+  // Onboarding & operational profile extensions
+  fleetSize: z.string().nullable().optional(),
+  teamSize: z.string().nullable().optional(),
+  geographicScope: z.string().nullable().optional(),
+  currentTool: z.string().nullable().optional(),
+  freightTypes: z.array(z.string()).optional(),
+  primaryGoals: z.array(z.string()).optional(),
+  website: z.string().max(255).nullable().optional(),
+  supportEmail: z
+    .string()
+    .email()
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
 })
 
 export type UpdateWorkspaceProfileInput = z.input<typeof profileSchema>
@@ -143,6 +157,49 @@ async function withUpdateWorkspaceProfile(
   }
 
   // 4. Apply update (only the fields present in input)
+  // Parse existing metadata and merge new operational onboarding fields
+  let existingMeta: Record<string, any> = {}
+  if (before.metadata) {
+    try {
+      existingMeta =
+        typeof before.metadata === "string"
+          ? JSON.parse(before.metadata)
+          : before.metadata
+    } catch (e) {
+      console.warn("[WORKSPACE/ACTION] failed to parse existing metadata:", e)
+    }
+  }
+
+  const updatedMeta = {
+    ...existingMeta,
+    businessType: data.businessType ?? existingMeta.businessType ?? null,
+    dotNumber: data.dotNumber ?? existingMeta.dotNumber ?? null,
+    mcNumber: data.mcNumber ?? existingMeta.mcNumber ?? null,
+    fleetSize: data.fleetSize !== undefined ? data.fleetSize : (existingMeta.fleetSize ?? null),
+    teamSize: data.teamSize !== undefined ? data.teamSize : (existingMeta.teamSize ?? null),
+    geographicScope:
+      data.geographicScope !== undefined
+        ? data.geographicScope
+        : (existingMeta.geographicScope ?? null),
+    currentTool:
+      data.currentTool !== undefined
+        ? data.currentTool
+        : (existingMeta.currentTool ?? null),
+    freightTypes:
+      data.freightTypes !== undefined
+        ? data.freightTypes
+        : (existingMeta.freightTypes ?? []),
+    primaryGoals:
+      data.primaryGoals !== undefined
+        ? data.primaryGoals
+        : (existingMeta.primaryGoals ?? []),
+    website: data.website !== undefined ? data.website : (existingMeta.website ?? null),
+    supportEmail:
+      data.supportEmail !== undefined
+        ? data.supportEmail
+        : (existingMeta.supportEmail ?? null),
+  }
+
   const patch: Partial<typeof organization.$inferInsert> = {
     name: data.name ?? before.name,
     slug: data.slug ?? before.slug,
@@ -161,6 +218,7 @@ async function withUpdateWorkspaceProfile(
     timeZone: data.timeZone,
     fiscalYearStart: data.fiscalYearStart,
     logo: data.logo ?? null,
+    metadata: JSON.stringify(updatedMeta),
   }
   await db
     .update(organization)
