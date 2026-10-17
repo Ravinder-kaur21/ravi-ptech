@@ -40,6 +40,7 @@ import { Attachments, Attachment } from "@/components/ai-elements/attachments";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { MessageSquare, Sparkles } from "lucide-react";
+import { AgentOrb } from "@/components/ai/agent-orb";
 
 /** Default provider (OpenRouter preferred when API key is present). */
 const DEFAULT_PROVIDER = "openrouter";
@@ -230,10 +231,11 @@ export default function ChatInterface() {
           </div>
         )}
 
-        <div className="w-full max-w-2xl text-center mb-6 space-y-1.5">
-          <div className="inline-flex size-11 items-center justify-center rounded-2xl bg-brand-accent-tint text-brand-accent mb-2 shadow-2xs border border-brand-accent/15">
-            <Sparkles className="size-5" />
-          </div>
+          <AgentOrb
+            size="lg"
+            state={status === "submitted" || status === "streaming" ? "thinking" : "idle"}
+            className="mb-3 mx-auto"
+          />
           <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
             What can I help you dispatch today?
           </h1>

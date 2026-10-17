@@ -50,6 +50,7 @@ import {
 import { PinnedRecent } from "@/components/pinned-recent"
 
 import { NavUser } from "@/components/nav-user"
+import { AgentOrb } from "@/components/ai/agent-orb"
 import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
@@ -316,7 +317,11 @@ export function AppSidebar({
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-[18px]" />
+                      {item.href === "/copilot" ? (
+                        <AgentOrb size="sm" className="mr-0.5" />
+                      ) : (
+                        <item.icon className="size-[18px]" />
+                      )}
                       <span className="text-[15px] font-medium">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

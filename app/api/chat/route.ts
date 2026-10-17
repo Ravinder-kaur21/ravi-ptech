@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { streamText } from "ai";
+import { streamText, convertToModelMessages } from "ai";
 import { getModel } from "@/lib/ai-providers";
 import { getSession } from "@/lib/dal";
 import { getEffectivePermissions } from "@/lib/can";
@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
 
     const resolvedModel = getModel(targetProvider, targetModel);
 
+    // Official AI SDK v5: Convert UIMessage[] (from useChat) to ModelMessage[] (for streamText)
+    const modelMessages = await convertToModelMessages(messages);
+
     const systemPrompt = `You are Muvx Copilot, the intelligent AI assistant integrated into Muvx TMS (Transportation Management System).
 User: ${session.user.name || session.user.email} (${session.user.role || "Member"})
 Workspace: ${tenantId || "Global"}
@@ -45,7 +48,7 @@ Instructions:
     const result = streamText({
       model: resolvedModel,
       system: systemPrompt,
-      messages,
+      messages: modelMessages,
     });
 
     return result.toUIMessageStreamResponse();
