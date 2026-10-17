@@ -41,8 +41,8 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { MessageSquare } from "lucide-react";
 
-/** NIM is currently the only configured provider. */
-const PROVIDER = "nim";
+/** Default provider (OpenRouter preferred when API key is present). */
+const DEFAULT_PROVIDER = "openrouter";
 
 /**
  * Convert raw File[] (from the kokonutui file picker) into FileUIPart[]
@@ -154,6 +154,7 @@ function renderPart(
 }
 
 export default function ChatInterface() {
+  const [provider, setProvider] = useState<string>(DEFAULT_PROVIDER);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
 
@@ -161,11 +162,14 @@ export default function ChatInterface() {
     id: "ai-chat",
   });
 
-  // Fetch available models from the NIM API on mount
+  // Fetch available models on mount
   useEffect(() => {
     fetch("/api/models")
       .then((r) => r.json())
-      .then((data: { models: { id: string }[] }) => {
+      .then((data: { provider?: string; models: { id: string }[] }) => {
+        if (data.provider) {
+          setProvider(data.provider);
+        }
         const ids = data.models.map((m) => m.id);
         setAvailableModels(ids);
         if (ids.length > 0) {
@@ -185,7 +189,7 @@ export default function ChatInterface() {
       { text },
       {
         body: {
-          provider: PROVIDER,
+          provider,
           model: options.model ?? selectedModel,
           webSearch: options.webSearch,
         },
@@ -199,7 +203,7 @@ export default function ChatInterface() {
         { files: fileParts },
         {
           body: {
-            provider: PROVIDER,
+            provider,
             model: selectedModel,
           },
         }

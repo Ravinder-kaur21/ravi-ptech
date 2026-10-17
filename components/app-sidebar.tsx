@@ -19,6 +19,7 @@ import {
   ChevronsUpDown,
   Building2,
   MoreHorizontal,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -64,6 +65,7 @@ type NavItem = {
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "AI Copilot", href: "/copilot", icon: Sparkles },
   {
     label: "Loads",
     href: "/loads",
