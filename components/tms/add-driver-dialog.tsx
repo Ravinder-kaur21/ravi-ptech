@@ -2,21 +2,34 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, User, UserCheck, ShieldAlert, Phone, Mail, Award, CheckCircle2 } from "lucide-react"
-import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
+import { motion, AnimatePresence } from "motion/react"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { Spinner } from "@/components/ui/spinner"
+  Plus,
+  User,
+  UserCheck,
+  ShieldAlert,
+  Phone,
+  Mail,
+  Award,
+  CheckCircle2,
+  DollarSign,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  ArrowRight,
+  Loader2,
+  Check,
+} from "lucide-react"
+import { toast } from "sonner"
+import {
+  Modal,
+  ModalTrigger,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+} from "@/components/ui/animated-modal"
 import { getSubdivisions } from "@/lib/geography"
+import { cn } from "@/lib/utils"
 import { createDriverAction } from "@/app/actions/tms"
 
 interface WorkspaceMember {
@@ -25,6 +38,13 @@ interface WorkspaceMember {
   email: string
   role: string
 }
+
+const PAY_PRESETS = [
+  { label: "$0.60/mi", type: "Per Mile", rate: "0.60" },
+  { label: "$0.70/mi", type: "Per Mile", rate: "0.70" },
+  { label: "25% Gross", type: "Percentage", rate: "25" },
+  { label: "$32/hr", type: "Hourly", rate: "32" },
+]
 
 export function AddDriverDialog({
   workspaceMembers = [],
@@ -35,10 +55,13 @@ export function AddDriverDialog({
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
 
-  // Link to existing member state
+  // Mode: "quick" (manual profile) or "member" (link existing user)
+  const [mode, setMode] = React.useState<"quick" | "member">(
+    workspaceMembers.length > 0 ? "member" : "quick"
+  )
   const [selectedMemberId, setSelectedMemberId] = React.useState("")
 
-  // Driver profile fields
+  // Driver fields
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
   const [phone, setPhone] = React.useState("")
@@ -50,12 +73,10 @@ export function AddDriverDialog({
   const [payRate, setPayRate] = React.useState("0.65")
   const [emergencyContact, setEmergencyContact] = React.useState("")
   const [emergencyPhone, setEmergencyPhone] = React.useState("")
-  const [status, setStatus] = React.useState<"active" | "inactive" | "on_leave">("active")
+  const [showOptional, setShowOptional] = React.useState(false)
 
-  // Dynamic US & Canada subdivisions
   const usStates = React.useMemo(() => getSubdivisions("US"), [])
 
-  // Auto-fill when a workspace member is selected
   const handleMemberSelect = (userId: string) => {
     setSelectedMemberId(userId)
     if (!userId) return
@@ -69,33 +90,38 @@ export function AddDriverDialog({
     }
   }
 
+  const handleApplyPreset = (preset: typeof PAY_PRESETS[0]) => {
+    setPayType(preset.type)
+    setPayRate(preset.rate)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!firstName.trim() || !lastName.trim()) {
-      toast.error("First and last name are required")
+      toast.error("First name and last name are required.")
       return
     }
 
     setLoading(true)
     try {
       const res = await createDriverAction({
-        userId: selectedMemberId || null,
+        userId: mode === "member" && selectedMemberId ? selectedMemberId : null,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim() || null,
         email: email.trim() || null,
         cdlNumber: cdlNumber.trim() || null,
         cdlState: cdlState.trim() || null,
-        cdlExpiration: cdlExpiration ? cdlExpiration : null,
+        cdlExpiration: cdlExpiration || null,
         emergencyContact: emergencyContact.trim() || null,
         emergencyPhone: emergencyPhone.trim() || null,
         payType,
         payRate: payRate.trim() || null,
-        status,
+        status: "active",
       })
 
       if (res.ok) {
-        toast.success(`Driver ${res.name} registered successfully`)
+        toast.success(`Driver ${res.name} onboarded successfully!`)
         setOpen(false)
         setSelectedMemberId("")
         setFirstName("")
@@ -106,306 +132,332 @@ export function AddDriverDialog({
         setCdlExpiration("")
         setEmergencyContact("")
         setEmergencyPhone("")
+        setShowOptional(false)
         router.refresh()
       } else {
         toast.error(res.error || "Failed to add driver")
       }
     } catch (err: any) {
-      toast.error(err.message || "Something went wrong")
+      toast.error(err.message || "Failed to register driver")
     } finally {
       setLoading(false)
     }
   }
 
-  const isExpiringSoon =
-    cdlExpiration &&
-    new Date(cdlExpiration) < new Date(Date.now() + 30 * 86400000)
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Driver
-          </Button>
-        }
-      />
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <User className="h-5 w-5" />
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-semibold">Register Professional Driver</DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Add a fleet asset driver, or link to an invited workspace team member.
-              </p>
-            </div>
-          </div>
-        </DialogHeader>
+    <Modal open={open} setOpen={setOpen}>
+      <ModalTrigger>
+        <span className="inline-flex items-center gap-1.5 h-9 rounded-full bg-brand-ink px-4 text-xs font-medium text-brand-cream hover:bg-brand-ink-hover transition-colors shadow-xs cursor-pointer">
+          <Plus className="h-3.5 w-3.5" />
+          Add Driver
+        </span>
+      </ModalTrigger>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          {/* Member Bridge Selector */}
-          <div className="p-3.5 rounded-lg border bg-muted/20 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="link-member" className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <UserCheck className="h-3.5 w-3.5 text-primary" />
-                Link to Workspace Member (Optional)
-              </Label>
-              <span className="text-[11px] text-muted-foreground">Enables driver mobile app login</span>
+      {/* ─── Compact Aceternity-Inspired Modal Body (max-w-[480px]) ─── */}
+      <ModalBody className="max-w-[480px] overflow-hidden p-0 border border-[#d1ccc5] dark:border-zinc-800 shadow-2xl rounded-3xl bg-[#fdfbf7] dark:bg-zinc-950">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 border-b border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec]/80 dark:bg-zinc-900/40 relative">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="size-2 rounded-full bg-[#d9622b] animate-pulse" />
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8a8b8f]">
+                FLEET ROSTER · DRIVER ONBOARDING
+              </span>
             </div>
-            <NativeSelect
-              id="link-member"
-              value={selectedMemberId}
-              onChange={(e) => handleMemberSelect(e.target.value)}
-              className="h-9 text-xs"
-            >
-              <NativeSelectOption value="">
-                Fleet Driver Only (No login account linked)
-              </NativeSelectOption>
-              {workspaceMembers.map((m) => (
-                <NativeSelectOption key={m.userId} value={m.userId}>
-                  {m.name || "Unnamed"} ({m.email}) — Role: {m.role}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            {selectedMemberId && (
-              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Driver profile will be linked to workspace user account.
-              </p>
+            <h2 className="font-serif text-2xl font-normal text-[#16181d] dark:text-zinc-100">
+              Register <span className="italic text-[#d9622b]">Driver</span>
+            </h2>
+          </div>
+
+          {/* Kokonut Segmented Pill Switcher */}
+          {workspaceMembers.length > 0 && (
+            <div className="px-5 pt-3 pb-1">
+              <div className="grid grid-cols-2 p-1 rounded-2xl bg-[#eee9df] dark:bg-zinc-800/80 border border-[#e4ddd3] dark:border-zinc-700">
+                <button
+                  type="button"
+                  onClick={() => setMode("member")}
+                  className={cn(
+                    "py-1.5 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    mode === "member"
+                      ? "bg-white dark:bg-zinc-900 text-[#16181d] dark:text-zinc-100 shadow-xs font-semibold"
+                      : "text-[#73757a] hover:text-[#16181d]"
+                  )}
+                >
+                  <UserCheck className="size-3.5 text-[#d9622b]" />
+                  <span>Link Team Member</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("quick")
+                    setSelectedMemberId("")
+                  }}
+                  className={cn(
+                    "py-1.5 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    mode === "quick"
+                      ? "bg-white dark:bg-zinc-900 text-[#16181d] dark:text-zinc-100 shadow-xs font-semibold"
+                      : "text-[#73757a] hover:text-[#16181d]"
+                  )}
+                >
+                  <User className="size-3.5" />
+                  <span>Fleet Driver Record</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Form Scroll Body */}
+          <div className="px-5 py-3 space-y-3.5 max-h-[52vh] overflow-y-auto">
+            {/* Member Bridge Dropdown if mode is member */}
+            {mode === "member" && workspaceMembers.length > 0 && (
+              <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-[#e4ddd3] dark:border-zinc-800 space-y-1.5">
+                <label className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] block">
+                  Select Invited Team Member
+                </label>
+                <select
+                  value={selectedMemberId}
+                  onChange={(e) => handleMemberSelect(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
+                >
+                  <option value="">Select team member to link...</option>
+                  {workspaceMembers.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.name || "Unnamed"} ({m.email})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-[#73757a] flex items-center gap-1 pt-0.5">
+                  <CheckCircle2 className="size-3 text-emerald-600" />
+                  <span>Enables mobile driver app logins and route assignment.</span>
+                </p>
+              </div>
             )}
-          </div>
 
-          {/* Personal & Contact Details */}
-          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
-            <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
-              Identity & Contact
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="first-name" className="text-xs font-medium">
-                  First Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="first-name"
-                  placeholder="e.g. Marcus"
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
+                  First Name *
+                </label>
+                <input
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. Marcus"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                   required
-                  className="h-9 text-sm"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="last-name" className="text-xs font-medium">
-                  Last Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="last-name"
-                  placeholder="e.g. Vance"
+              <div>
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
+                  Last Name *
+                </label>
+                <input
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Vance"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                   required
-                  className="h-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="driver-phone" className="text-xs font-medium">
-                  Direct Phone / Cell
-                </Label>
-                <Input
-                  id="driver-phone"
-                  placeholder="(555) 000-0000"
+            {/* Phone & Email */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
+                  Phone (SMS Dispatch)
+                </label>
+                <input
+                  type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="h-9 text-sm"
+                  placeholder="e.g. (555) 234-5678"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="driver-email" className="text-xs font-medium">
-                  Email Address
-                </Label>
-                <Input
-                  id="driver-email"
+              <div>
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
+                  Email
+                </label>
+                <input
                   type="email"
-                  placeholder="driver@transport.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-9 text-sm"
+                  placeholder="driver@fleet.com"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                 />
               </div>
             </div>
-          </div>
 
-          {/* Commercial Driver License (CDL) Compliance */}
-          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wider">
-              <Award className="h-3.5 w-3.5 text-primary" />
-              Commercial Driver's License (CDL)
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="cdl-number" className="text-xs font-medium">
-                  CDL License #
-                </Label>
-                <Input
-                  id="cdl-number"
-                  placeholder="DL-8932014"
-                  value={cdlNumber}
-                  onChange={(e) => setCdlNumber(e.target.value)}
-                  className="h-9 text-sm font-mono"
-                />
+            {/* CDL License & State */}
+            <div className="p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-[#e4ddd3] dark:border-zinc-800 space-y-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Award className="size-3.5 text-[#d9622b]" />
+                <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
+                  Commercial Driver License (CDL)
+                </span>
               </div>
 
-              <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="cdl-state" className="text-xs font-medium">
-                  Issuing State / Jurisdiction
-                </Label>
-                <NativeSelect
-                  id="cdl-state"
-                  value={cdlState}
-                  onChange={(e) => setCdlState(e.target.value)}
-                  className="h-9 text-sm"
-                >
-                  {usStates.map((s) => (
-                    <NativeSelectOption key={s.code} value={s.code}>
-                      {s.name} ({s.code})
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <input
+                    value={cdlNumber}
+                    onChange={(e) => setCdlNumber(e.target.value)}
+                    placeholder="CDL License #"
+                    className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 font-mono text-xs font-semibold text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <select
+                    value={cdlState}
+                    onChange={(e) => setCdlState(e.target.value)}
+                    className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2 text-xs font-mono text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
+                  >
+                    {usStates.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="space-y-1.5 sm:col-span-1">
-                <Label htmlFor="cdl-expiration" className="text-xs font-medium">
-                  License Expiration
-                </Label>
-                <Input
-                  id="cdl-expiration"
+              <div>
+                <label className="font-mono text-[9px] uppercase text-[#8a8b8f] block mb-0.5">
+                  CDL Expiration Date
+                </label>
+                <input
                   type="date"
                   value={cdlExpiration}
                   onChange={(e) => setCdlExpiration(e.target.value)}
-                  className="h-9 text-sm"
+                  className="h-8 w-full rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
                 />
               </div>
             </div>
 
-            {isExpiringSoon && (
-              <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>Notice: CDL expiration date is within 30 days or already past.</span>
+            {/* Pay Agreement */}
+            <div className="p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-[#e4ddd3] dark:border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
+                  Settlement & Pay Rate
+                </span>
+                <span className="font-mono text-xs font-bold text-[#d9622b]">
+                  {payType === "Percentage" ? `${payRate}%` : `$${payRate} / ${payType}`}
+                </span>
               </div>
-            )}
-          </div>
 
-          {/* Payroll Compensation & Status */}
-          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
-            <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
-              Payroll Compensation & Duty Status
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="pay-type" className="text-xs font-medium">
-                  Pay Model
-                </Label>
-                <NativeSelect
-                  id="pay-type"
+              <div className="grid grid-cols-2 gap-2">
+                <select
                   value={payType}
                   onChange={(e) => setPayType(e.target.value)}
-                  className="h-9 text-sm"
+                  className="h-9 rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 text-xs text-[#16181d] dark:text-zinc-100"
                 >
-                  <NativeSelectOption value="Per Mile">Per Mile (CPM)</NativeSelectOption>
-                  <NativeSelectOption value="Percentage">Percentage of Gross</NativeSelectOption>
-                  <NativeSelectOption value="Hourly">Hourly Rate</NativeSelectOption>
-                  <NativeSelectOption value="Flat Pay">Flat Rate per Load</NativeSelectOption>
-                </NativeSelect>
-              </div>
+                  <option value="Per Mile">Per Mile ($/mi)</option>
+                  <option value="Percentage">Percentage of Gross (%)</option>
+                  <option value="Hourly">Hourly ($/hr)</option>
+                  <option value="Flat Pay">Flat per Trip ($)</option>
+                </select>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="pay-rate" className="text-xs font-medium">
-                  Rate ($ or %)
-                </Label>
-                <Input
-                  id="pay-rate"
-                  placeholder="0.65"
+                <input
                   value={payRate}
                   onChange={(e) => setPayRate(e.target.value)}
-                  className="h-9 text-sm font-mono"
+                  placeholder="0.65"
+                  className="h-9 rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-3 font-mono text-xs font-bold text-[#16181d] dark:text-zinc-100"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="driver-status" className="text-xs font-medium">
-                  Dispatch Status
-                </Label>
-                <NativeSelect
-                  id="driver-status"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as any)}
-                  className="h-9 text-sm"
-                >
-                  <NativeSelectOption value="active">Active & Available</NativeSelectOption>
-                  <NativeSelectOption value="inactive">Inactive</NativeSelectOption>
-                  <NativeSelectOption value="on_leave">On Leave / Rest Cycle</NativeSelectOption>
-                </NativeSelect>
+              {/* Quick rate chips */}
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {PAY_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => handleApplyPreset(p)}
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-md border border-[#e4ddd3] dark:border-zinc-700 bg-[#f7f3ec] dark:bg-zinc-800 text-[#55575b] hover:border-[#d9622b] hover:text-[#d9622b] transition-colors cursor-pointer"
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {/* Emergency Contact Accordion */}
+            <div className="border border-[#e4ddd3] dark:border-zinc-800 rounded-xl overflow-hidden bg-[#f7f3ec]/30 dark:bg-zinc-900/20">
+              <button
+                type="button"
+                onClick={() => setShowOptional(!showOptional)}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-medium text-[#73757a] hover:text-[#16181d] transition-colors cursor-pointer"
+              >
+                <span>In Case of Emergency (ICE) Details</span>
+                {showOptional ? (
+                  <ChevronUp className="size-3 text-[#8a8b8f]" />
+                ) : (
+                  <ChevronDown className="size-3 text-[#8a8b8f]" />
+                )}
+              </button>
+
+              <AnimatePresence>
+                {showOptional && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="p-3 pt-0 space-y-2 border-t border-[#e4ddd3] dark:border-zinc-800"
+                  >
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <input
+                        value={emergencyContact}
+                        onChange={(e) => setEmergencyContact(e.target.value)}
+                        placeholder="Emergency Contact Name"
+                        className="h-8 rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 text-xs text-[#16181d]"
+                      />
+                      <input
+                        value={emergencyPhone}
+                        onChange={(e) => setEmergencyPhone(e.target.value)}
+                        placeholder="Emergency Phone #"
+                        className="h-8 rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 text-xs text-[#16181d]"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
-          {/* Emergency Contact */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
-            <div className="space-y-1.5">
-              <Label htmlFor="emergency-contact" className="text-xs font-medium">
-                Emergency Contact Name
-              </Label>
-              <Input
-                id="emergency-contact"
-                placeholder="e.g. Sarah Vance (Spouse)"
-                value={emergencyContact}
-                onChange={(e) => setEmergencyContact(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="emergency-phone" className="text-xs font-medium">
-                Emergency Contact Phone
-              </Label>
-              <Input
-                id="emergency-phone"
-                placeholder="(555) 999-1122"
-                value={emergencyPhone}
-                onChange={(e) => setEmergencyPhone(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
+          {/* Footer */}
+          <div className="p-4 border-t border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec]/90 dark:bg-zinc-900/60 flex items-center justify-between gap-3">
+            <button
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() => setOpen(false)}
-              disabled={loading}
+              className="text-xs font-medium text-[#73757a] hover:text-[#16181d] transition-colors px-2 py-1 cursor-pointer"
             >
               Cancel
-            </Button>
-            <Button type="submit" size="sm" disabled={loading}>
-              {loading && <Spinner className="h-4 w-4 mr-2" />}
-              Save Driver
-            </Button>
+            </button>
+
+            <button
+              type="submit"
+              disabled={loading || !firstName.trim() || !lastName.trim()}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#d9622b] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#c4531f] transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Registering Driver...</span>
+                </>
+              ) : (
+                <>
+                  <span>Complete Driver Registration</span>
+                  <ArrowRight className="size-3.5" />
+                </>
+              )}
+            </button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ModalBody>
+    </Modal>
   )
 }
