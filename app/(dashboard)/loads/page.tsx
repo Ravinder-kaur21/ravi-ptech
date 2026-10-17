@@ -5,7 +5,7 @@ import { getSession, getLoadsForOrg } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/status-badge"
+import { LoadsTableView } from "@/components/tms/loads-table-view"
 
 export const instant = false
 
@@ -112,74 +112,7 @@ export default async function LoadsPage() {
           )}
         </Card>
       ) : (
-        <Card className="border-brand-rule bg-brand-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-brand-rule bg-brand-cream-soft/50">
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft w-8" />
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Load
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Customer
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Route
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Status
-                  </th>
-                  <th className="text-right font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Rate
-                  </th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {loads.map((l: any) => (
-                  <tr
-                    key={l.id}
-                    className="border-b border-brand-rule last:border-0 hover:bg-brand-cream-soft/50"
-                  >
-                    <td className="px-5 py-3">
-                      {l.isStarred && (
-                        <Star className="size-3.5 text-brand-accent fill-brand-accent" />
-                      )}
-                    </td>
-                    <td className="px-5 py-3 font-mono text-[13px] text-brand-ink">
-                      <Link href={`/loads/${l.id}`} className="hover:underline">
-                        {l.loadNumber}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 text-brand-ink/80">
-                      {l.customerName || "—"}
-                    </td>
-                    <td className="px-5 py-3 text-brand-ink/80">
-                      {l.originCity && l.destCity
-                        ? `${l.originCity}, ${l.originState} → ${l.destCity}, ${l.destState}`
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge status={l.status} />
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-[13px] text-brand-ink">
-                      {l.rate ? `$${l.rate}` : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <Link
-                        href={`/loads/${l.id}`}
-                        className="text-brand-muted-soft hover:text-brand-ink"
-                      >
-                        <ArrowUpRight className="h-4 w-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <LoadsTableView loads={loads} />
       )}
     </div>
   )
