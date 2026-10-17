@@ -1,14 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { Plus, User, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, User, UserCheck, ShieldAlert, Phone, Mail, Award, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -16,20 +15,59 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Spinner } from "@/components/ui/spinner"
+import { getSubdivisions } from "@/lib/geography"
 import { createDriverAction } from "@/app/actions/tms"
 
-export function AddDriverDialog() {
+interface WorkspaceMember {
+  userId: string
+  name: string
+  email: string
+  role: string
+}
+
+export function AddDriverDialog({
+  workspaceMembers = [],
+}: {
+  workspaceMembers?: WorkspaceMember[]
+}) {
+  const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
+
+  // Link to existing member state
+  const [selectedMemberId, setSelectedMemberId] = React.useState("")
+
+  // Driver profile fields
   const [firstName, setFirstName] = React.useState("")
   const [lastName, setLastName] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [cdlNumber, setCdlNumber] = React.useState("")
   const [cdlState, setCdlState] = React.useState("TX")
+  const [cdlExpiration, setCdlExpiration] = React.useState("")
   const [payType, setPayType] = React.useState("Per Mile")
   const [payRate, setPayRate] = React.useState("0.65")
+  const [emergencyContact, setEmergencyContact] = React.useState("")
+  const [emergencyPhone, setEmergencyPhone] = React.useState("")
   const [status, setStatus] = React.useState<"active" | "inactive" | "on_leave">("active")
+
+  // Dynamic US & Canada subdivisions
+  const usStates = React.useMemo(() => getSubdivisions("US"), [])
+
+  // Auto-fill when a workspace member is selected
+  const handleMemberSelect = (userId: string) => {
+    setSelectedMemberId(userId)
+    if (!userId) return
+
+    const mem = workspaceMembers.find((m) => m.userId === userId)
+    if (mem) {
+      const parts = mem.name ? mem.name.trim().split(" ") : ["", ""]
+      setFirstName(parts[0] || "")
+      setLastName(parts.slice(1).join(" ") || "")
+      setEmail(mem.email || "")
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,25 +79,34 @@ export function AddDriverDialog() {
     setLoading(true)
     try {
       const res = await createDriverAction({
+        userId: selectedMemberId || null,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim() || null,
         email: email.trim() || null,
         cdlNumber: cdlNumber.trim() || null,
         cdlState: cdlState.trim() || null,
+        cdlExpiration: cdlExpiration ? cdlExpiration : null,
+        emergencyContact: emergencyContact.trim() || null,
+        emergencyPhone: emergencyPhone.trim() || null,
         payType,
         payRate: payRate.trim() || null,
         status,
       })
 
       if (res.ok) {
-        toast.success(`Driver ${res.name} added successfully`)
+        toast.success(`Driver ${res.name} registered successfully`)
         setOpen(false)
+        setSelectedMemberId("")
         setFirstName("")
         setLastName("")
         setPhone("")
         setEmail("")
         setCdlNumber("")
+        setCdlExpiration("")
+        setEmergencyContact("")
+        setEmergencyPhone("")
+        router.refresh()
       } else {
         toast.error(res.error || "Failed to add driver")
       }
@@ -70,128 +117,210 @@ export function AddDriverDialog() {
     }
   }
 
+  const isExpiringSoon =
+    cdlExpiration &&
+    new Date(cdlExpiration) < new Date(Date.now() + 30 * 86400000)
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-xs font-medium text-brand-cream hover:bg-brand-ink-soft" />
+          <Button size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Driver
+          </Button>
         }
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Add driver
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px] bg-brand-card border-brand-rule">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="flex size-7 items-center justify-center rounded-md bg-brand-accent-tint text-brand-accent">
-                <User className="size-4" />
-              </div>
-              <DialogTitle className="font-serif text-xl text-brand-ink">
-                Add Professional Driver
-              </DialogTitle>
+      />
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <User className="h-5 w-5" />
             </div>
-            <DialogDescription className="text-xs text-brand-muted-soft">
-              Register a commercial driver for dispatch assignments, hours of service compliance, and payroll.
-            </DialogDescription>
-          </DialogHeader>
+            <div>
+              <DialogTitle className="text-lg font-semibold">Register Professional Driver</DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Add a fleet asset driver, or link to an invited workspace team member.
+              </p>
+            </div>
+          </div>
+        </DialogHeader>
 
-          <div className="grid gap-4 py-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          {/* Member Bridge Selector */}
+          <div className="p-3.5 rounded-lg border bg-muted/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="link-member" className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5 text-primary" />
+                Link to Workspace Member (Optional)
+              </Label>
+              <span className="text-[11px] text-muted-foreground">Enables driver mobile app login</span>
+            </div>
+            <NativeSelect
+              id="link-member"
+              value={selectedMemberId}
+              onChange={(e) => handleMemberSelect(e.target.value)}
+              className="h-9 text-xs"
+            >
+              <NativeSelectOption value="">
+                Fleet Driver Only (No login account linked)
+              </NativeSelectOption>
+              {workspaceMembers.map((m) => (
+                <NativeSelectOption key={m.userId} value={m.userId}>
+                  {m.name || "Unnamed"} ({m.email}) — Role: {m.role}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+            {selectedMemberId && (
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Driver profile will be linked to workspace user account.
+              </p>
+            )}
+          </div>
+
+          {/* Personal & Contact Details */}
+          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
+            <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              Identity & Contact
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="firstName" className="text-xs font-medium text-brand-ink">
-                  First Name *
+                <Label htmlFor="first-name" className="text-xs font-medium">
+                  First Name <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  id="firstName"
+                  id="first-name"
+                  placeholder="e.g. Marcus"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Marcus"
                   required
-                  className="text-xs"
+                  className="h-9 text-sm"
                 />
               </div>
+
               <div className="space-y-1.5">
-                <Label htmlFor="lastName" className="text-xs font-medium text-brand-ink">
-                  Last Name *
+                <Label htmlFor="last-name" className="text-xs font-medium">
+                  Last Name <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  id="lastName"
+                  id="last-name"
+                  placeholder="e.g. Vance"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Vance"
                   required
-                  className="text-xs"
+                  className="h-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-xs font-medium text-brand-ink">
-                  Cell Phone
+                <Label htmlFor="driver-phone" className="text-xs font-medium">
+                  Direct Phone / Cell
                 </Label>
                 <Input
-                  id="phone"
+                  id="driver-phone"
+                  placeholder="(555) 000-0000"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (214) 555-0192"
-                  className="text-xs"
+                  className="h-9 text-sm"
                 />
               </div>
+
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-xs font-medium text-brand-ink">
+                <Label htmlFor="driver-email" className="text-xs font-medium">
                   Email Address
                 </Label>
                 <Input
-                  id="email"
+                  id="driver-email"
                   type="email"
+                  placeholder="driver@transport.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="marcus@freight.com"
-                  className="text-xs"
+                  className="h-9 text-sm"
                 />
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="cdlNumber" className="text-xs font-medium text-brand-ink">
+          {/* Commercial Driver License (CDL) Compliance */}
+          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground uppercase tracking-wider">
+              <Award className="h-3.5 w-3.5 text-primary" />
+              Commercial Driver's License (CDL)
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label htmlFor="cdl-number" className="text-xs font-medium">
                   CDL License #
                 </Label>
                 <Input
-                  id="cdlNumber"
+                  id="cdl-number"
+                  placeholder="DL-8932014"
                   value={cdlNumber}
                   onChange={(e) => setCdlNumber(e.target.value)}
-                  placeholder="DL-8932014"
-                  className="font-mono text-xs"
+                  className="h-9 text-sm font-mono"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cdlState" className="text-xs font-medium text-brand-ink">
-                  CDL State
+
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label htmlFor="cdl-state" className="text-xs font-medium">
+                  Issuing State / Jurisdiction
+                </Label>
+                <NativeSelect
+                  id="cdl-state"
+                  value={cdlState}
+                  onChange={(e) => setCdlState(e.target.value)}
+                  className="h-9 text-sm"
+                >
+                  {usStates.map((s) => (
+                    <NativeSelectOption key={s.code} value={s.code}>
+                      {s.name} ({s.code})
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-1">
+                <Label htmlFor="cdl-expiration" className="text-xs font-medium">
+                  License Expiration
                 </Label>
                 <Input
-                  id="cdlState"
-                  value={cdlState}
-                  onChange={(e) => setCdlState(e.target.value.toUpperCase())}
-                  placeholder="TX"
-                  maxLength={2}
-                  className="text-xs font-mono uppercase"
+                  id="cdl-expiration"
+                  type="date"
+                  value={cdlExpiration}
+                  onChange={(e) => setCdlExpiration(e.target.value)}
+                  className="h-9 text-sm"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {isExpiringSoon && (
+              <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                <span>Notice: CDL expiration date is within 30 days or already past.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Payroll Compensation & Status */}
+          <div className="space-y-3 p-3.5 rounded-lg border bg-muted/20">
+            <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              Payroll Compensation & Duty Status
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="payType" className="text-xs font-medium text-brand-ink">
-                  Compensation Model
+                <Label htmlFor="pay-type" className="text-xs font-medium">
+                  Pay Model
                 </Label>
                 <NativeSelect
-                  id="payType"
+                  id="pay-type"
                   value={payType}
                   onChange={(e) => setPayType(e.target.value)}
-                  className="text-xs"
+                  className="h-9 text-sm"
                 >
                   <NativeSelectOption value="Per Mile">Per Mile (CPM)</NativeSelectOption>
                   <NativeSelectOption value="Percentage">Percentage of Gross</NativeSelectOption>
@@ -199,39 +328,82 @@ export function AddDriverDialog() {
                   <NativeSelectOption value="Flat Pay">Flat Rate per Load</NativeSelectOption>
                 </NativeSelect>
               </div>
+
               <div className="space-y-1.5">
-                <Label htmlFor="payRate" className="text-xs font-medium text-brand-ink">
-                  Pay Rate ($ or %)
+                <Label htmlFor="pay-rate" className="text-xs font-medium">
+                  Rate ($ or %)
                 </Label>
                 <Input
-                  id="payRate"
+                  id="pay-rate"
+                  placeholder="0.65"
                   value={payRate}
                   onChange={(e) => setPayRate(e.target.value)}
-                  placeholder="0.65"
-                  className="text-xs font-mono"
+                  className="h-9 text-sm font-mono"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="driver-status" className="text-xs font-medium">
+                  Dispatch Status
+                </Label>
+                <NativeSelect
+                  id="driver-status"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="h-9 text-sm"
+                >
+                  <NativeSelectOption value="active">Active & Available</NativeSelectOption>
+                  <NativeSelectOption value="inactive">Inactive</NativeSelectOption>
+                  <NativeSelectOption value="on_leave">On Leave / Rest Cycle</NativeSelectOption>
+                </NativeSelect>
               </div>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          {/* Emergency Contact */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
+            <div className="space-y-1.5">
+              <Label htmlFor="emergency-contact" className="text-xs font-medium">
+                Emergency Contact Name
+              </Label>
+              <Input
+                id="emergency-contact"
+                placeholder="e.g. Sarah Vance (Spouse)"
+                value={emergencyContact}
+                onChange={(e) => setEmergencyContact(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="emergency-phone" className="text-xs font-medium">
+                Emergency Contact Phone
+              </Label>
+              <Input
+                id="emergency-phone"
+                placeholder="(555) 999-1122"
+                value={emergencyPhone}
+                onChange={(e) => setEmergencyPhone(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => setOpen(false)}
-              className="h-8 text-xs border-brand-rule"
+              disabled={loading}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="h-8 text-xs bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
-            >
-              {loading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            <Button type="submit" size="sm" disabled={loading}>
+              {loading && <Spinner className="h-4 w-4 mr-2" />}
               Save Driver
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

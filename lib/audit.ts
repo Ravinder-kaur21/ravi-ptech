@@ -87,6 +87,22 @@ export type AuditAction =
   | "role.create"
   | "role.update"
   | "role.delete"
+  | "customer.create"
+  | "customer.update"
+  | "customer.delete"
+  | "facility.create"
+  | "facility.update"
+  | "facility.delete"
+  | "expense.create"
+  | "expense.update_status"
+  | "expense.delete"
+  | "carrier.create"
+  | "carrier.update"
+  | "carrier.delete"
+  | "carrier_payment.create"
+  | "carrier_payment.update_status"
+  | "carrier_payment.record_payment"
+  | "carrier_payment.delete"
 
 export type AuditTargetType =
   | "user"
@@ -108,6 +124,11 @@ export type AuditTargetType =
   | "truck"
   | "workspace"
   | "role"
+  | "customer"
+  | "facility"
+  | "expense"
+  | "carrier"
+  | "carrier_payment"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }

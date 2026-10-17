@@ -22,6 +22,7 @@ import {
   getDriversForOrg,
   getTrucksForOrg,
   getTrailersForOrg,
+  getCarriersForOrg,
 } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { formatWorkspaceDate } from "@/lib/timezone"
@@ -45,13 +46,14 @@ export default async function LoadDetailPage({
   if (!tenantId) redirect("/onboarding")
 
   const { id } = await params
-  const [load, profile, perms, drivers, trucks, trailers] = await Promise.all([
+  const [load, profile, perms, drivers, trucks, trailers, carriers] = await Promise.all([
     getLoadById(id, tenantId),
     getWorkspaceProfile(tenantId),
     getEffectivePermissions(session.user.id, tenantId),
     getDriversForOrg(tenantId),
     getTrucksForOrg(tenantId),
     getTrailersForOrg(tenantId),
+    getCarriersForOrg(tenantId),
   ])
 
   if (!load) notFound()
@@ -137,6 +139,8 @@ export default async function LoadDetailPage({
               availableDrivers={drivers}
               availableTrucks={trucks}
               availableTrailers={trailers}
+              availableCarriers={carriers}
+              defaultCarrierRate={load.carrierRate}
             />
           )}
 

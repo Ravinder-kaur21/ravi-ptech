@@ -64,11 +64,9 @@
    - *Current state*: Database table `invoice` and DAL queries exist. Page `/invoices` currently renders a `ModulePage` placeholder.
    - *Missing*: Invoice generation from delivered loads, finalize modal with discounts, and invoice listing table.
 3. **Accounts Payable (Trip Expenses)**:
-   - *Current state*: Database table `apExpense` exists. Page `/accounts-payable` currently renders a `ModulePage` placeholder.
-   - *Missing*: Expense logging table, receipt image attachments, and accountant review queue.
+   - *Current state*: **Complete**. Interactive AP dashboard at `/accounts-payable` with KPI cards (Pending, Approved, Reimbursed, Fuel & DEF), filterable table, receipt viewer, and accountant approval workflow.
 4. **Carrier Settlements & Pay**:
-   - *Current state*: Database table `carrierPayment` exists. Page `/carrier-pay` currently renders a `ModulePage` placeholder.
-   - *Missing*: Carrier settlement list and payment confirmation dialog.
+   - *Current state*: **Complete**. Master outside carrier directory (`carrier` table), interactive Carrier Pay dashboard at `/carrier-pay` with live KPIs, settlement builder with accessorials/deductions, remittance payment confirmation dialog, and automated settlement generation upon trip delivery.
 5. **Driver Payroll**:
    - *Current state*: Database tables `payStub` and `payItem` exist. Page `/payroll` currently renders a `ModulePage` placeholder.
    - *Missing*: Automatic pay item aggregation, empty mile calculations, and PDF pay stub generation.

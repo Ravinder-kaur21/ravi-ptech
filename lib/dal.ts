@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth"
 import { eq, and, desc, sql, ne, gte, isNull, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import {
+  customer,
+  facility,
   load,
   trip,
   driver,
@@ -12,6 +14,7 @@ import {
   invoice,
   payStub,
   apExpense,
+  carrier,
   carrierPayment,
   organization,
   member,
@@ -465,6 +468,85 @@ export const getTripsWithDetailsForOrg = async (tenantId: string) => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMERS & FACILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getCustomersForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(customer)
+    .where(eq(customer.tenantId, tenantId))
+    .orderBy(desc(customer.createdAt))
+}
+
+export const getCustomerById = async (customerId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(customer)
+    .where(and(eq(customer.id, customerId), eq(customer.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+export const getFacilitiesForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(facility)
+    .where(eq(facility.tenantId, tenantId))
+    .orderBy(desc(facility.createdAt))
+}
+
+export const getFacilityById = async (facilityId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(facility)
+    .where(and(eq(facility.id, facilityId), eq(facility.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNTS PAYABLE / EXPENSES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getExpensesWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: apExpense.id,
+      tripId: apExpense.tripId,
+      driverId: apExpense.driverId,
+      type: apExpense.type,
+      vendor: apExpense.vendor,
+      amount: apExpense.amount,
+      date: apExpense.date,
+      status: apExpense.status,
+      notes: apExpense.notes,
+      receipt: apExpense.receipt,
+      createdAt: apExpense.createdAt,
+      tripNumber: trip.tripNumber,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+    })
+    .from(apExpense)
+    .leftJoin(trip, eq(apExpense.tripId, trip.id))
+    .leftJoin(driver, eq(apExpense.driverId, driver.id))
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .where(eq(apExpense.tenantId, tenantId))
+    .orderBy(desc(apExpense.date))
+}
+
+export const getExpenseById = async (expenseId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(apExpense)
+    .where(and(eq(apExpense.id, expenseId), eq(apExpense.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DRIVERS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -474,6 +556,54 @@ export const getDriversForOrg = async (tenantId: string) => {
     .from(driver)
     .where(eq(driver.tenantId, tenantId))
     .orderBy(desc(driver.createdAt))
+}
+
+export const getDriversWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: driver.id,
+      tenantId: driver.tenantId,
+      userId: driver.userId,
+      firstName: driver.firstName,
+      lastName: driver.lastName,
+      email: driver.email,
+      phone: driver.phone,
+      cdlNumber: driver.cdlNumber,
+      cdlState: driver.cdlState,
+      cdlExpiration: driver.cdlExpiration,
+      dateOfBirth: driver.dateOfBirth,
+      address: driver.address,
+      city: driver.city,
+      state: driver.state,
+      zip: driver.zip,
+      status: driver.status,
+      hireDate: driver.hireDate,
+      payRate: driver.payRate,
+      payType: driver.payType,
+      emergencyContact: driver.emergencyContact,
+      emergencyPhone: driver.emergencyPhone,
+      notes: driver.notes,
+      createdAt: driver.createdAt,
+      userImage: user.image,
+      userEmailVerified: user.emailVerified,
+    })
+    .from(driver)
+    .leftJoin(user, eq(driver.userId, user.id))
+    .where(eq(driver.tenantId, tenantId))
+    .orderBy(desc(driver.createdAt))
+}
+
+export const getWorkspaceMembersForDriverAssignment = async (orgId: string) => {
+  return db
+    .select({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      role: member.role,
+    })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -612,6 +742,81 @@ export const getCarrierPaymentsForOrg = async (tenantId: string) => {
     .from(carrierPayment)
     .where(eq(carrierPayment.tenantId, tenantId))
     .orderBy(desc(carrierPayment.createdAt))
+}
+
+export const getCarrierPaymentsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: carrierPayment.id,
+      carrierId: carrierPayment.carrierId,
+      tripId: carrierPayment.tripId,
+      driverId: carrierPayment.driverId,
+      amount: carrierPayment.amount,
+      additions: carrierPayment.additions,
+      deductions: carrierPayment.deductions,
+      netAmount: carrierPayment.netAmount,
+      currency: carrierPayment.currency,
+      status: carrierPayment.status,
+      invoiceNumber: carrierPayment.invoiceNumber,
+      paymentDate: carrierPayment.paymentDate,
+      paymentMethod: carrierPayment.paymentMethod,
+      referenceNumber: carrierPayment.referenceNumber,
+      notes: carrierPayment.notes,
+      createdAt: carrierPayment.createdAt,
+      carrierName: carrier.name,
+      carrierMcNumber: carrier.mcNumber,
+      carrierDotNumber: carrier.dotNumber,
+      carrierPhone: carrier.phone,
+      carrierEmail: carrier.email,
+      carrierPaymentTerms: carrier.paymentTerms,
+      tripNumber: trip.tripNumber,
+      tripMiles: trip.totalMiles,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+    })
+    .from(carrierPayment)
+    .leftJoin(carrier, eq(carrierPayment.carrierId, carrier.id))
+    .leftJoin(trip, eq(carrierPayment.tripId, trip.id))
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(carrierPayment.driverId, driver.id))
+    .where(eq(carrierPayment.tenantId, tenantId))
+    .orderBy(desc(carrierPayment.createdAt))
+}
+
+export const getCarrierPaymentById = async (id: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(carrierPayment)
+    .where(and(eq(carrierPayment.id, id), eq(carrierPayment.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARRIERS DIRECTORY
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getCarriersForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(carrier)
+    .where(eq(carrier.tenantId, tenantId))
+    .orderBy(desc(carrier.createdAt))
+}
+
+export const getCarrierById = async (carrierId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(carrier)
+    .where(and(eq(carrier.id, carrierId), eq(carrier.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -297,6 +297,9 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   carrierPayments: many(carrierPayment),
   apExpenses: many(apExpense),
   payStubs: many(payStub),
+  customers: many(customer),
+  facilities: many(facility),
+  carriers: many(carrier),
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -797,6 +800,33 @@ export const load = pgTable("load", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
 
+// Carriers table (outside contracted carriers, owner-operators & power-only fleets)
+export const carrier = pgTable("carrier", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  mcNumber: varchar("mc_number", { length: 50 }),
+  dotNumber: varchar("dot_number", { length: 50 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 50 }),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  taxId: varchar("tax_id", { length: 50 }),
+  paymentTerms: varchar("payment_terms", { length: 50 }).default("Net 30"),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  insuranceExpiry: timestamp("insurance_expiry"),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
 // Trips table (load runs)
 export const trip = pgTable("trip", {
   id: text("id").primaryKey(),
@@ -805,6 +835,8 @@ export const trip = pgTable("trip", {
     .references(() => organization.id, { onDelete: "cascade" }),
   tripNumber: varchar("trip_number", { length: 50 }).notNull(),
   loadId: text("load_id").references(() => load.id),
+  carrierId: text("carrier_id").references(() => carrier.id),
+  carrierRate: varchar("carrier_rate", { length: 50 }),
   driverId: text("driver_id").references(() => driver.id),
   truckId: text("truck_id").references(() => truck.id),
   trailerId: text("trailer_id").references(() => trailer.id),
@@ -901,6 +933,53 @@ export const trailer = pgTable("trailer", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
 
+// Customers table (master customer directory & credit terms)
+export const customer = pgTable("customer", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 50 }),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  paymentTerms: varchar("payment_terms", { length: 50 }).default("Net 30"),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  creditLimit: varchar("credit_limit", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+// Facilities table (shippers, receivers, distribution centers, cross-docks, yards)
+export const facility = pgTable("facility", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  facilityType: varchar("facility_type", { length: 50 }).default("shipper_receiver"),
+  address: text("address").notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 50 }).notNull(),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  operatingHours: varchar("operating_hours", { length: 100 }),
+  appointmentRequired: boolean("appointment_required").default(true),
+  checkInInstructions: text("check_in_instructions"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
 // Invoices table
 export const invoice = pgTable("invoice", {
   id: text("id").primaryKey(),
@@ -927,12 +1006,19 @@ export const carrierPayment = pgTable("carrier_payment", {
   tenantId: text("tenant_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  carrierId: text("carrier_id").references(() => carrier.id),
   tripId: text("trip_id").references(() => trip.id),
   driverId: text("driver_id").references(() => driver.id),
   amount: varchar("amount", { length: 50 }).notNull(),
+  additions: varchar("additions", { length: 50 }).default("0"),
+  deductions: varchar("deductions", { length: 50 }).default("0"),
+  netAmount: varchar("net_amount", { length: 50 }),
+  currency: varchar("currency", { length: 10 }).default("USD"),
   status: varchar("status", { length: 50 }).notNull().default("pending"),
+  invoiceNumber: varchar("invoice_number", { length: 100 }),
   paymentDate: timestamp("payment_date"),
   paymentMethod: varchar("payment_method", { length: 50 }),
+  referenceNumber: varchar("reference_number", { length: 100 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -1023,6 +1109,10 @@ export const tripRelations = relations(trip, ({ one, many }) => ({
     fields: [trip.loadId],
     references: [load.id],
   }),
+  carrier: one(carrier, {
+    fields: [trip.carrierId],
+    references: [carrier.id],
+  }),
   driver: one(driver, {
     fields: [trip.driverId],
     references: [driver.id],
@@ -1109,10 +1199,37 @@ export const payItemRelations = relations(payItem, ({ one }) => ({
   }),
 }))
 
+export const carrierRelations = relations(carrier, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [carrier.tenantId],
+    references: [organization.id],
+  }),
+  trips: many(trip),
+  carrierPayments: many(carrierPayment),
+}))
+
+export const customerRelations = relations(customer, ({ one }) => ({
+  organization: one(organization, {
+    fields: [customer.tenantId],
+    references: [organization.id],
+  }),
+}))
+
+export const facilityRelations = relations(facility, ({ one }) => ({
+  organization: one(organization, {
+    fields: [facility.tenantId],
+    references: [organization.id],
+  }),
+}))
+
 export const carrierPaymentRelations = relations(carrierPayment, ({ one }) => ({
   organization: one(organization, {
     fields: [carrierPayment.tenantId],
     references: [organization.id],
+  }),
+  carrier: one(carrier, {
+    fields: [carrierPayment.carrierId],
+    references: [carrier.id],
   }),
   trip: one(trip, {
     fields: [carrierPayment.tripId],

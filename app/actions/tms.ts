@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
-import { load, trip, driver, truck, trailer, user as userTable } from "@/lib/schema"
+import { load, trip, driver, truck, trailer, carrier, carrierPayment, user as userTable } from "@/lib/schema"
 import { requireTenant, TenantError } from "@/lib/dal"
 import { requireCatalogPermission } from "@/lib/can"
 import { recordAuditEvent } from "@/lib/audit"
@@ -134,14 +134,22 @@ export async function createTrailerAction(raw: z.infer<typeof trailerSchema>) {
 // ─── 3. CREATE DRIVER ────────────────────────────────────────────────────────
 
 const driverSchema = z.object({
+  userId: z.string().optional().nullable(),
   firstName: z.string().min(1, "First name is required").max(100),
   lastName: z.string().min(1, "Last name is required").max(100),
   email: z.string().email().optional().nullable().or(z.literal("")),
   phone: z.string().max(50).optional().nullable(),
   cdlNumber: z.string().max(50).optional().nullable(),
   cdlState: z.string().max(50).optional().nullable(),
+  cdlExpiration: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  state: z.string().max(50).optional().nullable(),
+  zip: z.string().max(20).optional().nullable(),
   payType: z.string().max(50).optional().nullable(),
   payRate: z.string().max(50).optional().nullable(),
+  emergencyContact: z.string().max(100).optional().nullable(),
+  emergencyPhone: z.string().max(50).optional().nullable(),
   status: z.enum(["active", "inactive", "on_leave"]).default("active"),
   notes: z.string().optional().nullable(),
 })
@@ -162,12 +170,20 @@ export async function createDriverAction(raw: z.infer<typeof driverSchema>) {
     await db.insert(driver).values({
       id,
       tenantId: ctx.tenantId,
+      userId: data.userId || null,
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email || null,
       phone: data.phone ?? null,
       cdlNumber: data.cdlNumber ?? null,
       cdlState: data.cdlState ?? null,
+      cdlExpiration: data.cdlExpiration ? new Date(data.cdlExpiration) : null,
+      address: data.address ?? null,
+      city: data.city ?? null,
+      state: data.state ?? null,
+      zip: data.zip ?? null,
+      emergencyContact: data.emergencyContact ?? null,
+      emergencyPhone: data.emergencyPhone ?? null,
       payType: data.payType ?? "Per Mile",
       payRate: data.payRate ?? null,
       status: data.status,
@@ -199,8 +215,10 @@ export async function createDriverAction(raw: z.infer<typeof driverSchema>) {
 
 const dispatchSchema = z.object({
   loadId: z.string().min(1, "Load ID is required"),
-  driverId: z.string().min(1, "Driver assignment is required"),
-  truckId: z.string().min(1, "Truck assignment is required"),
+  carrierId: z.string().optional().nullable(),
+  carrierRate: z.string().optional().nullable(),
+  driverId: z.string().optional().nullable(),
+  truckId: z.string().optional().nullable(),
   trailerId: z.string().optional().nullable(),
   tripNumber: z.string().optional(),
   totalMiles: z.string().optional().nullable(),
@@ -216,7 +234,11 @@ export async function dispatchLoadAction(raw: z.infer<typeof dispatchSchema>) {
       return { ok: false, error: "Validation error", details: parsed.error.issues }
     }
 
-    const { loadId, driverId, truckId, trailerId, tripNumber, totalMiles } = parsed.data
+    const { loadId, carrierId, carrierRate, driverId, truckId, trailerId, tripNumber, totalMiles } = parsed.data
+
+    if (!carrierId && (!driverId || !truckId)) {
+      return { ok: false, error: "Must assign either an outside carrier or a driver & power unit" }
+    }
 
     // Verify load exists and belongs to tenant
     const [existingLoad] = await db
@@ -238,8 +260,10 @@ export async function dispatchLoadAction(raw: z.infer<typeof dispatchSchema>) {
       tenantId: ctx.tenantId,
       tripNumber: generatedTripNumber,
       loadId,
-      driverId,
-      truckId,
+      carrierId: carrierId || null,
+      carrierRate: carrierRate || existingLoad.carrierRate || null,
+      driverId: driverId || null,
+      truckId: truckId || null,
       trailerId: trailerId ?? null,
       status: "in_progress",
       startDate: new Date(),
@@ -256,11 +280,13 @@ export async function dispatchLoadAction(raw: z.infer<typeof dispatchSchema>) {
       })
       .where(and(eq(load.id, loadId), eq(load.tenantId, ctx.tenantId)))
 
-    // Update truck to in_use
-    await db
-      .update(truck)
-      .set({ status: "in_use", updatedAt: new Date() })
-      .where(and(eq(truck.id, truckId), eq(truck.tenantId, ctx.tenantId)))
+    // Update truck to in_use if company truck
+    if (truckId) {
+      await db
+        .update(truck)
+        .set({ status: "in_use", updatedAt: new Date() })
+        .where(and(eq(truck.id, truckId), eq(truck.tenantId, ctx.tenantId)))
+    }
 
     // Update trailer to in_use if provided
     if (trailerId) {
@@ -353,6 +379,31 @@ export async function updateTripStatusAction(raw: z.infer<typeof updateTripStatu
           .update(load)
           .set({ status: "delivered", updatedAt: new Date() })
           .where(and(eq(load.id, existingTrip.loadId), eq(load.tenantId, ctx.tenantId)))
+      }
+
+      // If outside carrier trip was completed, auto-create a pending carrier settlement
+      if (existingTrip.carrierId && status === "completed") {
+        const [existingPayment] = await db
+          .select({ id: carrierPayment.id })
+          .from(carrierPayment)
+          .where(and(eq(carrierPayment.tripId, tripId), eq(carrierPayment.tenantId, ctx.tenantId)))
+          .limit(1)
+
+        if (!existingPayment) {
+          const agreedRate = existingTrip.carrierRate || "0"
+          await db.insert(carrierPayment).values({
+            id: randomUUID(),
+            tenantId: ctx.tenantId,
+            carrierId: existingTrip.carrierId,
+            tripId,
+            amount: agreedRate,
+            netAmount: agreedRate,
+            currency: "USD",
+            status: "pending",
+            notes: `Auto-generated settlement on trip completion (${existingTrip.tripNumber})`,
+          })
+          revalidatePath("/carrier-pay")
+        }
       }
     }
 

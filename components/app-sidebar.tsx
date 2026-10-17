@@ -93,6 +93,12 @@ const MAIN_NAV: NavItem[] = [
     permissions: ["drivers.module", "drivers.view_all", "drivers.view_own"],
   },
   {
+    label: "Customers",
+    href: "/customers",
+    icon: Building2,
+    permissions: ["customers.module", "customers.view_all"],
+  },
+  {
     label: "Invoices",
     href: "/invoices",
     icon: Receipt,
@@ -108,7 +114,7 @@ const MAIN_NAV: NavItem[] = [
     label: "Carrier Pay",
     href: "/carrier-pay",
     icon: Banknote,
-    permissions: ["accounting.module", "accounting.carrier_pay.view"],
+    permissions: ["accounting.module", "settlements.module", "settlements.view_all", "accounting.carrier_pay.view"],
   },
   {
     label: "Payroll",
