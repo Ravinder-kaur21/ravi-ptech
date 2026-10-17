@@ -21,7 +21,7 @@ import { formatWorkspaceDate } from "@/lib/timezone"
 import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { GenerateInvoiceDialog } from "@/components/tms/generate-invoice-dialog"
-import { ApplyPaymentDialog } from "@/components/tms/apply-payment-dialog"
+import { InvoicesTableView } from "@/components/tms/invoices-table-view"
 
 export const instant = false
 
@@ -151,103 +151,11 @@ export default async function InvoicesPage() {
           )}
         </Card>
       ) : (
-        <Card className="border-brand-rule bg-brand-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-brand-rule bg-brand-cream-soft/50">
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Invoice #
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Customer / Broker
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Linked Load
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Issued Date
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Due Date
-                  </th>
-                  <th className="text-right font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Amount
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft pl-6">
-                    Status
-                  </th>
-                  <th className="text-right font-mono text-[10px] font-medium uppercase tracking-[0.04em] px-5 py-3 text-brand-muted-soft">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b border-brand-rule last:border-0 hover:bg-brand-cream-soft/50 transition-colors"
-                  >
-                    <td className="px-5 py-3.5 font-mono text-xs font-semibold text-brand-ink">
-                      <Link
-                        href={`/invoices/${inv.id}`}
-                        className="text-brand-accent hover:underline inline-flex items-center gap-1"
-                      >
-                        {inv.invoiceNumber}
-                        <ArrowUpRight className="size-3" />
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-brand-ink">
-                      <div className="font-medium">{inv.customerName || "—"}</div>
-                      {inv.customerEmail && (
-                        <div className="text-[11px] text-brand-muted-soft">{inv.customerEmail}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs">
-                      {inv.loadId ? (
-                        <Link
-                          href={`/loads/${inv.loadId}`}
-                          className="font-mono text-brand-ink hover:text-brand-accent underline inline-flex items-center gap-1"
-                        >
-                          {inv.loadNumber || "Load"}
-                        </Link>
-                      ) : (
-                        <span className="text-brand-muted-soft font-mono">Standalone</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-brand-muted-soft font-mono">
-                      {formatWorkspaceDate(inv.createdAt, profile?.timeZone, undefined, { mode: "date" })}
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-brand-muted-soft font-mono">
-                      {inv.dueDate ? formatWorkspaceDate(inv.dueDate, profile?.timeZone, undefined, { mode: "date" }) : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-mono text-xs font-semibold text-brand-ink">
-                      ${parseFloat(inv.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-5 py-3.5 pl-6">
-                      <StatusBadge status={inv.status} />
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      {inv.status !== "paid" && canApplyPayment ? (
-                        <ApplyPaymentDialog
-                          invoiceId={inv.id}
-                          invoiceNumber={inv.invoiceNumber}
-                          totalAmount={inv.amount}
-                          customerName={inv.customerName}
-                        />
-                      ) : (
-                        <span className="text-[11px] font-medium text-emerald-600 inline-flex items-center gap-1">
-                          <CheckCircle2 className="size-3" />
-                          Reconciled
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <InvoicesTableView
+          invoices={invoices}
+          canApplyPayment={canApplyPayment}
+          timeZone={profile?.timeZone}
+        />
       )}
     </div>
   )

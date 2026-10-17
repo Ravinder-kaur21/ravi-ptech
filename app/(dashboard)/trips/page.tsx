@@ -4,8 +4,7 @@ import { Map, ArrowUpRight, Truck, User, Navigation, Phone, ExternalLink } from 
 import { getSession, getTripsWithDetailsForOrg, getDriversForOrg } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
-import { StatusBadge } from "@/components/status-badge"
-import { TripStatusUpdater } from "@/components/tms/trip-status-updater"
+import { TripsTableView } from "@/components/tms/trips-table-view"
 import { RecordExpenseDialog } from "@/components/tms/record-expense-dialog"
 
 export const instant = false
@@ -113,139 +112,7 @@ export default async function TripsPage() {
           </Link>
         </Card>
       ) : (
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 overflow-hidden shadow-xs rounded-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec]/80 dark:bg-zinc-900/60">
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Trip #
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Load
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Route & Nav
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Driver
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Equipment
-                  </th>
-                  <th className="text-left font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Status
-                  </th>
-                  <th className="text-right font-mono text-[10px] font-semibold uppercase tracking-wider px-5 py-3 text-[#8a8b8f]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e4ddd3] dark:divide-zinc-800/80">
-                {trips.map((t) => {
-                  const mapUrl =
-                    t.originCity && t.destCity
-                      ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
-                          `${t.originCity}, ${t.originState}`
-                        )}&destination=${encodeURIComponent(`${t.destCity}, ${t.destState}`)}`
-                      : null
-
-                  return (
-                    <tr
-                      key={t.id}
-                      className="hover:bg-[#f7f3ec]/50 dark:hover:bg-zinc-900/40 transition-colors"
-                    >
-                      <td className="px-5 py-3.5 font-mono text-xs font-semibold text-[#16181d] dark:text-zinc-100">
-                        {t.tripNumber}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {t.loadId ? (
-                          <Link
-                            href={`/loads/${t.loadId}`}
-                            className="font-mono text-xs text-[#d9622b] hover:underline inline-flex items-center gap-1 font-semibold"
-                          >
-                            {t.loadNumber || "View Load"}
-                            <ArrowUpRight className="size-3" />
-                          </Link>
-                        ) : (
-                          <span className="text-[#8a8b8f] text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 text-xs text-[#16181d] dark:text-zinc-200">
-                        <div className="flex items-center gap-1.5">
-                          <span>
-                            {t.originCity ? `${t.originCity}, ${t.originState}` : "—"}{" "}
-                            <span className="text-[#8a8b8f]">→</span>{" "}
-                            {t.destCity ? `${t.destCity}, ${t.destState}` : "—"}
-                          </span>
-                          {mapUrl && (
-                            <a
-                              href={mapUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open route in Google Maps"
-                              className="text-[#8a8b8f] hover:text-[#d9622b] transition-colors"
-                            >
-                              <ExternalLink className="size-3" />
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-xs">
-                        {t.driverFirstName ? (
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1.5 font-medium text-[#16181d] dark:text-zinc-100">
-                              <User className="size-3.5 text-[#8a8b8f] shrink-0" />
-                              <span>
-                                {t.driverFirstName} {t.driverLastName}
-                              </span>
-                            </div>
-                            {t.driverPhone && (
-                              <a
-                                href={`tel:${t.driverPhone}`}
-                                className="inline-flex items-center gap-1 font-mono text-[10px] text-[#d9622b] hover:underline"
-                              >
-                                <Phone className="size-2.5" />
-                                <span>{t.driverPhone}</span>
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[#8a8b8f] text-xs">Unassigned</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 text-xs">
-                        <div className="flex flex-col gap-0.5 font-mono text-[11px]">
-                          <span className="text-[#16181d] dark:text-zinc-100">
-                            Power: {t.truckUnitNumber ? `#${t.truckUnitNumber}` : "—"}
-                          </span>
-                          {t.trailerUnitNumber && (
-                            <span className="text-[#8a8b8f]">
-                              TLR: #{t.trailerUnitNumber}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <StatusBadge status={t.status} />
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <TripStatusUpdater tripId={t.id} currentStatus={t.status} />
-                          <RecordExpenseDialog
-                            trips={tripOptions}
-                            defaultTripId={t.id}
-                            drivers={drivers}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <TripsTableView trips={trips} drivers={drivers} />
       )}
     </div>
   )
