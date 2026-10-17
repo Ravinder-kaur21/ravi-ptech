@@ -22,9 +22,18 @@ export type BotRole =
   | "dispatcher";
 export type BotSize = "xs" | "sm" | "md" | "lg" | "xl";
 
+export interface Palette {
+  body: string;
+  eye: string;
+  pupil: string;
+  blush: string;
+  shadow: string;
+}
+
 export interface MuvxBotProps {
   mood?: BotMood;
   coat?: BotCoat;
+  palette?: Palette;
   role?: BotRole;
   variant?: "parent" | "child";
   size?: BotSize;
@@ -32,14 +41,7 @@ export interface MuvxBotProps {
   showDots?: boolean;
   interactive?: boolean;
   label?: string;
-}
-
-interface Palette {
-  body: string;
-  eye: string;
-  pupil: string;
-  blush: string;
-  shadow: string;
+  isActive?: boolean;
 }
 
 const coats: Record<BotCoat, Palette> = {
@@ -121,6 +123,7 @@ const sizeClasses: Record<BotSize, string> = {
 export const MuvxBot = memo(function MuvxBot({
   mood = "idle",
   coat,
+  palette: customPalette,
   role = "main",
   variant = "parent",
   size = "md",
@@ -128,13 +131,14 @@ export const MuvxBot = memo(function MuvxBot({
   showDots = false,
   interactive = true,
   label,
+  isActive = false,
 }: MuvxBotProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [pupil, setPupil] = useState({ x: 0, y: 0 });
 
   // Resolve coat based on explicit prop or child role
   const resolvedCoat = coat || roleToCoat[role] || (variant === "child" ? "amber" : "ink");
-  const palette = coats[resolvedCoat] || coats.ink;
+  const palette = customPalette || coats[resolvedCoat] || coats.ink;
 
   // Real-time eye tracking with bounds clamping
   useEffect(() => {
@@ -297,7 +301,22 @@ export const MuvxBot = memo(function MuvxBot({
               cy={isChild ? "160" : "156"}
               r={isChild ? "92" : "108"}
               fill={palette.body}
-              style={{ transition: "fill 600ms ease-in-out" }}
+              stroke={
+                palette.body.toLowerCase() === "#ffffff"
+                  ? "rgba(20, 20, 20, 0.14)"
+                  : palette.body.toLowerCase() === "#141414" && isActive
+                    ? "rgba(255, 255, 255, 0.35)"
+                    : undefined
+              }
+              strokeWidth={
+                palette.body.toLowerCase() === "#ffffff" ||
+                (palette.body.toLowerCase() === "#141414" && isActive)
+                  ? 4
+                  : 0
+              }
+              style={{
+                transition: "fill 600ms ease-in-out, stroke 600ms ease-in-out",
+              }}
             />
 
             {/* Cheek Blushes (overlapping outer bottom edge of eyes) */}
@@ -394,8 +413,8 @@ export const MuvxBot = memo(function MuvxBot({
                   transition: "transform 200ms ease",
                 }}
               >
-                <ellipse cx="122" cy="138" rx="28" ry="16" fill={palette.body} />
-                <ellipse cx="198" cy="138" rx="28" ry="16" fill={palette.body} />
+                <ellipse cx="122" cy="138" rx="28" ry="16" fill={palette.body} style={{ transition: "fill 600ms ease-in-out" }} />
+                <ellipse cx="198" cy="138" rx="28" ry="16" fill={palette.body} style={{ transition: "fill 600ms ease-in-out" }} />
               </g>
             </g>
 
@@ -458,26 +477,78 @@ export default MuvxBot;
 
 /**
  * Animated Copilot Agent Bot for the sidebar navigation.
- * Cycles dynamically through Muvx brand coats every 5 seconds.
+ * Cycles smoothly through the curated palette:
+ * #14a39b -> #e11d48 -> black -> white -> #00b5b5 -> white -> black -> cream
  */
-export const SIDEBAR_BOT_COATS: BotCoat[] = [
-  "ink",
-  "amber",
-  "emerald",
-  "indigo",
-  "rose",
-  "peach",
-  "grove",
+export const SIDEBAR_BOT_SEQUENCE: Palette[] = [
+  // 1. #14a39b
+  {
+    body: "#14a39b",
+    eye: "#ffffff",
+    pupil: "#073b38",
+    blush: "#5eead4",
+    shadow: "#073b38",
+  },
+  // 2. #e11d48
+  {
+    body: "#e11d48",
+    eye: "#ffffff",
+    pupil: "#4c0519",
+    blush: "#fda4af",
+    shadow: "#4c0519",
+  },
+  // 3. Black
+  {
+    body: "#141414",
+    eye: "#fffdf8",
+    pupil: "#141414",
+    blush: "#ff7a59",
+    shadow: "#141414",
+  },
+  // 4. White
+  {
+    body: "#ffffff",
+    eye: "#141414",
+    pupil: "#ffffff",
+    blush: "#fda4af",
+    shadow: "#94a3b8",
+  },
+  // 5. #00b5b5
+  {
+    body: "#00b5b5",
+    eye: "#ffffff",
+    pupil: "#043e3e",
+    blush: "#67e8f9",
+    shadow: "#043e3e",
+  },
+  // 6. White
+  {
+    body: "#ffffff",
+    eye: "#141414",
+    pupil: "#ffffff",
+    blush: "#fda4af",
+    shadow: "#94a3b8",
+  },
+  // 7. Black
+  {
+    body: "#141414",
+    eye: "#fffdf8",
+    pupil: "#141414",
+    blush: "#ff7a59",
+    shadow: "#141414",
+  },
+  // 8. Cream
+  {
+    body: "#fff6ea",
+    eye: "#141414",
+    pupil: "#fffdf8",
+    blush: "#ffb199",
+    shadow: "#3a2e1e",
+  },
 ];
 
-export const SIDEBAR_BOT_COATS_ACTIVE: BotCoat[] = [
-  "cream",
-  "amber",
-  "emerald",
-  "indigo",
-  "rose",
-  "peach",
-];
+export const SIDEBAR_BOT_COATS: BotCoat[] = ["ink", "cream", "rose"];
+export const SIDEBAR_BOT_COATS_ACTIVE: BotCoat[] = ["cream", "rose", "ink"];
 
 export function SidebarCopilotBot({
   className,
@@ -486,20 +557,18 @@ export function SidebarCopilotBot({
   className?: string;
   isActive?: boolean;
 }) {
-  const [coatIndex, setCoatIndex] = useState(0);
-
-  const coats = isActive ? SIDEBAR_BOT_COATS_ACTIVE : SIDEBAR_BOT_COATS;
+  const [stepIndex, setStepIndex] = useState(0);
 
   useEffect(() => {
-    // Automatically transition color every 4.5 seconds
+    // Automatically transition color every 4 seconds
     const interval = setInterval(() => {
-      setCoatIndex((prev) => (prev + 1) % coats.length);
-    }, 4500);
+      setStepIndex((prev) => (prev + 1) % SIDEBAR_BOT_SEQUENCE.length);
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [coats.length]);
+  }, []);
 
-  const currentCoat = coats[coatIndex % coats.length];
+  const currentPalette = SIDEBAR_BOT_SEQUENCE[stepIndex];
 
   return (
     <div
@@ -508,7 +577,12 @@ export function SidebarCopilotBot({
         className
       )}
     >
-      <MuvxBot size="xs" coat={currentCoat} mood="idle" />
+      <MuvxBot
+        size="xs"
+        palette={currentPalette}
+        mood="idle"
+        isActive={isActive}
+      />
     </div>
   );
 }
