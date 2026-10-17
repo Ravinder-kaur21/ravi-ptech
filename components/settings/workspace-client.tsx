@@ -30,6 +30,10 @@ import { toast } from "sonner"
 // is included on every role; the server action enforces "update" for
 // owner + admin only).
 
+import { getAvailableTimezones } from "@/lib/timezone"
+import { getAllCurrencies } from "@/lib/currencies"
+import { getAllCountries } from "@/lib/geography"
+
 const BUSINESS_TYPES = [
   { value: "broker", label: "Broker" },
   { value: "carrier", label: "Carrier" },
@@ -38,29 +42,10 @@ const BUSINESS_TYPES = [
   { value: "other", label: "Other" },
 ]
 
-const CURRENCIES = [
-  { value: "USD", label: "USD — US Dollar" },
-  { value: "CAD", label: "CAD — Canadian Dollar" },
-  { value: "MXN", label: "MXN — Mexican Peso" },
-  { value: "EUR", label: "EUR — Euro" },
-  { value: "GBP", label: "GBP — British Pound" },
-]
+const DYNAMIC_CURRENCIES = getAllCurrencies()
+const DYNAMIC_TIMEZONES = getAvailableTimezones()
+const DYNAMIC_COUNTRIES = getAllCountries()
 
-const TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "America/Toronto",
-  "America/Vancouver",
-  "America/Mexico_City",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Tokyo",
-  "UTC",
-]
 
 const FISCAL_YEAR_STARTS = [
   { value: "01-01", label: "January 1 (Calendar year)" },
@@ -698,18 +683,24 @@ export function WorkspaceSettingsClient() {
             />
           </div>
         </div>
-        <div className="space-y-1.5 max-w-[10rem]">
+        <div className="space-y-1.5 max-w-xs">
           <Label htmlFor="country">Country</Label>
-          <Input
-            id="country"
+          <Select
             value={form.country ?? "US"}
-            onChange={(e) =>
-              update("country", e.target.value.toUpperCase().slice(0, 2) || "US")
-            }
-            maxLength={2}
+            onValueChange={(v) => update("country", v)}
             disabled={!canEdit}
-            className="h-10 font-mono uppercase"
-          />
+          >
+            <SelectTrigger id="country" className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {DYNAMIC_COUNTRIES.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.code} — {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </Card>
 
@@ -734,9 +725,9 @@ export function WorkspaceSettingsClient() {
               <SelectTrigger id="defaultCurrency" className="h-10">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
+              <SelectContent className="max-h-72">
+                {DYNAMIC_CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
                     {c.label}
                   </SelectItem>
                 ))}
@@ -753,10 +744,10 @@ export function WorkspaceSettingsClient() {
               <SelectTrigger id="timeZone" className="h-10">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
+              <SelectContent className="max-h-72">
+                {DYNAMIC_TIMEZONES.map((tz) => (
+                  <SelectItem key={tz.id} value={tz.id}>
+                    {tz.label}
                   </SelectItem>
                 ))}
               </SelectContent>

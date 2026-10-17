@@ -764,6 +764,20 @@ export const load = pgTable("load", {
   targetProfit: varchar("target_profit", { length: 50 }),
   actualProfit: varchar("actual_profit", { length: 50 }),
 
+  // Currency & Tax Engine
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  salesTaxType: varchar("sales_tax_type", { length: 20 }).default("none"),
+  salesTaxRate: varchar("sales_tax_rate", { length: 20 }),
+  salesTaxAmount: varchar("sales_tax_amount", { length: 20 }),
+  finalRate: varchar("final_rate", { length: 50 }),
+
+  // Multi-stop route, references & reefer specs
+  tenderNumber: varchar("tender_number", { length: 100 }),
+  stops: text("stops"), // JSON-serialized LoadStop[]
+  temperature: varchar("temperature", { length: 50 }),
+  isRefrigerated: boolean("is_refrigerated").default(false),
+  specialInstructions: text("special_instructions"),
+
   // BOL tracking
   bolNumber: varchar("bol_number", { length: 50 }),
   bolReceived: boolean("bol_received").default(false),

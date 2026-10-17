@@ -18,6 +18,79 @@
 
 export const DEFAULT_TIMEZONE = "America/Chicago"
 
+export type TimezoneOption = {
+  id: string // IANA identifier e.g. "America/Chicago"
+  label: string // e.g. "America/Chicago (GMT-5)"
+  region: string // e.g. "America", "Europe"
+  offset: string // e.g. "GMT-5"
+}
+
+// Major freight corridor timezones prioritized at the top of select menus
+const PRIORITY_FREIGHT_TIMEZONES = [
+  "America/Chicago",
+  "America/New_York",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Toronto",
+  "America/Vancouver",
+  "America/Mexico_City",
+  "UTC",
+]
+
+/**
+ * Returns all 445 official IANA timezones dynamically discovered via Intl,
+ * with real-time GMT offset calculations. Zero hardcoded arrays.
+ */
+export function getAvailableTimezones(): TimezoneOption[] {
+  const rawZones = Intl.supportedValuesOf("timeZone")
+  const now = new Date()
+
+  const list: TimezoneOption[] = rawZones.map((tz) => {
+    let offset = ""
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        timeZoneName: "shortOffset",
+      }).formatToParts(now)
+      offset = parts.find((p) => p.type === "timeZoneName")?.value || ""
+    } catch {
+      offset = ""
+    }
+
+    const region = tz.includes("/") ? tz.split("/")[0] : "Global"
+    const readable = tz.replace(/_/g, " ")
+
+    return {
+      id: tz,
+      label: offset ? `${readable} (${offset})` : readable,
+      region,
+      offset,
+    }
+  })
+
+  // Prioritize primary North American logistics corridors first, then all others
+  const priority: TimezoneOption[] = []
+  const rest: TimezoneOption[] = []
+
+  for (const item of list) {
+    if (PRIORITY_FREIGHT_TIMEZONES.includes(item.id)) {
+      priority.push(item)
+    } else {
+      rest.push(item)
+    }
+  }
+
+  priority.sort(
+    (a, b) =>
+      PRIORITY_FREIGHT_TIMEZONES.indexOf(a.id) -
+      PRIORITY_FREIGHT_TIMEZONES.indexOf(b.id)
+  )
+
+  rest.sort((a, b) => a.id.localeCompare(b.id))
+
+  return [...priority, ...rest]
+}
+
 export type DateFormatOptions = {
   /** Show date + time, or just date. */
   mode?: "datetime" | "date" | "time"

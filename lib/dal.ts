@@ -378,6 +378,45 @@ export const getLoadById = async (loadId: string, tenantId: string) => {
   return result ?? null
 }
 
+export const getLoadWithTripDetails = async (loadId: string, tenantId: string) => {
+  const [loadRecord] = await db
+    .select()
+    .from(load)
+    .where(and(eq(load.id, loadId), eq(load.tenantId, tenantId)))
+    .limit(1)
+
+  if (!loadRecord) return null
+
+  const [tripRecord] = await db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      driverLicenseNumber: driver.cdlNumber,
+      truckUnitNumber: truck.unitNumber,
+      truckVin: truck.vin,
+      truckLicensePlate: truck.licensePlate,
+      trailerUnitNumber: trailer.unitNumber,
+      trailerLicensePlate: trailer.licensePlate,
+    })
+    .from(trip)
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .where(and(eq(trip.loadId, loadId), eq(trip.tenantId, tenantId)))
+    .orderBy(desc(trip.createdAt))
+    .limit(1)
+
+  return {
+    ...loadRecord,
+    trip: tripRecord ?? null,
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIPS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -471,6 +510,72 @@ export const getInvoicesForOrg = async (tenantId: string) => {
     .from(invoice)
     .where(eq(invoice.tenantId, tenantId))
     .orderBy(desc(invoice.createdAt))
+}
+
+export const getInvoicesWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidDate: invoice.paidDate,
+      customerName: invoice.customerName,
+      customerEmail: invoice.customerEmail,
+      notes: invoice.notes,
+      createdAt: invoice.createdAt,
+      loadId: invoice.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      loadRate: load.rate,
+    })
+    .from(invoice)
+    .leftJoin(load, eq(invoice.loadId, load.id))
+    .where(eq(invoice.tenantId, tenantId))
+    .orderBy(desc(invoice.createdAt))
+}
+
+export const getDeliveredLoadsForBilling = async (tenantId: string) => {
+  return db
+    .select()
+    .from(load)
+    .where(and(eq(load.tenantId, tenantId), eq(load.status, "delivered")))
+    .orderBy(desc(load.createdAt))
+}
+
+export const getInvoiceById = async (invoiceId: string, tenantId: string) => {
+  const [result] = await db
+    .select({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidDate: invoice.paidDate,
+      customerName: invoice.customerName,
+      customerEmail: invoice.customerEmail,
+      notes: invoice.notes,
+      createdAt: invoice.createdAt,
+      loadId: invoice.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      pickupDate: load.pickupDate,
+      deliveryDate: load.deliveryDate,
+      commodity: load.commodity,
+      loadRate: load.rate,
+    })
+    .from(invoice)
+    .leftJoin(load, eq(invoice.loadId, load.id))
+    .where(and(eq(invoice.id, invoiceId), eq(invoice.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
