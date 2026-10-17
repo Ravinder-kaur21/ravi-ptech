@@ -720,6 +720,37 @@ export const getPayStubsForOrg = async (tenantId: string) => {
     .orderBy(desc(payStub.createdAt))
 }
 
+export const getPayStubsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: payStub.id,
+      tenantId: payStub.tenantId,
+      driverId: payStub.driverId,
+      payPeriodStart: payStub.payPeriodStart,
+      payPeriodEnd: payStub.payPeriodEnd,
+      totalMiles: payStub.totalMiles,
+      payRate: payStub.payRate,
+      grossPay: payStub.grossPay,
+      deductions: payStub.deductions,
+      netPay: payStub.netPay,
+      status: payStub.status,
+      paidDate: payStub.paidDate,
+      notes: payStub.notes,
+      createdAt: payStub.createdAt,
+      updatedAt: payStub.updatedAt,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverEmail: driver.email,
+      driverPhone: driver.phone,
+      driverPayType: driver.payType,
+      driverPayRate: driver.payRate,
+    })
+    .from(payStub)
+    .leftJoin(driver, eq(payStub.driverId, driver.id))
+    .where(eq(payStub.tenantId, tenantId))
+    .orderBy(desc(payStub.createdAt))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AP EXPENSES
 // ─────────────────────────────────────────────────────────────────────────────
