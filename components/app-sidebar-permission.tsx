@@ -10,6 +10,7 @@ import {
   Building2,
   Plus,
   Settings,
+  CreditCard,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -251,19 +252,62 @@ export function AppSidebarPermission({
         {/* Pinned + recent — kept as-is for continuity */}
         <PinnedRecent orgId={org.id} />
 
-        {/* Bottom option: Settings */}
+        {/* Bottom options: Settings */}
         <div className="mt-auto" />
         <SidebarSeparator className="bg-sidebar-border" />
         <SidebarGroup>
+          <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
+            Settings
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
+                  render={<Link href="/settings/workspace" />}
+                  isActive={pathname === "/settings/workspace"}
+                  tooltip="Workspace"
+                  className={cn(
+                    pathname === "/settings/workspace"
+                      ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
+                      : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
+                  )}
+                >
+                  <Building2 className="size-[18px]" />
+                  <span className="text-[15px] font-medium">Workspace</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={<Link href="/settings/billing" />}
+                  isActive={pathname === "/settings/billing"}
+                  tooltip="Billing"
+                  className={cn(
+                    pathname === "/settings/billing"
+                      ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
+                      : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
+                  )}
+                >
+                  <CreditCard className="size-[18px]" />
+                  <span className="text-[15px] font-medium">Billing</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
                   render={<Link href="/settings" />}
-                  isActive={pathname === "/settings" || pathname.startsWith("/settings/")}
+                  isActive={
+                    pathname === "/settings" ||
+                    (pathname.startsWith("/settings/") &&
+                      pathname !== "/settings/workspace" &&
+                      pathname !== "/settings/billing")
+                  }
                   tooltip="Settings"
                   className={cn(
-                    pathname === "/settings" || pathname.startsWith("/settings/")
+                    pathname === "/settings" ||
+                      (pathname.startsWith("/settings/") &&
+                        pathname !== "/settings/workspace" &&
+                        pathname !== "/settings/billing")
                       ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                       : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                   )}

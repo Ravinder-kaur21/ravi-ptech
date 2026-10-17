@@ -223,7 +223,7 @@ export const SIDEBAR_NAV: NavGroup[] = [
         id: "workspace-settings",
         label: "Workspace",
         href: "/settings/workspace",
-        icon: Settings,
+        icon: Building2,
         requiresKey: "workspace.module",
         hint: "Profile, branding, defaults.",
       },

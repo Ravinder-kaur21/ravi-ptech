@@ -18,6 +18,7 @@ import {
   Plus,
   ChevronsUpDown,
   Building2,
+  CreditCard,
   MoreHorizontal,
   Bot,
   type LucideIcon,
@@ -124,6 +125,18 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
+  {
+    label: "Workspace",
+    href: "/settings/workspace",
+    icon: Building2,
+    permissions: ["workspace.module", "workspace.profile.view"],
+  },
+  {
+    label: "Billing",
+    href: "/settings/billing",
+    icon: CreditCard,
+    permissions: ["workspace.module", "workspace.profile.view"],
+  },
   {
     label: "Settings",
     href: "/settings",
@@ -338,17 +351,21 @@ export function AppSidebar({
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        {/* ─── ACCOUNT ─── */}
+        {/* ─── SETTINGS ─── */}
         <SidebarGroup>
           <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Account
+            Settings
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleAccountNav.map((item) => {
                 const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(item.href + "/")
+                  item.href === "/settings"
+                    ? pathname === "/settings" ||
+                      (pathname.startsWith("/settings/") &&
+                        pathname !== "/settings/workspace" &&
+                        pathname !== "/settings/billing")
+                    : pathname === item.href
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
