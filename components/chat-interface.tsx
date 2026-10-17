@@ -118,7 +118,7 @@ import {
   Route,
   HelpCircle,
 } from "lucide-react";
-import { MuvxBot } from "@/components/ai/muvx-bot";
+import { MuvxBot, type BotMood } from "@/components/ai/muvx-bot";
 
 /** Default provider (OpenRouter preferred when API key is present). */
 const DEFAULT_PROVIDER = "openrouter";
@@ -400,55 +400,96 @@ function renderPart(
       );
     }
 
-    // 3. Delegate Subtask — rendered with Task + ChainOfThought components
+    // 3. Delegate Subtask — rendered with Task + Sub-Agent Child Bot
     if (toolName === "delegateSubtask") {
-      const agentRole = input?.agentRole || "Specialist";
+      const rawRole = (input?.agentRole || "Specialist").toLowerCase();
       const subtaskTitle = input?.subtaskTitle || "Task Execution";
       const findings = output?.findings;
       const objective = input?.objective;
 
+      const childRole = rawRole.includes("rate") || rawRole.includes("audit")
+        ? "rate_auditor"
+        : rawRole.includes("driver") || rawRole.includes("fleet") || rawRole.includes("hos")
+          ? "fleet_guardian"
+          : rawRole.includes("route") || rawRole.includes("corridor")
+            ? "route_planner"
+            : rawRole.includes("safety") || rawRole.includes("fmcsa")
+              ? "safety_compliance"
+              : "dispatcher";
+
       return (
         <Task key={key} defaultOpen={isRunning}>
-          <TaskTrigger title={`Sub-agent: ${agentRole} — ${subtaskTitle}`} />
+          <TaskTrigger title={`Sub-agent: ${input?.agentRole || "Specialist"} — ${subtaskTitle}`}>
+            <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
+              <MuvxBot
+                variant="child"
+                role={childRole}
+                size="xs"
+                mood={isRunning ? "think" : "happy"}
+              />
+              <p className="flex-1 text-left font-medium text-xs text-brand-ink">
+                {input?.agentRole || "Specialist"}: {subtaskTitle}
+              </p>
+            </div>
+          </TaskTrigger>
           <TaskContent>
             {isRunning && (
               <TaskItem>
-                <Shimmer duration={2}>Processing…</Shimmer>
+                <div className="flex items-center gap-2 py-0.5">
+                  <MuvxBot
+                    variant="child"
+                    role={childRole}
+                    size="xs"
+                    mood="think"
+                  />
+                  <Shimmer duration={2}>Sub-agent analyzing operational parameters…</Shimmer>
+                </div>
               </TaskItem>
             )}
             {findings && (
               <TaskItem>
-                <ChainOfThought defaultOpen className="p-0 border-0 space-y-2">
-                  <ChainOfThoughtStep
-                    status="complete"
-                    icon={CheckCircle2}
-                    label={subtaskTitle}
-                    description={objective || "Sub-agent verification and analysis complete"}
-                  >
-                    {findings.verdict && (
-                      <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        {findings.verdict}
-                      </div>
-                    )}
-                    <ChainOfThoughtSearchResults className="mt-2">
-                      {Object.entries(findings)
-                        .filter(([k]) => k !== "availableDrivers" && k !== "verdict")
-                        .map(([k, v]) => (
-                          <ChainOfThoughtSearchResult key={k}>
-                            <span className="font-medium text-brand-ink capitalize">
-                              {k.replace(/([A-Z])/g, " $1")}:
-                            </span>{" "}
-                            {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                          </ChainOfThoughtSearchResult>
-                        ))}
-                    </ChainOfThoughtSearchResults>
-                    {findings.recommendation && (
-                      <p className="mt-2 text-xs text-brand-muted-soft italic">
-                        {findings.recommendation}
-                      </p>
-                    )}
-                  </ChainOfThoughtStep>
-                </ChainOfThought>
+                <div className="flex items-start gap-2.5">
+                  <MuvxBot
+                    variant="child"
+                    role={childRole}
+                    size="sm"
+                    mood="happy"
+                    className="mt-0.5 shrink-0"
+                  />
+                  <div className="flex-1">
+                    <ChainOfThought defaultOpen className="p-0 border-0 space-y-2">
+                      <ChainOfThoughtStep
+                        status="complete"
+                        icon={CheckCircle2}
+                        label={subtaskTitle}
+                        description={objective || "Sub-agent verification and analysis complete"}
+                      >
+                        {findings.verdict && (
+                          <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            {findings.verdict}
+                          </div>
+                        )}
+                        <ChainOfThoughtSearchResults className="mt-2">
+                          {Object.entries(findings)
+                            .filter(([k]) => k !== "availableDrivers" && k !== "verdict")
+                            .map(([k, v]) => (
+                              <ChainOfThoughtSearchResult key={k}>
+                                <span className="font-medium text-brand-ink capitalize">
+                                  {k.replace(/([A-Z])/g, " $1")}:
+                                </span>{" "}
+                                {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                              </ChainOfThoughtSearchResult>
+                            ))}
+                        </ChainOfThoughtSearchResults>
+                        {findings.recommendation && (
+                          <p className="mt-2 text-xs text-brand-muted-soft italic">
+                            {findings.recommendation}
+                          </p>
+                        )}
+                      </ChainOfThoughtStep>
+                    </ChainOfThought>
+                  </div>
+                </div>
               </TaskItem>
             )}
             {output?.result && (
@@ -599,6 +640,7 @@ export default function ChatInterface() {
   const [provider, setProvider] = useState<string>(DEFAULT_PROVIDER);
   const [availableModels, setAvailableModels] = useState<AIModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
+  const [interactiveMood, setInteractiveMood] = useState<BotMood>("idle");
 
   const { messages, sendMessage, status, error, addToolApprovalResponse } = useChat({
     id: "ai-chat",
@@ -670,21 +712,44 @@ export default function ChatInterface() {
           </div>
         )}
 
-        <div className="w-full max-w-2xl text-center mb-6 space-y-1.5">
+        <div className="w-full max-w-2xl text-center mb-6 space-y-2">
+          {/* Muvx Copilot Master Bot with Pointer Tracking and Mood Expressions */}
           <MuvxBot
             size="lg"
-            coat="grove"
+            coat="ink"
             mood={
               status === "submitted"
                 ? "think"
                 : status === "streaming"
                   ? "listen"
-                  : "idle"
+                  : interactiveMood
             }
-            showDots={status === "submitted"}
-            className="mb-3 mx-auto"
+            showDots={status === "submitted" || interactiveMood === "think"}
+            className="mb-1 mx-auto"
           />
-          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
+
+          {/* Interactive Mood Selector - allows immediate live mood testing */}
+          <div className="flex items-center justify-center gap-1.5 pt-1">
+            {(["idle", "listen", "think", "happy", "wow", "sleep"] as BotMood[]).map(
+              (m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setInteractiveMood(m)}
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all capitalize",
+                    interactiveMood === m && status !== "submitted" && status !== "streaming"
+                      ? "bg-brand-ink text-brand-cream shadow-2xs"
+                      : "bg-brand-card/80 border border-brand-rule text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40"
+                  )}
+                >
+                  {m}
+                </button>
+              )
+            )}
+          </div>
+
+          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink pt-1">
             What can I help you dispatch today?
           </h1>
           <p className="text-xs text-brand-muted-soft max-w-md mx-auto">
@@ -756,7 +821,7 @@ export default function ChatInterface() {
                     <div className="flex items-center gap-2 mb-0.5 select-none">
                       <MuvxBot
                         size="xs"
-                        coat="grove"
+                        coat="ink"
                         mood={
                           isLastMessage && status === "streaming"
                             ? "listen"
@@ -796,7 +861,7 @@ export default function ChatInterface() {
             {status === "submitted" && (
               <Message from="assistant" className="gap-1.5">
                 <div className="flex items-center gap-2 mb-0.5 select-none">
-                  <MuvxBot size="xs" coat="grove" mood="think" />
+                  <MuvxBot size="xs" coat="ink" mood="think" />
                   <span className="text-xs font-medium text-brand-ink/90">
                     Muvx
                   </span>

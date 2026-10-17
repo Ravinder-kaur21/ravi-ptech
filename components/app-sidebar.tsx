@@ -318,7 +318,7 @@ export function AppSidebar({
                       )}
                     >
                       {item.href === "/copilot" ? (
-                        <MuvxBot size="xs" coat="grove" mood="idle" className="mr-0.5" />
+                        <MuvxBot size="xs" coat="ink" mood="idle" className="mr-0.5" />
                       ) : (
                         <item.icon className="size-[18px]" />
                       )}

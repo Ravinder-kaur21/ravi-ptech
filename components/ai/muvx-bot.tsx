@@ -1,42 +1,58 @@
 "use client";
 
-import { useEffect, useRef, memo } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { cn } from "@/lib/utils";
 
 export type BotMood = "idle" | "listen" | "think" | "happy" | "sleep" | "wow";
-export type BotCoat = "ink" | "cream" | "peach" | "grove";
+export type BotCoat =
+  | "ink"
+  | "cream"
+  | "peach"
+  | "grove"
+  | "amber"
+  | "emerald"
+  | "indigo"
+  | "rose";
+export type BotRole =
+  | "main"
+  | "rate_auditor"
+  | "fleet_guardian"
+  | "route_planner"
+  | "safety_compliance"
+  | "dispatcher";
 export type BotSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 export interface MuvxBotProps {
   mood?: BotMood;
   coat?: BotCoat;
+  role?: BotRole;
+  variant?: "parent" | "child";
   size?: BotSize;
   className?: string;
   showDots?: boolean;
   interactive?: boolean;
+  label?: string;
 }
 
-const coats: Record<
-  BotCoat,
-  { body: string; eye: string; pupil: string; blush: string; shadow: string }
-> = {
-  grove: {
-    body: "#133830",
-    eye: "#f4fbf7",
-    pupil: "#0b201b",
-    blush: "#57b79d",
-    shadow: "#071613",
-  },
+interface Palette {
+  body: string;
+  eye: string;
+  pupil: string;
+  blush: string;
+  shadow: string;
+}
+
+const coats: Record<BotCoat, Palette> = {
   ink: {
-    body: "#16181d",
+    body: "#141414",
     eye: "#fffdf8",
-    pupil: "#16181d",
-    blush: "#d9622b",
-    shadow: "#0b0c0e",
+    pupil: "#141414",
+    blush: "#ff7a59",
+    shadow: "#141414",
   },
   cream: {
     body: "#fff6ea",
-    eye: "#16181d",
+    eye: "#141414",
     pupil: "#fffdf8",
     blush: "#ffb199",
     shadow: "#3a2e1e",
@@ -45,47 +61,100 @@ const coats: Record<
     body: "#ffb199",
     eye: "#fffdf8",
     pupil: "#3a221c",
-    blush: "#d9622b",
-    shadow: "#2a1510",
+    blush: "#ff7a59",
+    shadow: "#3a221c",
   },
+  grove: {
+    body: "#163d36",
+    eye: "#f3fff9",
+    pupil: "#0d2420",
+    blush: "#7dceb8",
+    shadow: "#0d2420",
+  },
+  amber: {
+    body: "#b45309",
+    eye: "#fffef0",
+    pupil: "#451a03",
+    blush: "#f59e0b",
+    shadow: "#451a03",
+  },
+  emerald: {
+    body: "#047857",
+    eye: "#f0fdf4",
+    pupil: "#022c22",
+    blush: "#34d399",
+    shadow: "#022c22",
+  },
+  indigo: {
+    body: "#1d4ed8",
+    eye: "#eff6ff",
+    pupil: "#172554",
+    blush: "#60a5fa",
+    shadow: "#172554",
+  },
+  rose: {
+    body: "#be123c",
+    eye: "#fff1f2",
+    pupil: "#4c0519",
+    blush: "#fb7185",
+    shadow: "#4c0519",
+  },
+};
+
+const roleToCoat: Record<BotRole, BotCoat> = {
+  main: "ink",
+  rate_auditor: "amber",
+  fleet_guardian: "emerald",
+  route_planner: "indigo",
+  safety_compliance: "rose",
+  dispatcher: "peach",
 };
 
 const sizeClasses: Record<BotSize, string> = {
   xs: "w-7 h-7",
   sm: "w-10 h-10",
   md: "w-16 h-16",
-  lg: "w-36 h-36 sm:w-44 sm:h-44",
-  xl: "w-48 h-48 sm:w-56 sm:h-56",
+  lg: "w-40 h-40 sm:w-48 sm:h-48",
+  xl: "w-52 h-52 sm:w-64 sm:h-64",
 };
 
 export const MuvxBot = memo(function MuvxBot({
   mood = "idle",
-  coat = "grove",
+  coat,
+  role = "main",
+  variant = "parent",
   size = "md",
   className,
   showDots = false,
   interactive = true,
+  label,
 }: MuvxBotProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const palette = coats[coat] || coats.grove;
+  const [pupil, setPupil] = useState({ x: 0, y: 0 });
 
+  // Resolve coat based on explicit prop or child role
+  const resolvedCoat = coat || roleToCoat[role] || (variant === "child" ? "amber" : "ink");
+  const palette = coats[resolvedCoat] || coats.ink;
+
+  // Real-time eye tracking with bounds clamping
   useEffect(() => {
     if (!interactive) return;
-    const el = rootRef.current;
-    if (!el) return;
 
     const onMove = (event: PointerEvent) => {
-      // Don't track if bot is sleeping or in think mode (which has fixed gaze)
-      if (mood === "sleep" || mood === "think") return;
+      const el = rootRef.current;
+      if (!el) return;
+
+      // When sleeping, eyes stay resting
+      if (mood === "sleep") return;
 
       const box = el.getBoundingClientRect();
       const cx = box.left + box.width / 2;
       const cy = box.top + box.height * 0.46;
-      const dx = Math.max(-7, Math.min(7, (event.clientX - cx) / 28));
-      const dy = Math.max(-6, Math.min(6, (event.clientY - cy) / 28));
 
-      el.style.setProperty("--pupil-x", `${dx}px`);
-      el.style.setProperty("--pupil-y", `${dy}px`);
+      const dx = Math.max(-8, Math.min(8, (event.clientX - cx) / 24));
+      const dy = Math.max(-7, Math.min(7, (event.clientY - cy) / 24));
+
+      setPupil({ x: dx, y: dy });
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -94,7 +163,16 @@ export const MuvxBot = memo(function MuvxBot({
 
   const smile = mood === "happy";
   const sleepy = mood === "sleep";
+  const isChild = variant === "child";
   const isLarge = size === "lg" || size === "xl";
+
+  // When thinking, look thoughtfully up and to the right
+  const pupilTransform =
+    mood === "think"
+      ? "translate(3px, -6px)"
+      : mood === "sleep"
+        ? "translate(0px, 4px)"
+        : `translate(${pupil.x}px, ${pupil.y}px)`;
 
   return (
     <div
@@ -104,32 +182,120 @@ export const MuvxBot = memo(function MuvxBot({
       )}
       data-mood={mood}
     >
+      {/* Scoped Keyframe Animations - guaranteed to run in all Next.js environments */}
+      <style>{`
+        @keyframes mote-idle {
+          0%, 100% { transform: translateY(0) scale(1, 1); }
+          50% { transform: translateY(-8px) scale(1.02, 0.98); }
+        }
+        @keyframes mote-shadow {
+          0%, 100% { transform: scaleX(1); opacity: 0.18; }
+          50% { transform: scaleX(0.86); opacity: 0.12; }
+        }
+        @keyframes mote-listen {
+          0%, 100% { transform: translateY(4px) scale(1.04, 0.96); }
+          50% { transform: translateY(0) scale(1.06, 0.94); }
+        }
+        @keyframes mote-happy {
+          0%, 100% { transform: translateY(0) scale(1, 1); }
+          40% { transform: translateY(-18px) scale(0.94, 1.08); }
+          70% { transform: translateY(2px) scale(1.08, 0.92); }
+        }
+        @keyframes mote-shadow-fast {
+          0%, 100% { transform: scaleX(1); opacity: 0.16; }
+          40% { transform: scaleX(0.72); opacity: 0.08; }
+        }
+        @keyframes mote-wow {
+          0%, 100% { transform: scale(1, 1); }
+          40% { transform: scale(0.92, 1.1); }
+        }
+        @keyframes mote-sleep {
+          0%, 100% { transform: translateY(6px) scale(1.06, 0.92) rotate(-2deg); }
+          50% { transform: translateY(2px) scale(1.08, 0.9) rotate(2deg); }
+        }
+        @keyframes mote-think {
+          0%, 100% { transform: rotate(-3deg) scale(1, 1); }
+          50% { transform: rotate(3deg) scale(1.01, 0.99); }
+        }
+        @keyframes dot-pulse {
+          0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
+          35% { opacity: 1; transform: translateY(-5px); }
+        }
+        @keyframes mote-blink {
+          0%, 95%, 100% { transform: scaleY(0); }
+          97.5% { transform: scaleY(1); }
+        }
+      `}</style>
+
       <div
         ref={rootRef}
-        className={cn("muvx-bot", sizeClasses[size])}
+        className={cn(
+          "relative aspect-square transition-transform duration-200",
+          sizeClasses[size]
+        )}
+        style={{
+          filter: isLarge
+            ? "drop-shadow(0 20px 28px rgba(20, 20, 20, 0.18))"
+            : "drop-shadow(0 4px 6px rgba(20, 20, 20, 0.12))",
+        }}
         data-mood={mood}
         aria-hidden="true"
       >
-        <svg viewBox="0 0 320 320">
-          {/* Ground Contact Shadow */}
+        <svg viewBox="0 0 320 320" className="w-full h-full overflow-visible">
+          {/* Ground Contact Shadow with Synchronized Breathing */}
           <ellipse
-            className="bot-shadow"
             cx="160"
             cy="286"
-            rx="78"
+            rx={isChild ? 68 : 78}
             ry="12"
             fill={palette.shadow}
             opacity="0.16"
+            style={{
+              transformOrigin: "160px 292px",
+              animation:
+                mood === "happy"
+                  ? "mote-shadow-fast 0.7s ease-in-out infinite"
+                  : "mote-shadow 3.6s ease-in-out infinite",
+            }}
           />
 
-          {/* Organic Blob Body */}
-          <g className="bot-body">
+          {/* Organic Blob Body with Responsive Mood Motion */}
+          <g
+            style={{
+              transformOrigin: "160px 168px",
+              animation:
+                mood === "happy"
+                  ? "mote-happy 0.7s ease-in-out infinite"
+                  : mood === "listen"
+                    ? "mote-listen 2.4s ease-in-out infinite"
+                    : mood === "think"
+                      ? "mote-think 2.2s ease-in-out infinite"
+                      : mood === "wow"
+                        ? "mote-wow 0.9s ease-in-out infinite"
+                        : mood === "sleep"
+                          ? "mote-sleep 4.8s ease-in-out infinite"
+                          : "mote-idle 3.6s ease-in-out infinite",
+            }}
+          >
+            {/* Child Bot Little Sprout on Head */}
+            {isChild && (
+              <g className="child-sprout">
+                <path
+                  d="M160 52 C158 32, 138 24, 130 28 C124 31, 128 44, 146 47 C154 48, 158 50, 160 52 Z"
+                  fill={palette.blush}
+                  opacity="0.95"
+                />
+                <circle cx="160" cy="52" r="3.5" fill={palette.blush} />
+              </g>
+            )}
+
+            {/* Main Blob Silhouette */}
             <path
               d="M160 46c62 0 112 46 118 108 6 58-28 112-86 128-18 5-28 8-32 8s-14-3-32-8c-58-16-92-70-86-128C48 92 98 46 160 46z"
               fill={palette.body}
             />
 
-            {/* Cheek Blushes */}
+            {/* Cheek Blushes (overlapping outer bottom edge of eyes) */}
             <ellipse
               cx="108"
               cy="168"
@@ -147,8 +313,9 @@ export const MuvxBot = memo(function MuvxBot({
               opacity="0.75"
             />
 
-            {/* Eyes & Lids Group */}
+            {/* Eyes Group */}
             <g>
+              {/* White Sclera */}
               <ellipse
                 cx="122"
                 cy="150"
@@ -164,25 +331,29 @@ export const MuvxBot = memo(function MuvxBot({
                 fill={palette.eye}
               />
 
+              {/* Pupils and Catchlights - smoothly tracking mouse */}
               {!smile && (
-                <>
-                  {/* Dynamic Pupils with pointer tracking */}
+                <g
+                  style={{
+                    transform: pupilTransform,
+                    transition: "transform 140ms ease-out",
+                  }}
+                >
+                  {/* Pupils */}
                   <circle
-                    className="bot-pupil"
                     cx="128"
                     cy="154"
                     r={mood === "wow" ? 12 : 8}
                     fill={palette.pupil}
                   />
                   <circle
-                    className="bot-pupil"
                     cx="204"
                     cy="154"
                     r={mood === "wow" ? 12 : 8}
                     fill={palette.pupil}
                   />
 
-                  {/* Catchlight reflections */}
+                  {/* Catchlight highlights */}
                   <circle
                     cx="132"
                     cy="150"
@@ -197,29 +368,27 @@ export const MuvxBot = memo(function MuvxBot({
                     fill={palette.eye}
                     opacity="0.9"
                   />
-                </>
+                </g>
               )}
 
-              {/* Animated Eyelids */}
-              <ellipse
-                className="bot-lid"
-                cx="122"
-                cy="138"
-                rx="28"
-                ry="16"
-                fill={palette.body}
-              />
-              <ellipse
-                className="bot-lid"
-                cx="198"
-                cy="138"
-                rx="28"
-                ry="16"
-                fill={palette.body}
-              />
+              {/* Eyelids (for sleeping, blinking, or resting) */}
+              <g
+                style={{
+                  transformOrigin: "center",
+                  transform: sleepy ? "scaleY(1)" : "scaleY(0)",
+                  animation:
+                    !sleepy && mood !== "think"
+                      ? "mote-blink 5.5s infinite"
+                      : "none",
+                  transition: "transform 200ms ease",
+                }}
+              >
+                <ellipse cx="122" cy="138" rx="28" ry="16" fill={palette.body} />
+                <ellipse cx="198" cy="138" rx="28" ry="16" fill={palette.body} />
+              </g>
             </g>
 
-            {/* Happy Curved Smile */}
+            {/* Happy Smile Mouth */}
             {smile && (
               <path
                 d="M138 196c8 12 36 12 44 0"
@@ -237,16 +406,41 @@ export const MuvxBot = memo(function MuvxBot({
       {(showDots || mood === "think") && (
         <div
           className={cn(
-            "bot-dots text-brand-muted-soft mt-1",
+            "flex gap-1.5 items-center justify-center mt-1.5",
             !isLarge && "scale-75"
           )}
+          style={{ height: "16px" }}
           aria-hidden="true"
         >
-          <span />
-          <span />
-          <span />
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-brand-ink/40 dark:bg-brand-cream/40"
+            style={{ animation: "dot-pulse 1.05s ease-in-out infinite" }}
+          />
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-brand-ink/40 dark:bg-brand-cream/40"
+            style={{
+              animation: "dot-pulse 1.05s ease-in-out infinite",
+              animationDelay: "0.16s",
+            }}
+          />
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-brand-ink/40 dark:bg-brand-cream/40"
+            style={{
+              animation: "dot-pulse 1.05s ease-in-out infinite",
+              animationDelay: "0.32s",
+            }}
+          />
         </div>
+      )}
+
+      {/* Optional Child or Sub-agent role label */}
+      {label && (
+        <span className="text-[10px] font-medium tracking-wide uppercase mt-1 text-brand-muted-soft">
+          {label}
+        </span>
       )}
     </div>
   );
 });
+
+export default MuvxBot;
