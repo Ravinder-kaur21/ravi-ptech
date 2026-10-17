@@ -10,16 +10,17 @@ import {
   Calendar,
   Sparkles,
   Building2,
-  CheckCircle2,
   Receipt,
   ArrowRight,
   ShieldCheck,
   Truck,
   MapPin,
   Clock,
+  ChevronDown,
+  ChevronUp,
+  Check,
 } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
 import {
   Modal,
   ModalTrigger,
@@ -47,11 +48,10 @@ interface GenerateInvoiceDialogProps {
 }
 
 const ACCESSORIAL_PRESETS = [
-  { label: "Detention", amount: 75, desc: "1 hr dock delay" },
-  { label: "Lumper Fee", amount: 150, desc: "Pallet unloading" },
-  { label: "Pallet Jack", amount: 50, desc: "Inside delivery" },
-  { label: "Stop-off Fee", amount: 100, desc: "Extra route drop" },
-  { label: "Layover", amount: 250, desc: "Overnight facility delay" },
+  { label: "Detention", amount: 75 },
+  { label: "Lumper", amount: 150 },
+  { label: "Pallet Jack", amount: 50 },
+  { label: "Layover", amount: 250 },
 ]
 
 export function GenerateInvoiceDialog({
@@ -60,8 +60,15 @@ export function GenerateInvoiceDialog({
 }: GenerateInvoiceDialogProps) {
   const [open, setOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
+
+  // Mode: "loads" or "custom"
+  const [mode, setMode] = React.useState<"loads" | "custom">(
+    deliveredLoads.length > 0 ? "loads" : "custom"
+  )
   const [selectedLoadId, setSelectedLoadId] = React.useState(preselectedLoadId || "")
-  const [invoiceNumber, setInvoiceNumber] = React.useState(`INV-${Date.now().toString().slice(-6)}`)
+  const [invoiceNumber, setInvoiceNumber] = React.useState(
+    `INV-${Date.now().toString().slice(-6)}`
+  )
   const [customerName, setCustomerName] = React.useState("")
   const [customerEmail, setCustomerEmail] = React.useState("")
   const [baseRate, setBaseRate] = React.useState("")
@@ -69,6 +76,7 @@ export function GenerateInvoiceDialog({
   const [accessorials, setAccessorials] = React.useState("0")
   const [dueDate, setDueDate] = React.useState("")
   const [notes, setNotes] = React.useState("")
+  const [showOptional, setShowOptional] = React.useState(false)
 
   // Pre-fill fields when selecting a delivered load
   const handleSelectLoad = (load: DeliveredLoad) => {
@@ -99,34 +107,33 @@ export function GenerateInvoiceDialog({
     if (baseRateNum > 0) {
       const calculatedFuel = ((baseRateNum * percentage) / 100).toFixed(2)
       setFuelSurcharge(calculatedFuel)
+      toast.info(`Calculated ${percentage}% fuel surcharge: $${calculatedFuel}`)
+    } else {
+      toast.error("Please enter a base rate first")
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!customerName.trim()) {
-      toast.error("Customer name is required.")
-      return
-    }
-    if (!totalAmount || parseFloat(totalAmount) <= 0) {
-      toast.error("Invoice total amount must be greater than zero.")
+    if (!customerName.trim() || !baseRate.trim() || baseRateNum <= 0) {
+      toast.error("Please provide Customer Name and a valid Linehaul Rate.")
       return
     }
 
     setLoading(true)
     try {
       const res = await createInvoiceAction({
-        invoiceNumber: invoiceNumber.trim(),
-        loadId: selectedLoadId || null,
+        loadId: selectedLoadId || undefined,
+        invoiceNumber,
         customerName: customerName.trim(),
-        customerEmail: customerEmail.trim() || null,
+        customerEmail: customerEmail.trim() || undefined,
         amount: totalAmount,
-        dueDate: dueDate || null,
-        notes: notes.trim() || null,
+        dueDate: dueDate || undefined,
+        notes: notes.trim() || undefined,
       })
 
       if (res.ok) {
-        toast.success(`Invoice ${res.invoiceNumber} generated & recorded!`)
+        toast.success(`Invoice ${invoiceNumber} issued for $${totalAmount}!`)
         setOpen(false)
         setSelectedLoadId("")
         setCustomerName("")
@@ -155,43 +162,68 @@ export function GenerateInvoiceDialog({
         </span>
       </ModalTrigger>
 
-      <ModalBody className="max-w-3xl">
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          {/* ─── Studio Header ─── */}
-          <div className="px-6 py-6 border-b border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec] dark:bg-zinc-900/60 relative overflow-hidden">
-            <div className="absolute -top-12 -right-12 size-36 rounded-full bg-[#d9622b]/10 blur-2xl pointer-events-none" />
-
-            <div className="flex items-center gap-2 mb-2">
+      {/* ─── Compact Modal Body (max-w-[480px]) ─── */}
+      <ModalBody className="max-w-[480px] overflow-hidden p-0 border border-[#d1ccc5] dark:border-zinc-800 shadow-2xl rounded-3xl bg-[#fdfbf7] dark:bg-zinc-950">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 border-b border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec]/80 dark:bg-zinc-900/40 relative">
+            <div className="flex items-center gap-2 mb-1">
               <span className="size-2 rounded-full bg-[#d9622b] animate-pulse" />
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-[#8a8b8f]">
-                BILLING STUDIO · ACCOUNTS RECEIVABLE
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8a8b8f]">
+                AR · Billing Studio
               </span>
             </div>
-
-            <h2 className="font-serif text-[28px] leading-tight font-normal text-[#16181d] dark:text-zinc-100">
-              Generate Customer <span className="italic text-[#d9622b]">Invoice</span>
+            <h2 className="font-serif text-2xl font-normal text-[#16181d] dark:text-zinc-100">
+              Generate <span className="italic text-[#d9622b]">Invoice</span>
             </h2>
-
-            <p className="mt-1 text-xs text-[#73757a] dark:text-zinc-400">
-              Bill freight shippers for delivered loads or generate a standalone commercial logistics statement.
-            </p>
           </div>
 
-          {/* ─── Modal Content Canvas ─── */}
-          <ModalContent className="space-y-6 pt-5 pb-6">
-            {/* 1. Delivered Load Quick-Selector Cards */}
-            {deliveredLoads.length > 0 && (
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f]">
-                    Delivered Freight Ready for Invoicing
-                  </span>
-                  <span className="font-mono text-[11px] text-[#d9622b]">
-                    {deliveredLoads.length} Uninvoiced Load{deliveredLoads.length > 1 ? "s" : ""}
-                  </span>
-                </div>
+          {/* Mode Switcher (Kokonut Gliding Pill) */}
+          {deliveredLoads.length > 0 && (
+            <div className="px-5 pt-3 pb-1">
+              <div className="grid grid-cols-2 p-1 rounded-2xl bg-[#eee9df] dark:bg-zinc-800/80 border border-[#e4ddd3] dark:border-zinc-700">
+                <button
+                  type="button"
+                  onClick={() => setMode("loads")}
+                  className={cn(
+                    "py-1.5 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    mode === "loads"
+                      ? "bg-white dark:bg-zinc-900 text-[#16181d] dark:text-zinc-100 shadow-xs font-semibold"
+                      : "text-[#73757a] hover:text-[#16181d]"
+                  )}
+                >
+                  <Truck className="size-3.5" />
+                  <span>Delivered Loads ({deliveredLoads.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("custom")
+                    setSelectedLoadId("")
+                  }}
+                  className={cn(
+                    "py-1.5 px-3 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                    mode === "custom"
+                      ? "bg-white dark:bg-zinc-900 text-[#16181d] dark:text-zinc-100 shadow-xs font-semibold"
+                      : "text-[#73757a] hover:text-[#16181d]"
+                  )}
+                >
+                  <FileText className="size-3.5" />
+                  <span>Manual Bill</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto p-0.5">
+          {/* Form Content */}
+          <div className="px-5 py-3 space-y-4 max-h-[52vh] overflow-y-auto">
+            {/* Delivered Load Picker */}
+            {mode === "loads" && deliveredLoads.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block">
+                  Select Completed Delivery
+                </label>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {deliveredLoads.map((l) => {
                     const isSelected = selectedLoadId === l.id
                     return (
@@ -200,37 +232,29 @@ export function GenerateInvoiceDialog({
                         type="button"
                         onClick={() => handleSelectLoad(l)}
                         className={cn(
-                          "flex items-start gap-3 p-3.5 rounded-2xl border text-left transition-all relative cursor-pointer",
+                          "w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-all cursor-pointer text-xs",
                           isSelected
-                            ? "border-[#d9622b] bg-[#fff0e6] shadow-[0_2px_12px_rgba(217,98,43,0.12)] ring-1 ring-[#d9622b]"
-                            : "border-[#d1ccc5] bg-white hover:border-[#b8b1a7] hover:bg-[#fffefb]"
+                            ? "border-[#d9622b] bg-[#fff0e6] dark:bg-orange-950/30 text-[#16181d] ring-1 ring-[#d9622b]"
+                            : "border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-[#b8b1a7]"
                         )}
                       >
-                        <div
-                          className={cn(
-                            "size-9 rounded-xl flex items-center justify-center shrink-0 transition-colors",
-                            isSelected
-                              ? "bg-[#d9622b] text-white"
-                              : "bg-[#eee9df] text-[#16181d]"
-                          )}
-                        >
-                          <Truck className="size-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-xs font-bold text-[#16181d]">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-[#16181d] dark:text-zinc-100">
                               {l.loadNumber}
                             </span>
-                            <span className="font-mono text-xs font-semibold text-[#d9622b]">
-                              ${parseFloat(l.rate || "0").toFixed(2)}
+                            <span className="text-[#73757a] truncate font-medium">
+                              {l.customerName || "Shipper"}
                             </span>
                           </div>
-                          <p className="text-[13px] font-medium text-[#16181d] truncate mt-0.5">
-                            {l.customerName || "Customer Shipper"}
+                          <p className="text-[10px] text-[#8a8b8f] truncate mt-0.5">
+                            {l.originCity ? `${l.originCity}, ${l.originState} → ${l.destCity}, ${l.destState}` : "Delivered Load"}
                           </p>
-                          <p className="text-[11px] text-[#73757a] truncate">
-                            {l.originCity ? `${l.originCity}, ${l.originState} → ${l.destCity}, ${l.destState}` : "Standard Route"}
-                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-mono font-bold text-[#d9622b]">
+                            ${parseFloat(l.rate || "0").toFixed(2)}
+                          </span>
                         </div>
                       </button>
                     )
@@ -239,225 +263,199 @@ export function GenerateInvoiceDialog({
               </div>
             )}
 
-            {/* 2. Customer & Invoice Identifiers */}
-            <div className="grid gap-4 sm:grid-cols-2">
+            {/* Customer & Invoice Number */}
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
-                  Customer / Shipper Name *
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
+                  Customer / Shipper *
                 </label>
                 <input
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Walmart Logistics, Target"
-                  className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white px-3.5 text-[14px] text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
+                  placeholder="e.g. Target, Sysco"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                   required
                 />
               </div>
 
               <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
+                <label className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[#8a8b8f] block mb-1">
                   Invoice Number *
                 </label>
                 <input
                   value={invoiceNumber}
                   onChange={(e) => setInvoiceNumber(e.target.value)}
-                  placeholder="INV-10029"
-                  className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white px-3.5 font-mono text-[14px] font-semibold text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
+                  className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 font-mono text-xs font-semibold text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none transition-colors"
                   required
                 />
               </div>
             </div>
 
-            {/* 3. Financial Line Items */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
-                  Linehaul Base Rate *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-sm text-[#73757a]">
-                    $
-                  </span>
+            {/* Financial Line Items: Base Rate, Fuel, Accessorials */}
+            <div className="p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-[#e4ddd3] dark:border-zinc-800 space-y-2.5">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] block mb-1">
+                    Linehaul ($) *
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={baseRate}
                     onChange={(e) => setBaseRate(e.target.value)}
                     placeholder="2500.00"
-                    className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white pl-8 pr-3 font-mono text-[14px] font-semibold text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
+                    className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 font-mono text-xs font-bold text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
                     required
                   />
                 </div>
-              </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f]">
-                    Fuel Surcharge
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => handleAutoFuel(12)}
-                    className="font-mono text-[10px] text-[#d9622b] hover:underline"
-                    title="Calculate 12% standard fuel surcharge"
-                  >
-                    +12% auto
-                  </button>
-                </div>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-sm text-[#73757a]">
-                    $
-                  </span>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
+                      Fuel ($)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFuel(12)}
+                      className="font-mono text-[9px] text-[#d9622b] hover:underline"
+                    >
+                      12%
+                    </button>
+                  </div>
                   <input
                     type="number"
                     step="0.01"
                     value={fuelSurcharge}
                     onChange={(e) => setFuelSurcharge(e.target.value)}
                     placeholder="0.00"
-                    className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white pl-8 pr-3 font-mono text-[14px] text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
+                    className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 font-mono text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
-                  Accessorial Charges
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-sm text-[#73757a]">
-                    $
-                  </span>
+                <div>
+                  <label className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] block mb-1">
+                    Accessorial ($)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={accessorials}
                     onChange={(e) => setAccessorials(e.target.value)}
                     placeholder="0.00"
-                    className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white pl-8 pr-3 font-mono text-[14px] text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
+                    className="h-9 w-full rounded-xl border border-[#d1ccc5] dark:border-zinc-700 bg-[#fdfbf7] dark:bg-zinc-950 px-2.5 font-mono text-xs text-[#16181d] dark:text-zinc-100 focus:border-[#d9622b] focus:outline-none"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Quick Accessorial Preset Chips */}
-            <div>
-              <span className="font-mono text-[10px] uppercase text-[#8a8b8f] tracking-[0.04em] block mb-2">
-                Quick-add accessorial fees:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
+              {/* Quick accessorial presets */}
+              <div className="flex flex-wrap items-center gap-1 pt-1">
+                <span className="font-mono text-[9px] text-[#8a8b8f] uppercase mr-1">Add:</span>
                 {ACCESSORIAL_PRESETS.map((p) => (
                   <button
                     key={p.label}
                     type="button"
                     onClick={() => handleAddAccessorial(p.amount)}
-                    className="px-3 py-1 rounded-full text-xs border border-[#d1ccc5] bg-white hover:border-[#d9622b] hover:bg-[#fff0e6] transition-colors text-[#16181d] font-medium cursor-pointer shadow-xs"
+                    className="px-2 py-0.5 rounded-md text-[10px] font-mono border border-[#e4ddd3] dark:border-zinc-700 bg-[#f7f3ec] dark:bg-zinc-800 text-[#55575b] hover:border-[#d9622b] hover:text-[#d9622b] transition-colors cursor-pointer"
                   >
-                    + {p.label} (${p.amount})
+                    +{p.label} (${p.amount})
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 4. Thermal Receipt & Statement Summary Preview */}
-            <div className="rounded-2xl border border-[#d1ccc5] bg-white p-5 space-y-3.5 shadow-xs">
-              <div className="flex items-center justify-between border-b border-[#e4ddd3] pb-3">
-                <div className="flex items-center gap-2">
-                  <Receipt className="size-4 text-[#d9622b]" />
-                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f]">
-                    LIVE INVOICE RECEIPT STATEMENT
-                  </span>
-                </div>
-                <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-[#f7f3ec] border border-[#e4ddd3] text-[#73757a]">
-                  Net 30 Standard
+            {/* Live Perforated Thermal Voucher Total */}
+            <div className="rounded-xl border border-dashed border-[#d1ccc5] dark:border-zinc-700 p-3 bg-[#fdfbf7] dark:bg-zinc-900/50 flex items-center justify-between font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <Receipt className="size-3.5 text-[#d9622b]" />
+                <span className="text-[#73757a] uppercase font-semibold tracking-wider text-[11px]">
+                  Total Billed Statement:
                 </span>
               </div>
-
-              <div className="space-y-2 font-mono text-xs text-[#73757a]">
-                <div className="flex justify-between">
-                  <span>Linehaul Freight</span>
-                  <span className="text-[#16181d] font-semibold">${baseRateNum.toFixed(2)}</span>
-                </div>
-
-                {fuelNum > 0 && (
-                  <div className="flex justify-between">
-                    <span>Fuel Surcharge</span>
-                    <span className="text-[#16181d] font-semibold">+${fuelNum.toFixed(2)}</span>
-                  </div>
-                )}
-
-                {accessorialsNum > 0 && (
-                  <div className="flex justify-between">
-                    <span>Accessorial Services</span>
-                    <span className="text-[#16181d] font-semibold">+${accessorialsNum.toFixed(2)}</span>
-                  </div>
-                )}
-
-                <div className="border-t border-[#e4ddd3] pt-2.5 flex justify-between items-center text-sm font-bold text-[#16181d]">
-                  <span>Total Due Shipper</span>
-                  <span className="text-[#d9622b] text-base font-bold">${totalAmount}</span>
-                </div>
-              </div>
+              <span className="text-base font-bold text-[#d9622b]">${totalAmount}</span>
             </div>
 
-            {/* Email & Payment Due Date */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
-                  Billing Contact Email{" "}
-                  <span className="text-[#a8a29a] normal-case tracking-normal">— Optional</span>
-                </label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="ap@shipper.com"
-                  className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white px-3.5 text-[14px] text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
-                />
-              </div>
+            {/* Optional Details (Email & Due Date) */}
+            <div className="border border-[#e4ddd3] dark:border-zinc-800 rounded-xl overflow-hidden bg-[#f7f3ec]/30 dark:bg-zinc-900/20">
+              <button
+                type="button"
+                onClick={() => setShowOptional(!showOptional)}
+                className="w-full flex items-center justify-between px-3 py-2 text-left text-xs font-medium text-[#73757a] hover:text-[#16181d] transition-colors cursor-pointer"
+              >
+                <span>Billing Email & Terms (Optional)</span>
+                {showOptional ? (
+                  <ChevronUp className="size-3 text-[#8a8b8f]" />
+                ) : (
+                  <ChevronDown className="size-3 text-[#8a8b8f]" />
+                )}
+              </button>
 
-              <div>
-                <label className="font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-[#8a8b8f] block mb-1.5">
-                  Payment Due Date{" "}
-                  <span className="text-[#a8a29a] normal-case tracking-normal">— Defaults Net 30</span>
-                </label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="h-11 w-full rounded-2xl border border-[#d1ccc5] bg-white px-3.5 text-[14px] text-[#16181d] focus:border-[#d9622b] focus:outline-none transition-colors shadow-xs"
-                />
-              </div>
+              <AnimatePresence>
+                {showOptional && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="p-3 pt-0 space-y-2 border-t border-[#e4ddd3] dark:border-zinc-800"
+                  >
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <div>
+                        <label className="font-mono text-[10px] uppercase text-[#8a8b8f] block mb-1">
+                          Billing Contact Email
+                        </label>
+                        <input
+                          type="email"
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          placeholder="ap@shipper.com"
+                          className="h-8 w-full rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 text-xs text-[#16181d]"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-mono text-[10px] uppercase text-[#8a8b8f] block mb-1">
+                          Payment Due Date
+                        </label>
+                        <input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          className="h-8 w-full rounded-lg border border-[#d1ccc5] dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2.5 text-xs text-[#16181d]"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </ModalContent>
+          </div>
 
-          {/* ─── Modal Footer ─── */}
-          <ModalFooter>
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-[#e4ddd3] dark:border-zinc-800 bg-[#f7f3ec]/90 dark:bg-zinc-900/60 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-xs font-medium text-[#73757a] hover:text-[#16181d] transition-colors px-3 py-2 cursor-pointer"
+              className="text-xs font-medium text-[#73757a] hover:text-[#16181d] transition-colors px-2 py-1 cursor-pointer"
             >
-              Cancel & Dismiss
+              Cancel
             </button>
 
             <button
               type="submit"
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#d9622b] px-8 py-3 text-sm font-semibold text-white shadow-xs hover:bg-[#c4531f] transition-all disabled:opacity-60 cursor-pointer"
+              disabled={loading || baseRateNum <= 0}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-[#d9622b] px-5 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-[#c4531f] transition-all disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
-                  <span>Generating Invoice...</span>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Issuing Invoice...</span>
                 </>
               ) : (
                 <>
-                  <span>Issue & Finalize Invoice (${totalAmount})</span>
-                  <ArrowRight className="size-4" />
+                  <span>Issue Invoice (${totalAmount})</span>
+                  <ArrowRight className="size-3.5" />
                 </>
               )}
             </button>
-          </ModalFooter>
+          </div>
         </form>
       </ModalBody>
     </Modal>

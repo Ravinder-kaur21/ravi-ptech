@@ -48,11 +48,11 @@ export async function createInvoiceAction(raw: z.infer<typeof createInvoiceSchem
       notes: data.notes || null,
     })
 
-    // If tied to a load, mark load status as invoiced
+    // If tied to a load, mark load status as completed
     if (data.loadId) {
       await db
         .update(load)
-        .set({ status: "invoiced" as any, updatedAt: new Date() })
+        .set({ status: "completed", updatedAt: new Date() })
         .where(and(eq(load.id, data.loadId), eq(load.tenantId, ctx.tenantId)))
     }
 

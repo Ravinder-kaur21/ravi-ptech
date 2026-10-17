@@ -156,8 +156,8 @@ export const ModalBody = ({
               damping: 24,
             }}
             className={cn(
-              "relative z-50 w-full max-w-2xl bg-[#fdfbf7] dark:bg-zinc-950 border border-[#d1ccc5] dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]",
-              className
+              "relative z-50 w-full bg-[#fdfbf7] dark:bg-zinc-950 border border-[#d1ccc5] dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]",
+              className || "max-w-xl"
             )}
           >
             {/* Close button */}
