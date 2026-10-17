@@ -22,7 +22,19 @@ import {
   Message,
   MessageContent,
   MessageResponse,
+  MessageToolbar,
+  MessageActions,
+  MessageAction,
 } from "@/components/ai-elements/message";
+import {
+  Plan,
+  PlanHeader,
+  PlanTitle,
+  PlanDescription,
+  PlanAction,
+  PlanTrigger,
+  PlanContent,
+} from "@/components/ai-elements/plan";
 import {
   Reasoning,
   ReasoningContent,
@@ -39,7 +51,19 @@ import {
 import { Attachments, Attachment } from "@/components/ai-elements/attachments";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
-import { MessageSquare, Sparkles } from "lucide-react";
+import {
+  MessageSquare,
+  Sparkles,
+  Copy,
+  Check,
+  Truck,
+  ArrowRight,
+  ShieldCheck,
+  Cpu,
+  CheckCircle2,
+  Clock,
+  Layers,
+} from "lucide-react";
 import { AgentOrb } from "@/components/ai/agent-orb";
 
 /** Default provider (OpenRouter preferred when API key is present). */
@@ -68,6 +92,34 @@ async function filesToFileUIParts(files: File[]): Promise<FileUIPart[]> {
         url,
       };
     })
+  );
+}
+
+function CopyButton({ message }: { message: UIMessage }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    const text = message.parts
+      .filter((p) => isTextUIPart(p))
+      .map((p) => (p as { text: string }).text)
+      .join("\n");
+    if (text) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <MessageAction
+      tooltip={copied ? "Copied to clipboard" : "Copy response"}
+      onClick={handleCopy}
+    >
+      {copied ? (
+        <Check className="size-3.5 text-emerald-600" />
+      ) : (
+        <Copy className="size-3.5 text-muted-foreground" />
+      )}
+    </MessageAction>
   );
 }
 
@@ -106,11 +158,163 @@ function renderPart(
   if (isToolUIPart(part)) {
     const toolPart = part as unknown as ToolPart;
     const key = `${message.id}-tool-${index}`;
+    const dynamic = part as unknown as DynamicToolUIPart;
+    const toolName = (dynamic.toolName ||
+      (toolPart as any).toolName ||
+      toolPart.type) as string;
+    const input = (dynamic.input ?? (toolPart as any).input) as any;
+    const output = (dynamic.output ?? (toolPart as any).output) as any;
+    const isRunning =
+      toolPart.state === "input-streaming" ||
+      toolPart.state === "input-available";
 
-    // ToolUIPart (static) needs type+state but no toolName;
-    // DynamicToolUIPart needs type+state+toolName.
+    // 1. Dynamic Plan Rendering using official <Plan> AI Element
+    if (toolName === "createExecutionPlan") {
+      const planSteps = output?.steps ?? input?.steps ?? [];
+      const planGoal =
+        output?.goal ?? input?.goal ?? "Operational Execution Plan";
+      return (
+        <Plan
+          key={key}
+          className="my-2 border border-brand-accent/20 bg-brand-card/60 rounded-xl"
+          isStreaming={isRunning}
+        >
+          <PlanHeader>
+            <div className="flex items-center gap-2">
+              <Layers className="size-4 text-brand-accent" />
+              <div>
+                <PlanTitle>{planGoal}</PlanTitle>
+                <PlanDescription>
+                  Autonomous Multi-Agent Task Orchestration
+                </PlanDescription>
+              </div>
+            </div>
+            <PlanAction>
+              <PlanTrigger />
+            </PlanAction>
+          </PlanHeader>
+          <PlanContent className="pt-2">
+            <div className="space-y-2">
+              {planSteps.map((step: any, sIdx: number) => (
+                <div
+                  key={step.id || sIdx}
+                  className="flex items-center justify-between rounded-lg border border-brand-rule/60 bg-brand-cream/30 px-3 py-2 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="size-3.5 text-emerald-500" />
+                    <span className="font-medium text-brand-ink">
+                      {step.title}
+                    </span>
+                  </div>
+                  <span className="rounded-md bg-brand-accent/10 px-2 py-0.5 text-[10px] font-medium text-brand-accent">
+                    {step.assignedAgent}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </PlanContent>
+        </Plan>
+      );
+    }
+
+    // 2. Sub-agent Delegation Card
+    if (toolName === "delegateSubtask") {
+      const agentRole =
+        input?.agentRole ?? output?.agentRole ?? "Specialist Agent";
+      const subtaskTitle =
+        input?.subtaskTitle ?? output?.subtaskTitle ?? "Executing Subtask";
+      const findings = output?.findings;
+
+      return (
+        <div
+          key={key}
+          className="my-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3.5 text-xs text-brand-ink space-y-2"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="size-4 text-sky-500" />
+              <span className="font-semibold">{subtaskTitle}</span>
+            </div>
+            <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-mono font-medium text-sky-600 dark:text-sky-400">
+              {agentRole}
+            </span>
+          </div>
+
+          {findings && (
+            <div className="mt-2 rounded-lg border border-brand-rule/40 bg-brand-card p-2.5 space-y-1 font-mono text-[11px]">
+              {typeof findings === "object" ? (
+                Object.entries(findings).map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-4">
+                    <span className="text-brand-muted-soft capitalize">
+                      {k.replace(/([A-Z])/g, " $1")}:
+                    </span>
+                    <span className="font-medium text-brand-ink text-right">
+                      {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p>{String(findings)}</p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 3. Draft Load Interactive Card
+    if (toolName === "draftLoad") {
+      const load = output ?? input;
+      return (
+        <div
+          key={key}
+          className="my-2 rounded-xl border border-brand-accent/25 bg-gradient-to-br from-brand-accent/5 to-transparent p-4 text-xs space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Truck className="size-4 text-brand-accent" />
+              <span className="font-semibold text-brand-ink">
+                Load Draft {load?.draftId ?? ""}
+              </span>
+            </div>
+            <span className="rounded-full bg-amber-500/15 text-amber-600 px-2.5 py-0.5 text-[10px] font-medium">
+              Requires Dispatch Approval
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg bg-brand-card p-3 border border-brand-rule">
+            <div>
+              <div className="text-[10px] text-brand-muted-soft uppercase tracking-wider">
+                Origin
+              </div>
+              <div className="font-semibold text-sm text-brand-ink">
+                {load?.origin}
+              </div>
+            </div>
+            <ArrowRight className="size-4 text-brand-muted-soft" />
+            <div>
+              <div className="text-[10px] text-brand-muted-soft uppercase tracking-wider">
+                Destination
+              </div>
+              <div className="font-semibold text-sm text-brand-ink">
+                {load?.destination}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-brand-muted-soft uppercase tracking-wider">
+                Agreed Rate
+              </div>
+              <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">
+                {load?.rate}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default Tool rendering with official <Tool> AI Element
     if (toolPart.type === "dynamic-tool") {
-      const dynamic = part as unknown as DynamicToolUIPart;
       return (
         <Tool key={key}>
           <ToolHeader
@@ -295,19 +499,49 @@ export default function ChatInterface() {
           <ConversationContent>
             {messages.map((message) => (
               <Message key={message.id} from={message.role}>
+                {message.role === "assistant" && (
+                  <div className="flex items-center gap-2 mb-1 select-none">
+                    <AgentOrb
+                      size="sm"
+                      state={status === "streaming" ? "streaming" : "idle"}
+                    />
+                    <span className="text-xs font-semibold text-brand-ink">
+                      Muvx Copilot
+                    </span>
+                    <span className="text-[10px] text-brand-muted-soft font-mono uppercase tracking-wider">
+                      Autonomous Dispatcher
+                    </span>
+                  </div>
+                )}
                 <MessageContent>
                   {message.parts.map((part, i) =>
                     renderPart(message, part, i)
                   )}
                 </MessageContent>
+                {message.role === "assistant" && (
+                  <MessageToolbar>
+                    <MessageActions>
+                      <CopyButton message={message} />
+                    </MessageActions>
+                  </MessageToolbar>
+                )}
               </Message>
             ))}
 
             {/* Thinking indicator while the model is preparing a response */}
             {status === "submitted" && (
               <Message from="assistant">
+                <div className="flex items-center gap-2 mb-1 select-none">
+                  <AgentOrb size="sm" state="thinking" />
+                  <span className="text-xs font-semibold text-brand-ink">
+                    Muvx Copilot
+                  </span>
+                  <span className="text-[10px] text-brand-muted-soft font-mono uppercase tracking-wider">
+                    Orchestrating Sub-agents
+                  </span>
+                </div>
                 <MessageContent>
-                  <Shimmer duration={2}>Thinking…</Shimmer>
+                  <Shimmer duration={2}>Planning and coordinating sub-agents…</Shimmer>
                 </MessageContent>
               </Message>
             )}
