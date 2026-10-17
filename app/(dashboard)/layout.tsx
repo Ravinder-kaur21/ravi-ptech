@@ -153,7 +153,7 @@ export default async function DashboardLayout({
           session={sidebarSession}
           isImpersonating={!!impersonatedBy}
         />
-        <SidebarInset className="bg-background">
+        <SidebarInset className="bg-background min-w-0 overflow-x-hidden">
           <SiteHeader
             userName={session.user.name ?? "User"}
             userEmail={session.user.email}
@@ -161,7 +161,7 @@ export default async function DashboardLayout({
             isImpersonating={!!impersonatedBy}
           />
           <AnnouncementBanner initial={activeAnnouncements} />
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
         </SidebarInset>
       </PermissionsBootstrap>
     </SidebarProvider>

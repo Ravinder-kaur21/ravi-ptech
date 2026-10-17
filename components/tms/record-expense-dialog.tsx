@@ -180,7 +180,7 @@ export function RecordExpenseDialog({
   return (
     <Modal open={open} setOpen={setOpen}>
       <ModalTrigger>
-        <span className="inline-flex items-center gap-1.5 h-9 rounded-full bg-brand-ink px-4 text-xs font-medium text-brand-cream hover:bg-brand-ink-hover transition-colors shadow-xs cursor-pointer">
+        <span className="inline-flex items-center gap-1.5 h-9 rounded-full bg-brand-accent px-4 text-xs font-medium text-white hover:bg-brand-accent-hover transition-colors shadow-xs cursor-pointer">
           <Plus className="h-3.5 w-3.5" />
           Record Expense
         </span>
