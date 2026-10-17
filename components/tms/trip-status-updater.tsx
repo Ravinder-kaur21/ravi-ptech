@@ -67,7 +67,7 @@ export function TripStatusUpdater({ tripId, currentStatus }: TripStatusUpdaterPr
           size="sm"
           disabled={loading}
           onClick={() => handleUpdate("completed")}
-          className="h-7 px-2.5 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="h-7 px-2.5 text-[11px] rounded-4xl gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
         >
           {loading ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
           Complete Delivery
