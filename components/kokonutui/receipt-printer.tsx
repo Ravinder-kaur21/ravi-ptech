@@ -46,10 +46,13 @@ export interface ReceiptItem {
   name: string;
   quantity: number;
   price: number;
+  unitLabel?: string;
+  formattedAmount?: string;
 }
 
 export interface ReceiptPrinterProps {
   merchant?: string;
+  subtitle?: string;
   order?: string;
   date?: string;
   items?: ReceiptItem[];
@@ -61,6 +64,14 @@ export interface ReceiptPrinterProps {
   onPrint?: () => void;
   onTear?: () => void;
   className?: string;
+  metadata?: { label: string; value: string }[];
+  footerNote?: string;
+  showFinancials?: boolean;
+  totalOverride?: number;
+  totalLabel?: string;
+  subtotalLabel?: string;
+  children?: React.ReactNode;
+  paperClassName?: string;
 }
 
 const DEFAULT_ITEMS: ReceiptItem[] = [
@@ -95,64 +106,116 @@ function turn(px: number, py: number, angle: number) {
 
 function Receipt({
   merchant,
+  subtitle,
   order,
   date,
   items,
-  tax,
+  tax = 0,
   currency,
-}: Required<
-  Pick<
-    ReceiptPrinterProps,
-    "merchant" | "order" | "date" | "items" | "tax" | "currency"
-  >
+  metadata,
+  footerNote,
+  showFinancials = true,
+  totalOverride,
+  totalLabel = "Total",
+  subtotalLabel = "Subtotal",
+}: Pick<
+  ReceiptPrinterProps,
+  | "merchant"
+  | "subtitle"
+  | "order"
+  | "date"
+  | "items"
+  | "tax"
+  | "currency"
+  | "metadata"
+  | "footerNote"
+  | "showFinancials"
+  | "totalOverride"
+  | "totalLabel"
+  | "subtotalLabel"
 >) {
   const money = (n: number) => n.toFixed(2);
-  const subtotal = items.reduce((sum, i) => sum + i.quantity * i.price, 0);
-  const taxAmount = subtotal * tax;
+  const safeItems = items || [];
+  const subtotal = safeItems.reduce((sum, i) => sum + i.quantity * i.price, 0);
+  const taxAmount = subtotal * (tax || 0);
+  const calculatedTotal = totalOverride !== undefined ? totalOverride : subtotal + taxAmount;
+
   return (
     <div className="px-5 pt-6 pb-8 font-mono text-[11px] text-zinc-800 leading-[15px]">
-      <p className="text-center font-semibold text-xs tracking-[0.2em]">
-        {merchant.toUpperCase()}
+      <p className="text-center font-bold text-xs tracking-[0.2em] break-words">
+        {merchant?.toUpperCase()}
       </p>
-      <p className="text-center text-zinc-500">{date}</p>
-      <p className="text-center text-zinc-500">Order {order}</p>
+      {subtitle && (
+        <p className="text-center font-semibold text-[10px] tracking-wider text-zinc-600 mt-0.5">
+          {subtitle.toUpperCase()}
+        </p>
+      )}
+      <p className="text-center text-zinc-500 mt-1">{date}</p>
+      <p className="text-center text-zinc-500 font-medium">Order {order}</p>
+
+      {metadata && metadata.length > 0 && (
+        <div className="my-2 border-t border-b border-dashed border-zinc-300 py-1.5 space-y-1 text-[10px]">
+          {metadata.map((item) => (
+            <div key={item.label} className="flex justify-between gap-2">
+              <span className="text-zinc-500 uppercase shrink-0">{item.label}</span>
+              <span className="font-semibold text-right truncate text-zinc-900">
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <p
         aria-hidden="true"
         className="my-[7px] overflow-hidden whitespace-nowrap text-zinc-400"
       >
         {"- ".repeat(40)}
       </p>
-      {items.map((item) => (
+      {safeItems.map((item) => (
         <p className="flex justify-between gap-3" key={item.name}>
           <span className="truncate">
-            {item.quantity} × {item.name}
+            {item.quantity > 1 ? `${item.quantity} × ` : ""}
+            {item.name}
           </span>
-          <span className="tabular-nums">
-            {money(item.quantity * item.price)}
+          <span className="tabular-nums shrink-0 font-medium">
+            {item.formattedAmount
+              ? item.formattedAmount
+              : showFinancials
+              ? `${currency}${money(item.quantity * item.price)}`
+              : `${item.quantity} ${item.unitLabel || "PCS"}`}
           </span>
         </p>
       ))}
-      <p
-        aria-hidden="true"
-        className="my-[7px] overflow-hidden whitespace-nowrap text-zinc-400"
-      >
-        {"- ".repeat(40)}
-      </p>
-      <p className="flex justify-between text-zinc-500">
-        <span>Subtotal</span>
-        <span className="tabular-nums">{money(subtotal)}</span>
-      </p>
-      <p className="flex justify-between text-zinc-500">
-        <span>Tax {Math.round(tax * 100)}%</span>
-        <span className="tabular-nums">{money(taxAmount)}</span>
-      </p>
-      <p className="mt-1 flex justify-between font-semibold text-[13px]">
-        <span>Total</span>
-        <span className="tabular-nums">
-          {currency}
-          {money(subtotal + taxAmount)}
-        </span>
-      </p>
+
+      {showFinancials && (
+        <>
+          <p
+            aria-hidden="true"
+            className="my-[7px] overflow-hidden whitespace-nowrap text-zinc-400"
+          >
+            {"- ".repeat(40)}
+          </p>
+          <p className="flex justify-between text-zinc-500">
+            <span>{subtotalLabel}</span>
+            <span className="tabular-nums">{currency}{money(subtotal)}</span>
+          </p>
+          {(tax ?? 0) > 0 && (
+            <p className="flex justify-between text-zinc-500">
+              <span>Tax {Math.round((tax ?? 0) * 100)}%</span>
+              <span className="tabular-nums">{currency}{money(taxAmount)}</span>
+            </p>
+          )}
+          <p className="mt-1 flex justify-between font-bold text-[13px] text-zinc-900">
+            <span>{totalLabel}</span>
+            <span className="tabular-nums">
+              {currency}
+              {money(calculatedTotal)}
+            </span>
+          </p>
+        </>
+      )}
+
       <div aria-hidden="true" className="mt-4 flex h-9 justify-center gap-px">
         {BARS.map((width, i) => (
           <span
@@ -162,7 +225,9 @@ function Receipt({
           />
         ))}
       </div>
-      <p className="mt-3 text-center text-zinc-500">Thank you, come again</p>
+      <p className="mt-3 text-center text-zinc-500 text-[10px] uppercase tracking-wider">
+        {footerNote || "Thank you, come again"}
+      </p>
     </div>
   );
 }
@@ -178,6 +243,7 @@ const MASK_TORN = `${edge("top")}, ${edge("bottom")}, ${FILL}`;
 
 export default function ReceiptPrinter({
   merchant = "Kokonut Coffee",
+  subtitle,
   order = "#4182",
   date = "14 Oct 2026 · 08:42",
   items = DEFAULT_ITEMS,
@@ -187,6 +253,14 @@ export default function ReceiptPrinter({
   onPrint,
   onTear,
   className,
+  paperClassName,
+  metadata,
+  footerNote,
+  showFinancials = true,
+  totalOverride,
+  totalLabel = "Total",
+  subtotalLabel = "Subtotal",
+  children,
 }: ReceiptPrinterProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [torn, setTorn] = useState(false);
@@ -248,8 +322,7 @@ export default function ReceiptPrinter({
     // Place the sheet so its centre of mass lands on (cx, cy), turned by
     // `angle` around its top-left corner.
     const [ox, oy] = turn(s.width / 2, s.height / 2, s.angle);
-    const left = s.slotX - s.width / 2;
-    const tx = s.cx - ox - left;
+    const tx = s.cx - ox;
     const ty = s.cy - oy - SLOT_Y;
     paper.style.transform = `translate3d(${tx.toFixed(2)}px,${ty.toFixed(2)}px,0) rotate(${s.angle.toFixed(4)}rad)`;
   }, []);
@@ -286,11 +359,12 @@ export default function ReceiptPrinter({
   const stepPrinting = useCallback(
     (dt: number) => {
       const s = sim.current;
+      const lineStep = s.height > 600 ? 32 : LINE;
       if (s.pause > 0) {
         s.pause -= dt;
       } else if (s.feedTarget > 0) {
-        s.feedTarget = Math.max(0, s.feedTarget - LINE);
-        s.pause = LINE_PAUSE + Math.random() * LINE_JITTER;
+        s.feedTarget = Math.max(0, s.feedTarget - lineStep);
+        s.pause = (s.height > 600 ? 0.03 : LINE_PAUSE) + Math.random() * LINE_JITTER;
       }
       s.hidden += (s.feedTarget - s.hidden) * Math.min(1, FEED_RATE * dt);
       if (Math.abs(s.hidden - s.feedTarget) < 0.05) {
@@ -422,6 +496,9 @@ export default function ReceiptPrinter({
     s.width = paper.offsetWidth;
     s.height = paper.offsetHeight;
     s.slotX = card.clientWidth / 2;
+    if (s.height > 400 && card) {
+      card.style.minHeight = `${s.height + SLOT_Y + 120}px`;
+    }
   }, []);
 
   const print = useCallback(() => {
@@ -656,7 +733,7 @@ export default function ReceiptPrinter({
   return (
     <div
       className={cn(
-        "relative h-[30rem] w-72 select-none overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100",
+        "relative h-[30rem] w-72 select-none overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 print:border-0 print:bg-transparent print:shadow-none print:h-auto print:overflow-visible print:min-h-0",
         className
       )}
       ref={cardRef}
@@ -664,15 +741,16 @@ export default function ReceiptPrinter({
       {/* The sheet, clipped at the slot until it's torn free. */}
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0",
+          "absolute inset-x-0 bottom-0 print:static print:overflow-visible print:top-0",
           torn ? "overflow-visible" : "overflow-hidden"
         )}
         style={{ top: SLOT_Y }}
       >
         <div
-          aria-label={`Receipt from ${merchant}, order ${order}`}
+          aria-label={`Document from ${merchant}, order ${order}`}
           className={cn(
-            "absolute top-0 w-56 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-12px_rgb(0_0_0/0.25)] outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:bg-zinc-100",
+            "absolute top-0 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.06),0_8px_24px_-12px_rgb(0_0_0/0.25)] outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:bg-zinc-900 print:transform-none print:shadow-none print:static print:w-full print:m-0",
+            children ? (paperClassName || "w-full max-w-4xl") : "w-56",
             phase === "hanging" && "cursor-grab active:cursor-grabbing",
             phase === "held" && "cursor-grabbing",
             phase === "idle" && torn && "invisible"
@@ -685,42 +763,62 @@ export default function ReceiptPrinter({
           ref={paperRef}
           role="document"
           style={{
-            left: "50%",
-            marginLeft: "-7rem",
+            left: 0,
             transformOrigin: "0 0",
             mask: torn ? MASK_TORN : MASK_RESTING,
             WebkitMask: torn ? MASK_TORN : MASK_RESTING,
             touchAction: "none",
           }}
         >
-          <Receipt
-            currency={currency}
-            date={date}
-            items={items}
-            merchant={merchant}
-            order={order}
-            tax={tax}
-          />
+          {/* Perforation along the slot, where the sheet tears off. */}
+          {!torn && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-1 top-1 border-zinc-300 border-t-2 border-dotted print:hidden"
+            />
+          )}
+          {children ? (
+            children
+          ) : (
+            <Receipt
+              currency={currency}
+              date={date}
+              footerNote={footerNote}
+              items={items}
+              merchant={merchant}
+              metadata={metadata}
+              order={order}
+              showFinancials={showFinancials}
+              subtitle={subtitle}
+              subtotalLabel={subtotalLabel}
+              tax={tax}
+              totalLabel={totalLabel}
+              totalOverride={totalOverride}
+            />
+          )}
         </div>
       </div>
 
       {/* The printer housing, in front of the paper's top edge. */}
       <div
-        className="absolute inset-x-0 top-0 h-16 border-zinc-200 border-b bg-white dark:border-zinc-800 dark:bg-zinc-900"
+        className="absolute inset-x-0 top-0 h-16 border-zinc-200 border-b bg-white dark:border-zinc-800 dark:bg-zinc-900 z-10 print:hidden"
         ref={printerRef}
       >
-        <div className="flex items-center justify-between px-5 pt-4 text-xs">
-          <span className="font-medium">{merchant}</span>
-          <span aria-live="polite" className="text-zinc-500 dark:text-zinc-400">
+        <div className="flex items-center justify-between px-6 pt-4 text-xs">
+          <div className="flex items-center gap-2 truncate max-w-md">
+            <span className="inline-block size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="font-semibold text-sm truncate">{merchant}</span>
+          </div>
+          <span aria-live="polite" className="text-zinc-500 dark:text-zinc-400 font-mono text-xs shrink-0">
             {status}
           </span>
         </div>
-        <div className="absolute inset-x-8 bottom-2 h-1 rounded-full bg-zinc-900 dark:bg-black" />
+        <div className="absolute inset-x-6 bottom-2 h-1.5 rounded-full bg-zinc-900 dark:bg-black" />
       </div>
 
       {phase === "hanging" && (
         <button
-          className="sr-only focus:not-sr-only focus:absolute focus:right-4 focus:bottom-4 focus:rounded-full focus:bg-zinc-900 focus:px-3 focus:py-1.5 focus:text-white focus:text-xs dark:focus:bg-zinc-100 dark:focus:text-zinc-900"
+          className="sr-only focus:not-sr-only focus:absolute focus:right-4 focus:bottom-4 focus:rounded-full focus:bg-zinc-900 focus:px-3 focus:py-1.5 focus:text-white focus:text-xs dark:focus:bg-zinc-100 dark:focus:text-zinc-900 print:hidden"
           onClick={handleTearKey}
           type="button"
         >
@@ -730,18 +828,18 @@ export default function ReceiptPrinter({
 
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 flex justify-center p-5 transition-opacity duration-200 ease-out",
+          "absolute inset-x-0 bottom-0 flex justify-center p-5 transition-opacity duration-200 ease-out z-20 print:hidden",
           phase === "idle" ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       >
         <button
-          className="rounded-full bg-zinc-900 px-4 py-2 font-medium text-sm text-white outline-none transition-colors duration-150 ease-out hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="rounded-full bg-zinc-900 px-5 py-2.5 font-medium text-sm text-white outline-none transition-colors duration-150 ease-out hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 shadow-md"
           disabled={phase !== "idle"}
           onClick={print}
           tabIndex={phase === "idle" ? 0 : -1}
           type="button"
         >
-          {torn ? "Print another" : "Print receipt"}
+          {torn ? "Print another document" : "Print document"}
         </button>
       </div>
     </div>

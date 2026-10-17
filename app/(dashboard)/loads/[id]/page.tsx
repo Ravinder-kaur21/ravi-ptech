@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import {
   getSession,
-  getLoadById,
+  getLoadWithTripDetails,
   getWorkspaceProfile,
   getDriversForOrg,
   getTrucksForOrg,
@@ -47,7 +47,7 @@ export default async function LoadDetailPage({
 
   const { id } = await params
   const [load, profile, perms, drivers, trucks, trailers, carriers] = await Promise.all([
-    getLoadById(id, tenantId),
+    getLoadWithTripDetails(id, tenantId),
     getWorkspaceProfile(tenantId),
     getEffectivePermissions(session.user.id, tenantId),
     getDriversForOrg(tenantId),

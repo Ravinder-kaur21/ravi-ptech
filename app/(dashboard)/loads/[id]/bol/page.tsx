@@ -8,6 +8,7 @@ import {
 } from "@/lib/dal"
 import { formatWorkspaceDate } from "@/lib/timezone"
 import { PrintDocumentButton } from "@/components/tms/print-document-button"
+import ReceiptPrinter from "@/components/kokonutui/receipt-printer"
 import type { LoadStop } from "@/lib/tms-tax"
 
 export const instant = false
@@ -91,8 +92,18 @@ export default async function BillOfLadingPage({
         </div>
       </div>
 
-      {/* ─── PRINTABLE DOCUMENT SHEET ─── */}
-      <div className="max-w-4xl mx-auto bg-white dark:bg-zinc-900 border border-brand-rule print:border-0 p-8 shadow-sm print:p-0 print:shadow-none text-zinc-900 dark:text-zinc-100 text-xs">
+      {/* ─── BIG FULL-DOCUMENT PRINTER ─── */}
+      <div className="max-w-4xl mx-auto">
+        <ReceiptPrinter
+          merchant={profile?.name || "MUVX CARRIER LOGISTICS"}
+          order={bolNumber}
+          date={formattedDate}
+          className="w-full max-w-4xl min-h-[72rem] shadow-2xl border-brand-rule mx-auto"
+          paperClassName="w-full max-w-[850px] p-0"
+          autoPrint={true}
+        >
+          {/* ─── ORIGINAL FULL DOCUMENT SHEET ─── */}
+          <div className="w-full bg-white dark:bg-zinc-900 border border-brand-rule print:border-0 p-8 shadow-sm print:p-0 print:shadow-none text-zinc-900 dark:text-zinc-100 text-xs">
         {/* Document Header */}
         <div className="border-b-2 border-black pb-4 mb-4">
           <div className="flex justify-between items-start">
@@ -318,6 +329,8 @@ export default async function BillOfLadingPage({
             </div>
           </div>
         </div>
+      </div>
+        </ReceiptPrinter>
       </div>
     </div>
   )
