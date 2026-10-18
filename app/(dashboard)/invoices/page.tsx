@@ -75,39 +75,54 @@ export default async function InvoicesPage() {
         )}
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards matching Dashboard Design Language */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[12px] text-brand-muted-soft">Outstanding AR</p>
-            <Clock className="size-4 text-brand-accent" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">
             ${totalOutstandingAr.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Outstanding AR</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Awaiting customer collection</p>
         </Card>
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[12px] text-brand-muted-soft">Paid & Collected</p>
-            <CheckCircle2 className="size-4 text-emerald-600" />
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             ${totalPaidRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Paid & Collected</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Settled freight revenue</p>
         </Card>
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[12px] text-brand-muted-soft">Pending Settlement</p>
-            <FileText className="size-4 text-brand-muted-soft" />
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <FileText className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">{pendingInvoices.length}</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">{pendingInvoices.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Invoices</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Unpaid or open billing</p>
         </Card>
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[12px] text-brand-muted-soft">Ready to Bill (Delivered)</p>
-            <Truck className="size-4 text-brand-accent" />
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">{deliveredLoads.length}</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">{deliveredLoads.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Ready to Bill (Delivered)</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Delivered loads with POD pending</p>
         </Card>
       </div>
 

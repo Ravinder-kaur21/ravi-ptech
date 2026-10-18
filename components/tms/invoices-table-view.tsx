@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Truck,
   Building2,
+  Download,
 } from "lucide-react"
 import {
   Table,
@@ -22,6 +23,7 @@ import {
   TableCell,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -88,6 +90,29 @@ export function InvoicesTableView({
       return true
     })
   }, [invoices, activeTab, searchQuery])
+
+  const exportCsv = () => {
+    const headers = ["Invoice #", "Customer", "Email", "Order / Load", "Amount", "Status", "Due Date", "Created Date"]
+    const rows = filteredInvoices.map((i) => [
+      `"${(i.invoiceNumber || "").replace(/"/g, '""')}"`,
+      `"${(i.customerName || "").replace(/"/g, '""')}"`,
+      `"${(i.customerEmail || "").replace(/"/g, '""')}"`,
+      `"${(i.loadNumber || "").replace(/"/g, '""')}"`,
+      `"${i.amount || "0"}"`,
+      `"${(i.status || "").replace(/"/g, '""')}"`,
+      `"${i.dueDate ? new Date(i.dueDate).toISOString().slice(0, 10) : ""}"`,
+      `"${i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : ""}"`,
+    ])
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `customer_invoices_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   // Helper to determine aging bucket for pending invoices
   const getAgingBadge = (inv: InvoiceRecord) => {
@@ -196,22 +221,34 @@ export function InvoicesTableView({
           </TabsList>
         </Tabs>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#8a8b8f]" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search invoice #, customer, load..."
-            className="h-8.5 pl-8.5 text-xs bg-[#fdfbf7] dark:bg-zinc-950 border-[#e4ddd3] dark:border-zinc-800 rounded-lg placeholder:text-[#8a8b8f]"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#8a8b8f] hover:text-[#16181d] dark:hover:text-zinc-100"
-            >
-              Clear
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#8a8b8f]" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search invoice #, customer, load..."
+              className="h-8.5 pl-8.5 text-xs bg-[#fdfbf7] dark:bg-zinc-950 border-[#e4ddd3] dark:border-zinc-800 rounded-lg placeholder:text-[#8a8b8f]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#8a8b8f] hover:text-[#16181d] dark:hover:text-zinc-100"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportCsv}
+            className="h-8.5 px-3 text-xs border-[#e4ddd3] dark:border-zinc-800 text-[#16181d] dark:text-zinc-200 hover:bg-[#f7f3ec] dark:hover:bg-zinc-900 rounded-lg gap-1.5 shrink-0"
+          >
+            <Download className="size-3.5 text-[#8a8b8f]" />
+            Export
+          </Button>
         </div>
       </div>
 

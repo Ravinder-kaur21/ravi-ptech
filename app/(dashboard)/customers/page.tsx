@@ -39,66 +39,58 @@ export default async function CustomersDirectoryPage() {
         </div>
       </div>
 
-      {/* ─── STATS & OVERVIEW ─── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">
-              Active Accounts
-            </span>
-            <Building2 className="size-4 text-brand-accent" />
+      {/* ─── STATS & OVERVIEW (Dashboard Taste KPI Cards) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Building2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             {customers.length}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Shippers & logistics brokers
-          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active Accounts</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Shippers & logistics brokers</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">
-              Saved Facilities
-            </span>
-            <MapPin className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <MapPin className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             {facilities.length}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Docks, terminals & yards
-          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Saved Facilities</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Docks, terminals & yards</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">
-              Standard Terms
-            </span>
-            <DollarSign className="size-4 text-blue-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <DollarSign className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             Net 30
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Primary AR credit window
-          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Standard Terms</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Primary AR credit window</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">
-              Carrier Facilities
-            </span>
-            <ShieldCheck className="size-4 text-purple-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             {facilities.filter((f) => f.facilityType === "terminal" || f.facilityType === "yard").length}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Terminals & drop yards
-          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Carrier Terminals</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Operational cross-docks & yards</p>
         </Card>
       </div>
 

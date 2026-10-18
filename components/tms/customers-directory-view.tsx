@@ -11,6 +11,7 @@ import {
   DollarSign,
   ShieldCheck,
   CheckCircle2,
+  Download,
 } from "lucide-react"
 import {
   Table,
@@ -21,6 +22,7 @@ import {
   TableCell,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -101,6 +103,59 @@ export function CustomersDirectoryView({
     })
   }, [facilities, facilitySearch])
 
+  const exportCsv = () => {
+    if (activeTab === "customers") {
+      const headers = ["Company Name", "Contact", "Email", "Phone", "Address", "City", "State", "ZIP", "Payment Terms", "Currency", "Credit Limit", "Status"]
+      const rows = filteredCustomers.map((c) => [
+        `"${(c.name || "").replace(/"/g, '""')}"`,
+        `"${(c.contactName || "").replace(/"/g, '""')}"`,
+        `"${(c.email || "").replace(/"/g, '""')}"`,
+        `"${(c.phone || "").replace(/"/g, '""')}"`,
+        `"${(c.address || "").replace(/"/g, '""')}"`,
+        `"${(c.city || "").replace(/"/g, '""')}"`,
+        `"${(c.state || "").replace(/"/g, '""')}"`,
+        `"${(c.zip || "").replace(/"/g, '""')}"`,
+        `"${(c.paymentTerms || "").replace(/"/g, '""')}"`,
+        `"${(c.currency || "").replace(/"/g, '""')}"`,
+        `"${(c.creditLimit || "").replace(/"/g, '""')}"`,
+        `"${(c.status || "").replace(/"/g, '""')}"`,
+      ])
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `customers_directory_${new Date().toISOString().slice(0, 10)}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } else {
+      const headers = ["Facility Name", "Type", "Address", "City", "State", "ZIP", "Country", "Operating Hours", "Contact", "Phone", "Check In Instructions"]
+      const rows = filteredFacilities.map((f) => [
+        `"${(f.name || "").replace(/"/g, '""')}"`,
+        `"${(f.facilityType || "").replace(/"/g, '""')}"`,
+        `"${(f.address || "").replace(/"/g, '""')}"`,
+        `"${(f.city || "").replace(/"/g, '""')}"`,
+        `"${(f.state || "").replace(/"/g, '""')}"`,
+        `"${(f.zip || "").replace(/"/g, '""')}"`,
+        `"${(f.country || "").replace(/"/g, '""')}"`,
+        `"${(f.operatingHours || "").replace(/"/g, '""')}"`,
+        `"${(f.contactName || "").replace(/"/g, '""')}"`,
+        `"${(f.contactPhone || "").replace(/"/g, '""')}"`,
+        `"${(f.checkInInstructions || "").replace(/"/g, '""')}"`,
+      ])
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `facilities_directory_${new Date().toISOString().slice(0, 10)}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* ─── TABS & CONTROLS ─── */}
@@ -171,6 +226,16 @@ export function CustomersDirectoryView({
                 )}
               </div>
             )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportCsv}
+              className="h-8.5 px-3 text-xs border-[#e4ddd3] dark:border-zinc-800 text-[#16181d] dark:text-zinc-200 hover:bg-[#f7f3ec] dark:hover:bg-zinc-900 rounded-lg gap-1.5 shrink-0"
+            >
+              <Download className="size-3.5 text-[#8a8b8f]" />
+              Export
+            </Button>
           </div>
         </div>
 
