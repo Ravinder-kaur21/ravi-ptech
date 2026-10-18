@@ -31,6 +31,7 @@ import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { TripStatusUpdater } from "@/components/tms/trip-status-updater"
 import { RecordExpenseDialog } from "@/components/tms/record-expense-dialog"
+import { sounds } from "@/lib/sound-effects"
 
 export interface TripRecord {
   id: string
@@ -233,8 +234,15 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                     className="hover:bg-brand-cream/40 transition-colors border-brand-rule"
                   >
                     {/* Trip # */}
-                    <TableCell className="px-4 py-3 font-mono text-xs font-semibold text-brand-ink">
-                      {t.tripNumber}
+                    <TableCell className="px-4 py-3 font-mono text-xs font-semibold">
+                      <Link
+                        href={`/trips/${t.id}`}
+                        onClick={() => sounds.playClick()}
+                        className="text-brand-accent hover:underline inline-flex items-center gap-1 font-mono font-semibold"
+                      >
+                        {t.tripNumber}
+                        <ArrowUpRight className="size-3 opacity-60" />
+                      </Link>
                     </TableCell>
 
                     {/* Linked Load */}

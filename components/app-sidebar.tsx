@@ -50,7 +50,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { PinnedRecent } from "@/components/pinned-recent"
 
 import { NavUser } from "@/components/nav-user"
 import { SidebarCopilotBot } from "@/components/ai/muvx-bot"
@@ -364,11 +363,6 @@ export function AppSidebar({
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarSeparator className="bg-sidebar-border" />
-
-        {/* ─── PINNED + RECENT ─── */}
-        <PinnedRecent orgId={org.id} />
 
         <SidebarSeparator className="bg-sidebar-border" />
 

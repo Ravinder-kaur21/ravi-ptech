@@ -138,7 +138,7 @@ function springStep(
   return Math.abs(state.a - target) < 0.05 && Math.abs(state.v) < 2;
 }
 
-export default function SpendingRing({
+export function SpendingRing({
   title = "October spending",
   categories = DEFAULT_CATEGORIES,
   currency = "USD",

@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { usePermissions } from "@/lib/permissions-context"
 import { SIDEBAR_NAV, filterNavByPermissions } from "@/lib/nav-config"
-import { PinnedRecent } from "@/components/pinned-recent"
 import { NavUser } from "@/components/nav-user"
 import { SidebarCopilotBot } from "@/components/ai/muvx-bot"
 import { cn } from "@/lib/utils"
@@ -254,9 +253,6 @@ export function AppSidebarPermission({
             <SidebarSeparator className="bg-sidebar-border" />
           </React.Fragment>
         ))}
-
-        {/* Pinned + recent — kept as-is for continuity */}
-        <PinnedRecent orgId={org.id} />
 
         {/* Bottom options: Settings */}
         <div className="mt-auto" />

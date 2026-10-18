@@ -44,12 +44,23 @@ export default async function ReportsPage() {
     getCarrierPaymentsWithDetailsForOrg(tenantId),
   ])
 
-  // Map expenses by loadNumber
+  // Map expenses by loadNumber and category
   const expensesByLoad = new Map<string, number>()
   let totalApExpenses = 0
+  let fuelTotal = 0
+  let maintTotal = 0
+  let tollsTotal = 0
+  let otherApTotal = 0
+
   for (const exp of expenses) {
     const amt = parseFloat(exp.amount || "0")
     totalApExpenses += amt
+    const cat = (exp.type || "other").toLowerCase()
+    if (cat.includes("fuel")) fuelTotal += amt
+    else if (cat.includes("maint") || cat.includes("repair") || cat.includes("tire")) maintTotal += amt
+    else if (cat.includes("toll") || cat.includes("scale") || cat.includes("permit")) tollsTotal += amt
+    else otherApTotal += amt
+
     if (exp.loadNumber) {
       expensesByLoad.set(exp.loadNumber, (expensesByLoad.get(exp.loadNumber) || 0) + amt)
     }
@@ -206,6 +217,13 @@ export default async function ReportsPage() {
         totalExpenses={totalCosts}
         totalNetProfit={totalNetProfit}
         overallMargin={overallMargin}
+        expenseBreakdown={{
+          fuel: fuelTotal,
+          carrierCost: totalCarrierCost,
+          maintenance: maintTotal,
+          tolls: tollsTotal,
+          other: otherApTotal,
+        }}
       />
     </div>
   )

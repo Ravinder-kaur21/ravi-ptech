@@ -467,6 +467,62 @@ export const getTripsWithDetailsForOrg = async (tenantId: string) => {
     .orderBy(desc(trip.createdAt))
 }
 
+export const getTripByIdWithDetails = async (tripId: string, tenantId: string) => {
+  const [result] = await db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      totalMiles: trip.totalMiles,
+      totalRevenue: trip.totalRevenue,
+      totalExpense: trip.totalExpense,
+      carrierRate: trip.carrierRate,
+      createdAt: trip.createdAt,
+      updatedAt: trip.updatedAt,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      loadStatus: load.status,
+      originCity: load.originCity,
+      originState: load.originState,
+      originZip: load.originZip,
+      destCity: load.destCity,
+      destState: load.destState,
+      destZip: load.destZip,
+      commodity: load.commodity,
+      weight: load.weight,
+      pickupDate: load.pickupDate,
+      deliveryDate: load.deliveryDate,
+      driverId: trip.driverId,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      driverEmail: driver.email,
+      truckId: trip.truckId,
+      truckUnitNumber: truck.unitNumber,
+      truckMake: truck.make,
+      truckModel: truck.model,
+      trailerId: trip.trailerId,
+      trailerUnitNumber: trailer.unitNumber,
+      trailerType: trailer.type,
+      carrierId: trip.carrierId,
+      carrierName: carrier.name,
+      carrierDotNumber: carrier.dotNumber,
+      carrierPhone: carrier.phone,
+    })
+    .from(trip)
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .leftJoin(carrier, eq(trip.carrierId, carrier.id))
+    .where(and(eq(trip.id, tripId), eq(trip.tenantId, tenantId)))
+    .limit(1)
+
+  return result ?? null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOMERS & FACILITIES
 // ─────────────────────────────────────────────────────────────────────────────

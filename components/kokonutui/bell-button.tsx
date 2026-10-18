@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { sounds } from "@/lib/sound-effects";
 
 // The bell and its clapper are two pendulums on the same pivot. Nothing
 // couples them but collisions: the swinging bell catches the clapper with
@@ -188,6 +189,7 @@ export function BellButton({
       // The clapper hits the bell's right wall when it swings right.
       flare(side as 1 | -1, impact / 1600);
       haptic(6);
+      sounds.playBell(Math.min(0.18, impact / 2500));
     }
   }, [flare]);
 
