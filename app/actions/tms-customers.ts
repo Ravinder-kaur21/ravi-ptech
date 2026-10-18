@@ -72,6 +72,22 @@ export async function createCustomerAction(raw: z.infer<typeof createCustomerSch
       metadata: { tenantId: ctx.tenantId, paymentTerms: data.paymentTerms },
     })
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "team",
+        event: "team.customer_created",
+        severity: "info",
+        title: "Customer Account Created",
+        message: `Customer "${data.name}" was added to directory.`,
+        link: "/customers",
+        metadata: { customerId: id, name: data.name },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching team.customer_created:", e)
+    }
+
     revalidatePath("/customers")
     revalidatePath("/loads/new")
     revalidatePath("/invoices")
@@ -145,6 +161,22 @@ export async function createFacilityAction(raw: z.infer<typeof createFacilitySch
       target: { type: "facility", id, label: data.name },
       metadata: { tenantId: ctx.tenantId, city: data.city, state: data.state },
     })
+
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "fleet",
+        event: "fleet.facility_created",
+        severity: "info",
+        title: "Facility Added",
+        message: `Shipping/receiving facility "${data.name}" (${data.city}, ${data.state}) was registered.`,
+        link: "/customers",
+        metadata: { facilityId: id, name: data.name, city: data.city, state: data.state },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching fleet.facility_created:", e)
+    }
 
     revalidatePath("/customers")
     revalidatePath("/loads/new")

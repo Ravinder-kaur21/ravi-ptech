@@ -78,6 +78,22 @@ export async function createCarrierAction(raw: z.infer<typeof createCarrierSchem
       metadata: { tenantId: ctx.tenantId, mcNumber: data.mcNumber, dotNumber: data.dotNumber },
     })
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "team",
+        event: "team.carrier_created",
+        severity: "info",
+        title: "Carrier Onboarded",
+        message: `Outside carrier "${data.name}" was onboarded to the partner directory.`,
+        link: "/carrier-pay",
+        metadata: { carrierId: id, name: data.name, mcNumber: data.mcNumber },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching team.carrier_created:", e)
+    }
+
     revalidatePath("/carrier-pay")
     revalidatePath("/trips")
     return { success: true, id }
@@ -150,6 +166,22 @@ export async function createCarrierPaymentAction(raw: z.infer<typeof createCarri
       metadata: { tenantId: ctx.tenantId, carrierId: data.carrierId, tripId: data.tripId },
     })
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "settlement",
+        event: "settlement.carrier_payment_created",
+        severity: "info",
+        title: "Carrier Settlement Generated",
+        message: `Settlement of $${netTotal} generated for carrier payment processing.`,
+        link: "/carrier-pay",
+        metadata: { paymentId: id, carrierId: data.carrierId, amount: netTotal },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching settlement.carrier_payment_created:", e)
+    }
+
     revalidatePath("/carrier-pay")
     return { success: true, id }
   } catch (err) {
@@ -215,6 +247,22 @@ export async function updateCarrierPaymentStatusAction(raw: z.infer<typeof updat
       target: { type: "carrier_payment", id: paymentId, label: `Carrier settlement $${existing.netAmount || existing.amount}` },
       metadata: { tenantId: ctx.tenantId, previousStatus: existing.status, newStatus: status },
     })
+
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "settlement",
+        event: "settlement.carrier_payment_updated",
+        severity: status === "paid" ? "success" : status === "approved" ? "info" : "warn",
+        title: `Carrier Settlement ${status.toUpperCase()}`,
+        message: `Carrier settlement ($${existing.netAmount || existing.amount}) marked as ${status}.`,
+        link: "/carrier-pay",
+        metadata: { paymentId, previousStatus: existing.status, newStatus: status },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching settlement.carrier_payment_updated:", e)
+    }
 
     revalidatePath("/carrier-pay")
     return { success: true }
@@ -287,6 +335,22 @@ export async function confirmRemittanceAction(raw: z.infer<typeof confirmRemitta
         paymentDate: data.paymentDate,
       },
     })
+
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "settlement",
+        event: "settlement.carrier_payment_paid",
+        severity: "success",
+        title: "Carrier Remittance Paid",
+        message: `Carrier settlement ($${existing.netAmount || existing.amount}) paid via ${data.paymentMethod} (Ref #${data.referenceNumber}).`,
+        link: "/carrier-pay",
+        metadata: { paymentId: data.paymentId, method: data.paymentMethod, ref: data.referenceNumber },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching settlement.carrier_payment_paid:", e)
+    }
 
     revalidatePath("/carrier-pay")
     return { success: true }

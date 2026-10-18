@@ -136,5 +136,21 @@ export const POST = withTenant(async (req: Request, { tenantId, userId }) => {
     metadata: { tenantId, customerName: data.customerName ?? null },
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: tenantId,
+      category: "load",
+      event: "load.created",
+      severity: "info",
+      title: `New Load #${data.loadNumber} Created`,
+      message: `Load #${data.loadNumber} booked for ${data.customerName || "shipper"}: ${data.originCity || "Origin"} → ${data.destCity || "Destination"}.`,
+      link: `/loads/${id}`,
+      metadata: { loadId: id, loadNumber: data.loadNumber, rate: data.rate },
+    })
+  } catch (notifErr) {
+    console.error("[NOTIFICATIONS] Error dispatching load.created:", notifErr)
+  }
+
   return NextResponse.json({ id, loadNumber: data.loadNumber }, { status: 201 })
 })

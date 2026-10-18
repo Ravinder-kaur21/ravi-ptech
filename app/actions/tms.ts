@@ -135,6 +135,22 @@ export async function createTrailerAction(raw: z.infer<typeof trailerSchema>) {
       notes: data.notes ?? null,
     })
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "fleet",
+        event: "fleet.trailer_added",
+        severity: "info",
+        title: "Trailer Added to Fleet",
+        message: `Trailer #${data.unitNumber} (${data.type ?? "Dry Van"}) was added to the equipment roster.`,
+        link: "/fleet",
+        metadata: { trailerId: id, unitNumber: data.unitNumber, type: data.type },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching fleet.trailer_added:", e)
+    }
+
     revalidatePath("/fleet")
     return { ok: true, id, unitNumber: data.unitNumber }
   } catch (err: any) {
@@ -443,6 +459,22 @@ export async function updateTripStatusAction(raw: z.infer<typeof updateTripStatu
       }
     }
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "trip",
+        event: "trip.status_updated",
+        severity: status === "completed" ? "success" : "info",
+        title: `Trip #${existingTrip.tripNumber} ${status.toUpperCase()}`,
+        message: `Trip #${existingTrip.tripNumber} status changed from ${existingTrip.status} to ${status}.`,
+        link: "/trips",
+        metadata: { tripId, tripNumber: existingTrip.tripNumber, previousStatus: existingTrip.status, newStatus: status },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching trip.status_updated:", e)
+    }
+
     revalidatePath("/trips")
     revalidatePath("/loads")
     revalidatePath("/fleet")
@@ -538,6 +570,22 @@ export async function updateLoadStatusAction(raw: z.infer<typeof updateLoadStatu
       target: { type: "load", id: loadId, label: existingLoad.loadNumber },
       metadata: { tenantId: ctx.tenantId, previousStatus: existingLoad.status, newStatus: status },
     })
+
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: ctx.tenantId,
+        category: "load",
+        event: "load.status_updated",
+        severity: status === "delivered" || status === "completed" ? "success" : status === "cancelled" ? "warn" : "info",
+        title: `Load #${existingLoad.loadNumber} ${status.replace("_", " ").toUpperCase()}`,
+        message: `Load #${existingLoad.loadNumber} status updated to ${status.replace("_", " ")}.`,
+        link: `/loads/${loadId}`,
+        metadata: { loadId, loadNumber: existingLoad.loadNumber, previousStatus: existingLoad.status, newStatus: status },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching load.status_updated:", e)
+    }
 
     revalidatePath("/loads")
     revalidatePath(`/loads/${loadId}`)

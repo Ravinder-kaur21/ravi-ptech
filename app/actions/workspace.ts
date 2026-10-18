@@ -285,6 +285,22 @@ async function withUpdateWorkspaceProfile(
     `[WORKSPACE/ACTION] ✅ updated ${Object.keys(changes).length} field(s) for org ${after.id}`,
   )
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "system",
+      event: "system.workspace_updated",
+      severity: "info",
+      title: "Workspace Profile Updated",
+      message: `Company profile details for "${after.name}" were updated.`,
+      link: "/settings/workspace",
+      metadata: { changedFields: Object.keys(changes) },
+    })
+  } catch (e) {
+    console.error("[NOTIFICATIONS] Error dispatching system.workspace_updated:", e)
+  }
+
   return {
     ok: true,
     organization: { id: after.id, name: after.name, slug: after.slug },
