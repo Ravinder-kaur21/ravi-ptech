@@ -309,3 +309,7 @@ class SoundEngine {
 }
 
 export const sounds = new SoundEngine()
+
+if (typeof window !== "undefined") {
+  ;(window as any).__muvxSounds = sounds
+}
