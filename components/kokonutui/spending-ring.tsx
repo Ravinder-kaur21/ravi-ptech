@@ -180,15 +180,25 @@ export function SpendingRing({
     },
   });
 
+  const safeCurrency = useMemo(() => {
+    if (!currency || currency === "$" || currency.length !== 3) return "USD";
+    try {
+      new Intl.NumberFormat("en-US", { style: "currency", currency });
+      return currency;
+    } catch {
+      return "USD";
+    }
+  }, [currency]);
+
   const money = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
         style: "currency",
-        currency,
+        currency: safeCurrency,
         maximumFractionDigits: 2,
         minimumFractionDigits: 2,
       }),
-    [currency]
+    [safeCurrency]
   );
 
   const paint = useCallback(() => {

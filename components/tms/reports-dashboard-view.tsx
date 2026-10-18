@@ -475,7 +475,7 @@ export function ReportsDashboardView({
             <div className="lg:col-span-5 flex flex-col justify-between">
               <SpendingRing
                 title="Operational Cost Breakdown"
-                currency="$"
+                currency="USD"
                 categories={spendingCategories}
                 className="w-full h-full border-brand-rule bg-brand-card shadow-xs"
               />
@@ -488,7 +488,7 @@ export function ReportsDashboardView({
               label="Fleet Rate Per Mile (RPM)"
               segments={["Linehaul Rate", "Fuel Surcharge", "Accessorials"]}
               format="currency"
-              currency="$"
+              currency="USD"
               className="border-brand-rule bg-brand-card shadow-xs"
             />
             <MetricCard

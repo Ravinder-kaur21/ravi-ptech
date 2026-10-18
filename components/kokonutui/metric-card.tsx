@@ -433,14 +433,24 @@ export function MetricCard({
   const shown = useRef<Shape>(info.shape);
   const morph = useRef({ raf: 0 });
 
+  const safeCurrency = useMemo(() => {
+    if (!currency || currency === "$" || currency.length !== 3) return "USD";
+    try {
+      new Intl.NumberFormat("en-US", { style: "currency", currency });
+      return currency;
+    } catch {
+      return "USD";
+    }
+  }, [currency]);
+
   const money = useMemo(
     () =>
       new Intl.NumberFormat("en-US", {
         style: format === "currency" ? "currency" : "decimal",
-        currency,
+        currency: safeCurrency,
         maximumFractionDigits: 0,
       }),
-    [format, currency]
+    [format, safeCurrency]
   );
 
   // A new period or segment morphs the lines from where they are now.
