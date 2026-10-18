@@ -81,6 +81,31 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
+      // 1A. Switch / Checkbox toggle clicks
+      const isSwitch =
+        clickable.getAttribute("role") === "switch" ||
+        clickable.getAttribute("role") === "checkbox" ||
+        (clickable.tagName === "INPUT" && (clickable as HTMLInputElement).type === "checkbox")
+
+      if (isSwitch) {
+        const isChecked =
+          clickable.getAttribute("aria-checked") === "true" ||
+          clickable.getAttribute("data-state") === "checked" ||
+          (clickable as HTMLInputElement).checked
+        sounds.playToggle(!isChecked)
+        return
+      }
+
+      // 1B. Dialog triggers — suppress click so the rich spatial dialog whoosh plays cleanly
+      const isDialogTrigger =
+        clickable.hasAttribute("data-dialog-trigger") ||
+        clickable.getAttribute("aria-haspopup") === "dialog" ||
+        clickable.closest('[data-slot="dialog-trigger"]')
+
+      if (isDialogTrigger) {
+        return
+      }
+
       sounds.playTrackpadClick()
     }
 

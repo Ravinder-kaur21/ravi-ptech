@@ -151,6 +151,32 @@ export function SoundToggle() {
               <Bell className="size-3 mr-1.5 text-amber-500" />
               <span>Bell Alert</span>
             </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => triggerTest("confirm", () => sounds.playConfirm())}
+              className={`h-8 justify-start text-[11px] font-normal border-brand-rule/80 ${
+                lastTested === "confirm" ? "border-brand-accent bg-brand-accent-tint" : ""
+              }`}
+            >
+              <Sparkles className="size-3 mr-1.5 text-sky-500" />
+              <span>Glass Confirm</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => triggerTest("toggle", () => sounds.playToggle(true))}
+              className={`h-8 justify-start text-[11px] font-normal border-brand-rule/80 ${
+                lastTested === "toggle" ? "border-brand-accent bg-brand-accent-tint" : ""
+              }`}
+            >
+              <Radio className="size-3 mr-1.5 text-violet-500" />
+              <span>Toggle Switch</span>
+            </Button>
           </div>
         </div>
 

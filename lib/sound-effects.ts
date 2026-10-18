@@ -151,48 +151,113 @@ class SoundEngine {
   }
 
   /**
-   * Soft pulse for dialogs, modals, and sheets opening.
-   * Warm acoustic resonant swell (120Hz -> 180Hz) with smooth spatial envelope.
+   * Soft spatial pulse for dialogs, modals, and sheets opening.
+   * Multi-harmonic warm swell (220Hz & 330Hz) with gentle lowpass sweep (400Hz -> 180Hz)
+   * creating an expansive, luxurious spatial bloom rather than a click.
    */
-  public playPulse(volume: number = 0.08) {
+  public playPulse(volume: number = 0.12) {
     if (this.isMuted) return
     const ctx = this.getContext()
     if (!ctx) return
     const t = ctx.currentTime
 
-    // 1. Resonant fundamental swell
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
+    // 1. Warm harmonic pad (A3 220Hz + E4 330Hz)
+    const freqs = [220, 330]
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const filter = ctx.createBiquadFilter()
 
-    osc.type = "sine"
-    osc.frequency.setValueAtTime(130, t)
-    osc.frequency.exponentialRampToValueAtTime(195, t + 0.12)
+      osc.type = "sine"
+      osc.frequency.setValueAtTime(freq, t)
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.08, t + 0.22)
 
-    gain.gain.setValueAtTime(0.001, t)
-    gain.gain.linearRampToValueAtTime(volume, t + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16)
+      filter.type = "lowpass"
+      filter.frequency.setValueAtTime(450, t)
+      filter.frequency.exponentialRampToValueAtTime(160, t + 0.28)
 
-    osc.connect(gain)
-    gain.connect(ctx.destination)
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.linearRampToValueAtTime(volume * (idx === 0 ? 0.9 : 0.45), t + 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28)
 
-    osc.start(t)
-    osc.stop(t + 0.16)
+      osc.connect(filter)
+      filter.connect(gain)
+      gain.connect(ctx.destination)
 
-    // 2. Warm sub-body
+      osc.start(t)
+      osc.stop(t + 0.28)
+    })
+
+    // 2. Soft sub-bass presence
     const subOsc = ctx.createOscillator()
     const subGain = ctx.createGain()
-
     subOsc.type = "sine"
-    subOsc.frequency.setValueAtTime(75, t)
-    subGain.gain.setValueAtTime(0.001, t)
-    subGain.gain.linearRampToValueAtTime(volume * 0.6, t + 0.015)
-    subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14)
+    subOsc.frequency.setValueAtTime(85, t)
+    subGain.gain.setValueAtTime(0.0001, t)
+    subGain.gain.linearRampToValueAtTime(volume * 0.7, t + 0.03)
+    subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.24)
 
     subOsc.connect(subGain)
     subGain.connect(ctx.destination)
 
     subOsc.start(t)
-    subOsc.stop(t + 0.14)
+    subOsc.stop(t + 0.24)
+  }
+
+  /**
+   * Subtle glass confirmation chime for saving/confirming actions
+   */
+  public playConfirm(volume: number = 0.1) {
+    if (this.isMuted) return
+    const ctx = this.getContext()
+    if (!ctx) return
+    const t = ctx.currentTime
+
+    // Two crystal chime tones (E6 1318Hz, B6 1975Hz)
+    const tones = [1318.5, 1975.5]
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+
+      osc.type = "sine"
+      osc.frequency.setValueAtTime(freq, t + i * 0.035)
+
+      gain.gain.setValueAtTime(0.0001, t + i * 0.035)
+      gain.gain.linearRampToValueAtTime(volume * 0.6, t + i * 0.035 + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.035 + 0.3)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.start(t + i * 0.035)
+      osc.stop(t + i * 0.035 + 0.3)
+    })
+  }
+
+  /**
+   * Gentle warning thud for deletes or destructive modals
+   */
+  public playWarning(volume: number = 0.1) {
+    if (this.isMuted) return
+    const ctx = this.getContext()
+    if (!ctx) return
+    const t = ctx.currentTime
+
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+
+    osc.type = "sine"
+    osc.frequency.setValueAtTime(140, t)
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.12)
+
+    gain.gain.setValueAtTime(volume * 0.8, t)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
+
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+
+    osc.start(t)
+    osc.stop(t + 0.12)
   }
 
   /**
