@@ -51,7 +51,7 @@ export default async function TripsPage() {
             {trips.length} {trips.length === 1 ? "trip" : "trips"} total · {activeTrips.length} rolling on highway
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ">
           {trips.length > 0 && (
             <RecordExpenseDialog
               trips={tripOptions}
