@@ -309,7 +309,8 @@
 
 @layer components {
   .display-heading {
-    @apply font-serif text-[clamp(32px, 4.4vw, 46px)] font-normal leading-[1.04] tracking-[-0.03em] text-brand-ink;
+    @apply font-serif font-normal leading-[1.04] tracking-[-0.03em] text-brand-ink;
+    font-size: clamp(32px, 4.4vw, 46px);
   }
 
   .italic-accent {
