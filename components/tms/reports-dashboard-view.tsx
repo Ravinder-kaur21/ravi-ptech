@@ -256,8 +256,14 @@ export function ReportsDashboardView({
     toast.success("Financial ledger exported to CSV successfully.")
   }
 
+  const formatCurrencyTick = (val: number) => {
+    if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`
+    if (val >= 1_000) return `$${(val / 1_000).toFixed(0)}k`
+    return `$${val}`
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-6">
       {/* ─── TABS & CONTROLS ─── */}
       <Tabs
         value={activeTab}
@@ -265,9 +271,9 @@ export function ReportsDashboardView({
           sounds.playClick()
           setActiveTab(v as any)
         }}
-        className="space-y-6"
+        className="w-full flex flex-col space-y-6"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
           <TabsList className="bg-brand-cream/50 border border-brand-rule p-0.5 h-9 rounded-lg w-full sm:w-auto">
             <TabsTrigger
               value="overview"
@@ -363,7 +369,7 @@ export function ReportsDashboardView({
                 <div className="h-[280px] w-full pt-4">
                   <ChartContainer config={chartConfig} className="h-full w-full">
                     {chartType === "bar" ? (
-                      <BarChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <BarChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e4ddd3" vertical={false} />
                         <XAxis
                           dataKey="month"
@@ -377,7 +383,8 @@ export function ReportsDashboardView({
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
-                          tickFormatter={(val) => `$${val > 999 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                          width={55}
+                          tickFormatter={formatCurrencyTick}
                         />
                         <RechartsTooltip
                           content={<ChartTooltipContent indicator="dashed" />}
@@ -402,7 +409,7 @@ export function ReportsDashboardView({
                         />
                       </BarChart>
                     ) : (
-                      <AreaChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <AreaChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#d9622b" stopOpacity={0.4} />
@@ -426,7 +433,8 @@ export function ReportsDashboardView({
                           fontSize={11}
                           tickLine={false}
                           axisLine={false}
-                          tickFormatter={(val) => `$${val > 999 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                          width={55}
+                          tickFormatter={formatCurrencyTick}
                         />
                         <RechartsTooltip content={<ChartTooltipContent />} />
                         <Area

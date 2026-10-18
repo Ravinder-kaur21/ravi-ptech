@@ -400,7 +400,7 @@ export function SpendingRing({
   return (
     <div
       className={cn(
-        "w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-5 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100",
+        "w-full rounded-2xl border border-brand-rule bg-brand-card p-5 text-zinc-900 dark:text-zinc-100",
         className
       )}
     >
