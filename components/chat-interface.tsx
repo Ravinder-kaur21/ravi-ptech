@@ -1390,6 +1390,130 @@ function renderPart(
       );
     }
 
+    // 2j. Invite Workspace Member Tool Card
+    if (toolName === "inviteWorkspaceMember") {
+      const email = input?.email || "team@company.com";
+      const role = input?.role || "member";
+      return (
+        <div className="rounded-xl border border-brand-warm-border/60 bg-white/80 dark:bg-zinc-900/80 p-3 shadow-sm mb-3">
+          <div className="flex items-center justify-between pb-2 border-b border-brand-warm-border/40 mb-2">
+            <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+              <UserPlus className="size-3.5 text-brand-accent" />
+              Invite Team Member
+            </span>
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase bg-brand-cream/80 text-brand-ink">
+              {role}
+            </span>
+          </div>
+          <div className="text-xs text-brand-ink/90 space-y-1 mb-2">
+            <div><span className="text-brand-muted-soft">Invitee:</span> <span className="font-medium">{email}</span></div>
+            <div><span className="text-brand-muted-soft">Assigned Role:</span> <span className="font-medium capitalize">{role}</span></div>
+          </div>
+          {output && (
+            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-1.5 rounded-md">
+              ✓ {output.message || `Invitation email sent to ${email}.`}
+            </div>
+          )}
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  Send official workspace invitation email to {email} as {role}?
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Invitation authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Invitation cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm & Send
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2k. Update Member Role Tool Card
+    if (toolName === "updateMemberRole") {
+      const memberId = input?.memberId;
+      const newRole = input?.role;
+      const suspend = input?.suspend;
+      return (
+        <div className="rounded-xl border border-brand-warm-border/60 bg-white/80 dark:bg-zinc-900/80 p-3 shadow-sm mb-3">
+          <div className="flex items-center justify-between pb-2 border-b border-brand-warm-border/40 mb-2">
+            <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+              <Users className="size-3.5 text-brand-accent" />
+              Member Access Update
+            </span>
+            {newRole && (
+              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase bg-brand-cream/80 text-brand-ink">
+                {newRole}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-brand-ink/90 space-y-1 mb-2">
+            <div><span className="text-brand-muted-soft">Member ID:</span> <span className="font-mono">{memberId}</span></div>
+            {newRole && <div><span className="text-brand-muted-soft">New Role:</span> <span className="font-medium capitalize">{newRole}</span></div>}
+            {suspend !== undefined && (
+              <div><span className="text-brand-muted-soft">Status Action:</span> <span className="font-medium text-amber-600 dark:text-amber-400">{suspend ? "Suspend Access" : "Reinstate Access"}</span></div>
+            )}
+          </div>
+          {output && (
+            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/10 px-2.5 py-1.5 rounded-md">
+              ✓ {output.message || "Member permissions updated."}
+            </div>
+          )}
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  Confirm updating access permissions for member {memberId}?
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Permission change authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Permission change rejected</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm Update
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
     // 3. Delegate Subtask — rendered with Task + Sub-Agent Child Bot
     if (toolName === "delegateSubtask") {
       const rawRole = (input?.agentRole || "Specialist").toLowerCase();

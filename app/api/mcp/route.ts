@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { getSession } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
-import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/mcp/tms-tools"
+import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/copilot/tools"
 
 /**
  * Model Context Protocol (MCP) Server for Muvx TMS.

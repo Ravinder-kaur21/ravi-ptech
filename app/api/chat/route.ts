@@ -3,7 +3,7 @@ import { streamText, convertToModelMessages, tool } from "ai"
 import { getModel } from "@/lib/ai-providers"
 import { getSession } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
-import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/mcp/tms-tools"
+import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/copilot/tools"
 
 export const maxDuration = 60
 
@@ -81,9 +81,12 @@ You have direct read, search, and transactional tools across EVERY TMS domain:
    - Approve driver expense reimbursement ('approveExpense')
    - Log new trip expense: fuel, toll, lumper, maintenance ('logTripExpense')
 8. Team & Workspace Administration:
-   - List team members and their roles ('listWorkspaceMembers')
+   - List team members and pending invites ('listWorkspaceMembers')
    - Invite new team members with assigned role ('inviteWorkspaceMember')
+   - Resend invitation email ('resendInvitation')
+   - Cancel pending invitation ('cancelInvitation')
    - Promote or update member role ('updateMemberRole')
+   - Remove member with cascade cleanup ('removeMember')
 9. Audit & Security Trail:
    - Search recent activity, load, dispatch, and security logs ('queryAuditLogs')
 10. Integrations & Telematics:
