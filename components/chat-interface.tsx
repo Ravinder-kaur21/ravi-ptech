@@ -117,11 +117,254 @@ import {
   Users,
   Route,
   HelpCircle,
+  Receipt,
+  Banknote,
+  FileWarning,
+  Cable,
+  Mail,
+  ExternalLink,
 } from "lucide-react";
-import { MuvxBot, type BotMood, type BotCoat } from "@/components/ai/muvx-bot";
+import { MuvxBot, type BotMood, type BotCoat, type BotRole } from "@/components/ai/muvx-bot";
 
 /** Default provider (OpenRouter preferred when API key is present). */
 const DEFAULT_PROVIDER = "openrouter";
+
+export interface BotSpecialist {
+  id: BotRole;
+  name: string;
+  title: string;
+  coat: BotCoat;
+  icon: any;
+  prompt: string;
+  description: string;
+  tagline: string;
+}
+
+export const SPECIALIST_TEAMS: BotSpecialist[] = [
+  {
+    id: "main",
+    name: "Master Muvx",
+    title: "Operations Intelligence",
+    coat: "ink",
+    icon: Sparkles,
+    prompt: "Provide an operational status report across active loads, fleet availability, and missing PODs.",
+    description: "Orchestrates all TMS modules with full autonomous agency.",
+    tagline: "Master freight orchestrator",
+  },
+  {
+    id: "dispatcher",
+    name: "Load Dispatcher",
+    title: "Freight Dispatch & Routing",
+    coat: "indigo",
+    icon: Route,
+    prompt: "Show available loads needing coverage and match available drivers.",
+    description: "Tender booking, multi-stop routing, driver assignments.",
+    tagline: "Rate negotiation & route dispatch",
+  },
+  {
+    id: "fleet_guardian",
+    name: "Fleet Guardian",
+    title: "HOS & FMCSA Safety",
+    coat: "emerald",
+    icon: ShieldCheck,
+    prompt: "Audit fleet safety: check driver CDL expirations and HOS duty limits.",
+    description: "Driver duty status, CDL expirations, 34-hour restart rules.",
+    tagline: "FMCSA safety & duty logs",
+  },
+  {
+    id: "rate_auditor",
+    name: "Rate & Billing Auditor",
+    title: "Factoring & Financials",
+    coat: "amber",
+    icon: Banknote,
+    prompt: "Audit delivered loads missing signed PODs and overdue customer invoices.",
+    description: "Rate confirmation audit, factoring receipts, AP expenses.",
+    tagline: "Receivables, PODs & factoring",
+  },
+  {
+    id: "safety_compliance",
+    name: "Logistics Hub",
+    title: "Telematics & Connectors",
+    coat: "grove",
+    icon: Cable,
+    prompt: "Check connection status and latency for Samsara, Motive, and DAT One.",
+    description: "Samsara GPS telemetry, Motive ELDs, loadboards & Resend.",
+    tagline: "Live telemetry & loadboards",
+  },
+];
+
+export function getAdaptiveSuggestions(
+  lastMessage: UIMessage | undefined,
+  activeSpecialist: BotRole = "main"
+): { title: string; prompt: string }[] {
+  if (!lastMessage) {
+    if (activeSpecialist === "dispatcher") {
+      return [
+        { title: "Find available loads", prompt: "Query active freight loads ready for dispatch" },
+        { title: "Match Midwest drivers", prompt: "Find available drivers in the Midwest corridor" },
+        { title: "Calculate lane margin", prompt: "Calculate break-even cost per mile for 600-mile haul" },
+        { title: "Draft load for dispatch", prompt: "Draft new freight load with Chicago pickup" },
+      ];
+    }
+    if (activeSpecialist === "fleet_guardian") {
+      return [
+        { title: "Expiring CDLs (<30d)", prompt: "Check fleet drivers with CDL expiring within 30 days" },
+        { title: "FMCSA 34-hr restart", prompt: "Explain FMCSA 34-hour restart rules for drivers" },
+        { title: "Driver HOS duty logs", prompt: "Check driver availability and HOS driving limits" },
+        { title: "Pre-trip DVIR audits", prompt: "Inspect pre-trip vehicle maintenance inspection logs" },
+      ];
+    }
+    if (activeSpecialist === "rate_auditor") {
+      return [
+        { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
+        { title: "Query overdue invoices", prompt: "Query accounts receivable invoices that are overdue" },
+        { title: "Factoring cashflow", prompt: "Review factorable freight receivables and credit limits" },
+        { title: "Review pending expenses", prompt: "Review pending AP trip expenses awaiting approval" },
+      ];
+    }
+    if (activeSpecialist === "safety_compliance") {
+      return [
+        { title: "Check Samsara GPS sync", prompt: "Check Samsara telematics GPS location sync status" },
+        { title: "Test DAT One rate feed", prompt: "Test DAT One loadboard rate-fetch connection" },
+        { title: "Verify Motive ELD logs", prompt: "Verify Motive ELD duty logs synchronization" },
+        { title: "Inspect Resend status", prompt: "Check Resend invoice email transmission latency" },
+      ];
+    }
+    return [
+      { title: "Draft load from rate con", prompt: "Draft a new load from rate confirmation details" },
+      { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
+      { title: "Fleet driver HOS", prompt: "Check driver availability and FMCSA HOS status" },
+      { title: "Overdue invoices", prompt: "Query overdue accounts receivable invoices" },
+    ];
+  }
+
+  // Check tool parts
+  const toolParts = lastMessage.parts.filter(isToolUIPart) as any[];
+  for (const part of toolParts) {
+    const toolName = part.toolName || part.type;
+
+    if (toolName === "getMissingPods") {
+      return [
+        { title: "Generate factoring batch", prompt: "Generate factoring invoice batch for delivered loads" },
+        { title: "Email carrier for POD", prompt: "Request signed proof of delivery from delivery carrier" },
+        { title: "Query active loads", prompt: "Query active freight loads in the system" },
+        { title: "Check overdue invoices", prompt: "Review customer accounts receivable overdue balances" },
+      ];
+    }
+
+    if (toolName === "queryLoads") {
+      return [
+        { title: "Dispatch next load", prompt: "Dispatch the first available load to an available driver" },
+        { title: "Check Midwest trucks", prompt: "Check available drivers and tractors in the Midwest" },
+        { title: "Calculate lane margin", prompt: "Calculate estimated break-even cost and margin for these loads" },
+        { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed PODs" },
+      ];
+    }
+
+    if (toolName === "bookLoad") {
+      return [
+        { title: "Assign driver & tractor", prompt: "Find available driver and tractor to dispatch this load" },
+        { title: "Calculate route tolls", prompt: "Calculate estimated mileage, tolls, and fuel cost" },
+        { title: "View active loads", prompt: "Query all active freight loads" },
+        { title: "Email rate confirmation", prompt: "Prepare load tender confirmation for customer" },
+      ];
+    }
+
+    if (toolName === "getFleetStatus") {
+      return [
+        { title: "Alert expiring CDLs", prompt: "Notify dispatch about drivers with expiring CDL licenses" },
+        { title: "FMCSA 34-hr restart", prompt: "Explain FMCSA 34-hour restart rules for drivers on duty" },
+        { title: "Assign truck to load", prompt: "Find available loads matching these tractors" },
+        { title: "Check Samsara telematics", prompt: "Check live GPS and telematics integration status" },
+      ];
+    }
+
+    if (toolName === "dispatchTrip") {
+      return [
+        { title: "Send driver instructions", prompt: "Send route instructions and pickup details to assigned driver" },
+        { title: "Track GPS telemetry", prompt: "Monitor live GPS telemetry for this dispatched trip" },
+        { title: "Review trip advance", prompt: "Review driver fuel advances and trip expense limits" },
+        { title: "Check active loads", prompt: "Query remaining available loads" },
+      ];
+    }
+
+    if (toolName === "queryInvoices") {
+      return [
+        { title: "Email overdue reminders", prompt: "Send payment reminder emails to customers with overdue balances" },
+        { title: "Review factorable freight", prompt: "Check factoring eligibility for pending invoices" },
+        { title: "Check missing POD receipts", prompt: "Find delivered loads missing POD receipts for factoring" },
+        { title: "View AP expenses", prompt: "Review pending AP expenses awaiting manager approval" },
+      ];
+    }
+
+    if (toolName === "sendInvoiceEmail") {
+      return [
+        { title: "Check delivery status", prompt: "Verify Resend email delivery status for this invoice" },
+        { title: "Review remaining invoices", prompt: "Query remaining unpaid customer invoices" },
+        { title: "Check missing PODs", prompt: "Audit missing proof of delivery receipts" },
+        { title: "View fleet status", prompt: "Check driver and tractor fleet availability" },
+      ];
+    }
+
+    if (toolName === "checkIntegrations") {
+      return [
+        { title: "Test Samsara GPS sync", prompt: "Check Samsara telematics real-time location sync" },
+        { title: "Check DAT One feed", prompt: "Test DAT One loadboard rate-fetch connection" },
+        { title: "Verify Motive ELD logs", prompt: "Check Motive ELD duty logs synchronization" },
+        { title: "Audit fleet status", prompt: "Check fleet driver HOS and tractor availability" },
+      ];
+    }
+
+    if (toolName === "reviewPendingExpenses" || toolName === "approveExpense") {
+      return [
+        { title: "Export settlements", prompt: "Export weekly driver settlement deductions summary" },
+        { title: "Check fuel receipts", prompt: "Audit driver fuel purchase receipts" },
+        { title: "Query customer invoices", prompt: "Query accounts receivable invoices" },
+        { title: "Check fleet status", prompt: "Check driver and tractor fleet availability" },
+      ];
+    }
+  }
+
+  // Keyword analysis
+  const fullText = lastMessage.parts
+    .filter(isTextUIPart)
+    .map((p: any) => p.text.toLowerCase())
+    .join(" ");
+
+  if (fullText.includes("driver") || fullText.includes("hos") || fullText.includes("cdl") || fullText.includes("hours of service")) {
+    return [
+      { title: "FMCSA 34-hr restart rules", prompt: "What are the FMCSA 34-hour restart rules?" },
+      { title: "Alert expiring CDLs", prompt: "Check fleet drivers with CDL expiring within 30 days" },
+      { title: "Assign driver to load", prompt: "Find available loads matching these drivers" },
+      { title: "Check telematics sync", prompt: "Check telematics integration status" },
+    ];
+  }
+
+  if (fullText.includes("rate") || fullText.includes("broker") || fullText.includes("margin") || fullText.includes("mile")) {
+    return [
+      { title: "Calculate break-even RPM", prompt: "Calculate break-even cost per mile for a 500-mile haul" },
+      { title: "Audit rate confirmation", prompt: "Audit rate confirmation for detention and accessorial terms" },
+      { title: "Book load into system", prompt: "Book load into Muvx TMS" },
+      { title: "Check market spot rates", prompt: "Compare contract vs DAT spot rates for this corridor" },
+    ];
+  }
+
+  if (fullText.includes("invoice") || fullText.includes("factoring") || fullText.includes("pod") || fullText.includes("paid")) {
+    return [
+      { title: "Email invoice reminder", prompt: "Send invoice payment reminder to customer via Resend" },
+      { title: "Audit missing PODs", prompt: "Check delivered loads missing signed POD receipts" },
+      { title: "Factoring cashflow check", prompt: "Review factoring credit eligibility" },
+      { title: "Review pending expenses", prompt: "Review pending AP expenses" },
+    ];
+  }
+
+  return [
+    { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
+    { title: "Find available loads", prompt: "Query active freight loads in the system" },
+    { title: "Check fleet availability", prompt: "Check driver and tractor fleet availability" },
+    { title: "Review overdue invoices", prompt: "Query overdue accounts receivable invoices" },
+  ];
+}
 
 /**
  * Convert raw File[] (from the kokonutui file picker) into FileUIPart[]
@@ -277,9 +520,9 @@ function renderPart(
       );
     }
 
-    // 2. Draft Load — with Confirmation approval workflow & Checkpoint milestone
-    if (toolName === "draftLoad") {
-      const load = output ?? input;
+    // 2. Book Load & Draft Load — with Confirmation approval workflow & Load Card
+    if (toolName === "bookLoad" || toolName === "draftLoad") {
+      const loadData = output ?? input;
       const isApproved =
         toolPart.state === "output-available" || approval?.approved === true;
       const isRejected =
@@ -287,23 +530,21 @@ function renderPart(
 
       return (
         <div key={key} className="my-2 space-y-2">
-          {/* Milestone Checkpoint when load is finalized */}
           {isApproved && (
             <Checkpoint className="my-2">
               <CheckpointIcon className="text-emerald-500" />
               <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                Load Confirmed & Synced ({load?.draftId})
+                Load Confirmed & Booked ({loadData?.loadNumber ?? loadData?.draftId})
               </span>
             </Checkpoint>
           )}
 
-          {/* Load Card */}
           <div className="rounded-xl border border-brand-accent/25 bg-gradient-to-br from-brand-accent/5 to-transparent p-3.5 text-xs space-y-2.5 max-w-xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Truck className="size-4 text-brand-accent" />
                 <span className="font-semibold text-brand-ink">
-                  Load Draft {load?.draftId ?? ""}
+                  Load #{loadData?.loadNumber ?? loadData?.draftId ?? "Pending"} · {loadData?.customerName || "Customer"}
                 </span>
               </div>
               <span
@@ -317,7 +558,7 @@ function renderPart(
                 )}
               >
                 {isApproved
-                  ? "Approved & Synced"
+                  ? "Booked & Synced"
                   : isRejected
                     ? "Rejected"
                     : "Requires Dispatch Approval"}
@@ -330,7 +571,7 @@ function renderPart(
                   Origin
                 </div>
                 <div className="font-semibold text-xs text-brand-ink">
-                  {load?.origin}
+                  {loadData?.originCity ? `${loadData.originCity}, ${loadData.originState || ""}` : loadData?.origin || "Origin"}
                 </div>
               </div>
               <ArrowRight className="size-3.5 text-brand-muted-soft" />
@@ -339,7 +580,7 @@ function renderPart(
                   Destination
                 </div>
                 <div className="font-semibold text-xs text-brand-ink">
-                  {load?.destination}
+                  {loadData?.destCity ? `${loadData.destCity}, ${loadData.destState || ""}` : loadData?.destination || "Destination"}
                 </div>
               </div>
               <div className="text-right">
@@ -347,55 +588,382 @@ function renderPart(
                   Rate
                 </div>
                 <div className="font-semibold text-xs text-emerald-600 dark:text-emerald-400">
-                  {load?.rate}
+                  {typeof loadData?.rate === "number" ? `$${loadData.rate.toLocaleString()}` : loadData?.rate}
                 </div>
               </div>
             </div>
+
+            {loadData?.equipmentType && (
+              <div className="flex items-center gap-2 pt-0.5 text-[11px] text-brand-muted-soft font-mono">
+                <span className="rounded bg-brand-cream/80 px-2 py-0.5 border border-brand-rule">
+                  {loadData.equipmentType}
+                </span>
+                {loadData?.commodity && <span>· {loadData.commodity}</span>}
+              </div>
+            )}
           </div>
 
-          {/* Official Confirmation component for approval workflow */}
           {approval && (
             <Confirmation approval={approval} state={toolPart.state}>
               <ConfirmationRequest>
                 <ConfirmationTitle>
-                  {approval.requestReason ||
-                    "This tool wants to create a new load. Do you approve?"}
+                  {approval.requestReason || "Book this freight load into active TMS database?"}
                 </ConfirmationTitle>
               </ConfirmationRequest>
               <ConfirmationAccepted>
                 <CheckIcon className="size-4 text-emerald-600" />
-                <span>Load creation approved</span>
+                <span>Load booking confirmed</span>
               </ConfirmationAccepted>
               <ConfirmationRejected>
                 <XIcon className="size-4 text-destructive" />
-                <span>Load creation rejected</span>
+                <span>Load booking rejected</span>
               </ConfirmationRejected>
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() =>
-                    addToolApprovalResponse?.({
-                      id: approval.id,
-                      approved: false,
-                    })
-                  }
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
                 >
                   Reject
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() =>
-                    addToolApprovalResponse?.({
-                      id: approval.id,
-                      approved: true,
-                    })
-                  }
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
                 >
-                  Approve & Create
+                  Approve & Book
                 </ConfirmationAction>
               </ConfirmationActions>
             </Confirmation>
           )}
+        </div>
+      );
+    }
+
+    // 2b. Query Loads List
+    if (toolName === "queryLoads") {
+      const data = output ?? input;
+      const loads = data?.loads || [];
+
+      return (
+        <div key={key} className="my-2 max-w-xl space-y-2">
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-brand-rule/60">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Truck className="size-3.5 text-brand-accent" />
+                Freight Loads ({loads.length} found)
+              </span>
+              <span className="font-mono text-[10px] text-brand-muted-soft uppercase">
+                Filter: {data?.statusFilter || "all"}
+              </span>
+            </div>
+            <div className="space-y-1.5 max-h-56 overflow-y-auto divide-y divide-brand-rule/40">
+              {loads.map((ld: any) => (
+                <div key={ld.id} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-xs text-brand-ink">
+                      #{ld.loadNumber} · {ld.customer}
+                    </div>
+                    <div className="text-[11px] text-brand-muted-soft">
+                      {ld.lane}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-semibold text-emerald-600 text-xs">
+                      {ld.rate}
+                    </div>
+                    <span className="text-[10px] font-mono capitalize px-1.5 py-0.5 rounded bg-brand-cream/60 border border-brand-rule">
+                      {ld.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2c. Dispatch Trip Card
+    if (toolName === "dispatchTrip") {
+      const tripData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Trip Dispatched ({tripData?.tripNumber})
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/20 p-3.5 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Route className="size-4 text-emerald-600" />
+                <span className="font-semibold text-brand-ink">
+                  Trip #{tripData?.tripNumber || "Pending"} · Load #{tripData?.loadNumber || ""}
+                </span>
+              </div>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500/15 text-emerald-700">
+                {isApproved ? "Dispatched" : "Pending Confirmation"}
+              </span>
+            </div>
+            <p className="text-[11px] text-brand-muted-soft">
+              Assigned Commercial Driver: <strong className="text-brand-ink">{tripData?.driverName || "Driver"}</strong>
+            </p>
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Confirm dispatch of this driver and equipment?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Trip dispatch authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Trip dispatch cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Authorize Dispatch
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2d. Fleet & HOS Status Card
+    if (toolName === "getFleetStatus") {
+      const fleet = output ?? input;
+      const drivers = fleet?.drivers || [];
+
+      return (
+        <div key={key} className="my-2 max-w-xl space-y-2">
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2.5 text-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-brand-rule/60">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Users className="size-3.5 text-brand-accent" />
+                Fleet & Driver Readiness
+              </span>
+              <span className="font-mono text-[10px] text-brand-muted-soft">
+                {fleet?.totalDrivers || 0} Drivers · {fleet?.activeTractors || 0} Active Tractors
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-56 overflow-y-auto">
+              {drivers.map((d: any) => (
+                <div
+                  key={d.id}
+                  className={`p-2 rounded-lg border flex items-center justify-between text-xs ${
+                    d.cdlWarning
+                      ? "bg-amber-50/40 border-amber-200"
+                      : "bg-brand-cream/20 border-brand-rule/60"
+                  }`}
+                >
+                  <div>
+                    <div className="font-medium text-brand-ink flex items-center gap-1.5">
+                      {d.name}
+                      {d.cdlWarning && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
+                          CDL Exp: {d.daysUntilExpiration}d
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-brand-muted-soft font-mono">
+                      {d.phone} · CDL: {d.cdlNumber}
+                    </div>
+                  </div>
+                  <span
+                    className={`font-mono text-[10px] px-2 py-0.5 rounded capitalize ${
+                      d.status === "active"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {d.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2e. Missing PODs Factoring Card
+    if (toolName === "getMissingPods") {
+      const data = output ?? input;
+      const count = data?.missingCount || 0;
+      const atRisk = data?.totalFactoringAtRisk || "$0.00";
+      const loads = data?.loadsMissingPod || [];
+
+      return (
+        <div key={key} className="my-2 max-w-xl space-y-2">
+          <div className="rounded-xl border border-amber-300 bg-amber-50/40 p-3.5 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileWarning className="size-4 text-amber-600" />
+                <span className="font-semibold text-brand-ink">
+                  Factoring Alert: {count} Delivered Loads Missing PODs
+                </span>
+              </div>
+              <span className="font-mono text-xs font-bold text-amber-900">
+                {atRisk} At Risk
+              </span>
+            </div>
+            <p className="text-[11px] text-brand-muted-soft">
+              Factoring providers advance payment only after receiving signed proof of delivery.
+            </p>
+            <div className="space-y-1.5 pt-1">
+              {loads.slice(0, 3).map((l: any) => (
+                <div key={l.id} className="p-2 rounded bg-white/80 border border-amber-200 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-brand-ink">#{l.loadNumber}</span> · {l.customer}
+                    <div className="text-[10px] text-brand-muted-soft">Delivered: {l.deliveredAt}</div>
+                  </div>
+                  <span className="font-mono font-semibold text-brand-ink">{l.unpaidAmount}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2f. Invoices Financial Overview Card
+    if (toolName === "queryInvoices") {
+      const inv = output ?? input;
+      const list = inv?.invoices || [];
+
+      return (
+        <div key={key} className="my-2 max-w-xl space-y-2">
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-brand-rule/60">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Receipt className="size-3.5 text-brand-accent" />
+                Accounts Receivable Overview
+              </span>
+              <span className="font-mono text-[10px] text-brand-muted-soft">
+                Pending: {inv?.pendingBalance || "$0"} · Overdue: {inv?.overdueBalance || "$0"}
+              </span>
+            </div>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto divide-y divide-brand-rule/40">
+              {list.map((item: any) => (
+                <div key={item.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="font-semibold text-brand-ink">#{item.invoiceNumber} · {item.customer}</div>
+                    <div className="text-[10px] text-brand-muted-soft">Due: {item.dueDate}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono font-semibold text-brand-ink">{item.amount}</div>
+                    <span className="text-[10px] font-mono capitalize px-1.5 py-0.2 rounded bg-brand-cream/80">
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 2g. Send Invoice Email Card
+    if (toolName === "sendInvoiceEmail") {
+      const mailData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Invoice #{mailData?.invoiceNumber} Emailed ({mailData?.sentTo})
+              </span>
+            </Checkpoint>
+          )}
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Email customer invoice payment link via Resend?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Invoice email authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Invoice email cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Send Invoice Email
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2h. Connected Integrations Status Card
+    if (toolName === "checkIntegrations") {
+      const data = output ?? input;
+      const tele = data?.telematics || [];
+      const loadboards = data?.loadboards || [];
+
+      return (
+        <div key={key} className="my-2 max-w-xl space-y-2">
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between pb-1 border-b border-brand-rule/60">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Cable className="size-3.5 text-brand-accent" />
+                Connected Logistics Integrations
+              </span>
+              <span className="font-mono text-[10px] text-emerald-600 font-bold">● Operational</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {[...tele, ...loadboards].slice(0, 4).map((p: any, idx: number) => (
+                <div key={idx} className="p-2 rounded-lg bg-brand-cream/30 border border-brand-rule/60 flex items-center justify-between">
+                  <span className="font-medium text-brand-ink text-[11px]">{p.platform}</span>
+                  <span className="font-mono text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    {p.latencyMs ? `${p.latencyMs}ms` : p.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       );
     }
@@ -642,6 +1210,7 @@ export default function ChatInterface() {
   const [selectedModel, setSelectedModel] = useState("");
   const [interactiveMood, setInteractiveMood] = useState<BotMood>("idle");
   const [botCoat, setBotCoat] = useState<BotCoat>("ink");
+  const [activeSpecialist, setActiveSpecialist] = useState<BotRole>("main");
 
   const { messages, sendMessage, status, error, addToolApprovalResponse } = useChat({
     id: "ai-chat",
@@ -670,26 +1239,47 @@ export default function ChatInterface() {
       });
   }, []);
 
-  const sendWithProvider = (
+  const sendWithProvider = async (
     text: string,
-    options: { webSearch: boolean; model: string | null }
+    options: { webSearch: boolean; model: string | null; files?: File[] }
   ) => {
-    sendMessage(
-      { text },
-      {
-        body: {
-          provider,
-          model: options.model ?? selectedModel,
-          webSearch: options.webSearch,
+    let fileParts: FileUIPart[] | undefined;
+    if (options.files && options.files.length > 0) {
+      fileParts = await filesToFileUIParts(options.files);
+    }
+
+    if (fileParts && fileParts.length > 0) {
+      sendMessage(
+        {
+          text: text.trim() || "Please review and process the attached freight document(s).",
+          files: fileParts,
         },
-      }
-    );
+        {
+          body: {
+            provider,
+            model: options.model ?? selectedModel,
+            webSearch: options.webSearch,
+          },
+        }
+      );
+    } else if (text.trim()) {
+      sendMessage(
+        { text },
+        {
+          body: {
+            provider,
+            model: options.model ?? selectedModel,
+            webSearch: options.webSearch,
+          },
+        }
+      );
+    }
   };
 
   const handleFiles = (files: File[]) => {
     filesToFileUIParts(files).then((fileParts) => {
       sendMessage(
-        { files: fileParts },
+        { text: "Please review and process the attached freight document(s).", files: fileParts },
         {
           body: {
             provider,
@@ -704,6 +1294,17 @@ export default function ChatInterface() {
     sendWithProvider(text, { webSearch: false, model: selectedModel });
   };
 
+  const handleSelectSpecialist = (sp: BotSpecialist) => {
+    setActiveSpecialist(sp.id);
+    setBotCoat(sp.coat);
+    setInteractiveMood("happy");
+    setTimeout(() => setInteractiveMood("idle"), 1200);
+  };
+
+  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
+  const adaptiveSuggestions = getAdaptiveSuggestions(lastAssistantMessage, activeSpecialist);
+  const emptyStateSuggestions = getAdaptiveSuggestions(undefined, activeSpecialist);
+
   if (messages.length === 0) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto">
@@ -713,11 +1314,12 @@ export default function ChatInterface() {
           </div>
         )}
 
-        <div className="w-full max-w-2xl text-center mb-6 space-y-2">
+        <div className="w-full max-w-2xl text-center mb-5 space-y-2">
           {/* Muvx Copilot Master Bot with Pointer Tracking and Mood Expressions */}
           <MuvxBot
             size="lg"
             coat={botCoat}
+            role={activeSpecialist}
             mood={
               status === "submitted"
                 ? "think"
@@ -787,6 +1389,61 @@ export default function ChatInterface() {
           </p>
         </div>
 
+        {/* Grok Bot Teams Concept: Specialist Team Bar */}
+        <div className="w-full max-w-2xl mb-4">
+          <div className="flex items-center justify-between pb-2 px-1 text-xs text-brand-muted-soft">
+            <span className="font-mono text-[10px] uppercase tracking-wider font-semibold text-brand-ink/80 flex items-center gap-1.5">
+              <Sparkles className="size-3 text-brand-accent" />
+              Logistics Specialist Team
+            </span>
+            <span className="text-[10px] text-brand-muted-soft hidden sm:inline">
+              Select specialist to focus AI agency
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+            {SPECIALIST_TEAMS.map((sp) => {
+              const isSelected = activeSpecialist === sp.id;
+              return (
+                <button
+                  key={sp.id}
+                  type="button"
+                  onClick={() => handleSelectSpecialist(sp)}
+                  className={cn(
+                    "flex flex-col items-start p-2.5 rounded-xl text-left border transition-all duration-150 cursor-pointer",
+                    isSelected
+                      ? "border-brand-ink bg-brand-cream/80 shadow-xs ring-1 ring-brand-ink/30"
+                      : "border-brand-rule bg-brand-card/70 hover:border-brand-accent/40 hover:bg-brand-cream/30 text-brand-muted-soft"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 w-full">
+                    <div
+                      className="size-2 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          sp.coat === "ink"
+                            ? "#141414"
+                            : sp.coat === "indigo"
+                              ? "#4f46e5"
+                              : sp.coat === "emerald"
+                                ? "#059669"
+                                : sp.coat === "amber"
+                                  ? "#d97706"
+                                  : "#163d36",
+                      }}
+                    />
+                    <span className="text-[11px] font-semibold text-brand-ink truncate">
+                      {sp.name}
+                    </span>
+                  </div>
+                  <span className="text-[9.5px] text-brand-muted-soft mt-0.5 line-clamp-1">
+                    {sp.tagline}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Centered AI Input with Live Model Picker */}
         <div className="w-full max-w-2xl">
           <AI_Input_Search
@@ -795,34 +1452,22 @@ export default function ChatInterface() {
             onModelChange={setSelectedModel}
             onSubmit={sendWithProvider}
             onFilesSelected={handleFiles}
-            placeholder="Ask anything, draft a load, or paste rate con details..."
+            placeholder={`Ask ${SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}, draft a load, or paste rate con...`}
             searchLabel="Web Search"
           />
         </div>
 
-        {/* Suggestion Chips using official Suggestion component */}
+        {/* Dynamic Contextual Suggestion Chips tailored to current specialist */}
         <div className="mt-4 max-w-2xl px-2">
-          <Suggestions className="justify-center">
-            <Suggestion
-              suggestion="Draft load from rate confirmation"
-              onClick={handleSuggestionClick}
-              className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
-            />
-            <Suggestion
-              suggestion="FMCSA HOS 34-hour restart rules"
-              onClick={handleSuggestionClick}
-              className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
-            />
-            <Suggestion
-              suggestion="Calculate break-even cost per mile"
-              onClick={handleSuggestionClick}
-              className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
-            />
-            <Suggestion
-              suggestion="Find available trucks in Midwest"
-              onClick={handleSuggestionClick}
-              className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
-            />
+          <Suggestions className="justify-center flex-wrap gap-1.5">
+            {emptyStateSuggestions.map((item, idx) => (
+              <Suggestion
+                key={`${item.title}-${idx}`}
+                suggestion={item.title}
+                onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
+                className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
+              />
+            ))}
           </Suggestions>
         </div>
       </div>
@@ -831,6 +1476,52 @@ export default function ChatInterface() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
+      {/* Grok Bot Teams Header Dots */}
+      <div className="shrink-0 border-b border-brand-rule/60 bg-brand-card/40 px-4 py-2 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">Team:</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {SPECIALIST_TEAMS.map((sp) => {
+              const isSelected = activeSpecialist === sp.id;
+              return (
+                <button
+                  key={sp.id}
+                  type="button"
+                  title={`${sp.name} · ${sp.title}`}
+                  onClick={() => handleSelectSpecialist(sp)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium transition-all cursor-pointer",
+                    isSelected
+                      ? "bg-brand-ink text-brand-cream shadow-2xs"
+                      : "text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream/60 border border-brand-rule/50"
+                  )}
+                >
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{
+                      backgroundColor:
+                        sp.coat === "ink"
+                          ? "#141414"
+                          : sp.coat === "indigo"
+                            ? "#6366f1"
+                            : sp.coat === "emerald"
+                              ? "#10b981"
+                              : sp.coat === "amber"
+                                ? "#f59e0b"
+                                : "#14b8a6",
+                    }}
+                  />
+                  <span>{sp.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <span className="font-mono text-[10px] text-brand-muted-soft hidden sm:inline">
+          {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.title}
+        </span>
+      </div>
+
       {/* Error display */}
       {error && (
         <div className="px-4 py-2 text-sm text-destructive shrink-0">
@@ -851,7 +1542,8 @@ export default function ChatInterface() {
                     <div className="flex items-center gap-2 mb-0.5 select-none">
                       <MuvxBot
                         size="xs"
-                        coat="ink"
+                        coat={botCoat}
+                        role={activeSpecialist}
                         mood={
                           isLastMessage && status === "streaming"
                             ? "listen"
@@ -861,7 +1553,7 @@ export default function ChatInterface() {
                         }
                       />
                       <span className="text-xs font-medium text-brand-ink/90">
-                        Muvx
+                        {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}
                       </span>
                     </div>
                   )}
@@ -891,9 +1583,9 @@ export default function ChatInterface() {
             {status === "submitted" && (
               <Message from="assistant" className="gap-1.5">
                 <div className="flex items-center gap-2 mb-0.5 select-none">
-                  <MuvxBot size="xs" coat="ink" mood="think" />
+                  <MuvxBot size="xs" coat={botCoat} role={activeSpecialist} mood="think" />
                   <span className="text-xs font-medium text-brand-ink/90">
-                    Muvx
+                    {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}
                   </span>
                 </div>
                 <MessageContent>
@@ -902,30 +1594,22 @@ export default function ChatInterface() {
               </Message>
             )}
 
-            {/* Contextual Suggestion Chips when assistant is idle */}
-            {status === "ready" && messages.length > 0 && (
-              <div className="py-2">
-                <Suggestions className="justify-start">
-                  <Suggestion
-                    suggestion="Audit rate confirmation"
-                    onClick={handleSuggestionClick}
-                    className="text-xs border-brand-rule bg-brand-card/70 text-brand-muted-soft hover:text-brand-ink shadow-2xs"
-                  />
-                  <Suggestion
-                    suggestion="Check driver HOS availability"
-                    onClick={handleSuggestionClick}
-                    className="text-xs border-brand-rule bg-brand-card/70 text-brand-muted-soft hover:text-brand-ink shadow-2xs"
-                  />
-                  <Suggestion
-                    suggestion="FMCSA 34-hour restart rules"
-                    onClick={handleSuggestionClick}
-                    className="text-xs border-brand-rule bg-brand-card/70 text-brand-muted-soft hover:text-brand-ink shadow-2xs"
-                  />
-                  <Suggestion
-                    suggestion="Draft load for dispatch"
-                    onClick={handleSuggestionClick}
-                    className="text-xs border-brand-rule bg-brand-card/70 text-brand-muted-soft hover:text-brand-ink shadow-2xs"
-                  />
+            {/* Contextual Suggestion Chips dynamically derived from latest response */}
+            {status === "ready" && messages.length > 0 && adaptiveSuggestions.length > 0 && (
+              <div className="py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft mb-1.5 flex items-center gap-1.5">
+                  <Sparkles className="size-3 text-brand-accent" />
+                  Suggested Next Steps
+                </div>
+                <Suggestions className="justify-start flex-wrap gap-1.5">
+                  {adaptiveSuggestions.map((item, idx) => (
+                    <Suggestion
+                      key={`${item.title}-${idx}`}
+                      suggestion={item.title}
+                      onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
+                      className="text-xs border-brand-rule bg-brand-card/80 text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40 hover:bg-brand-cream/50 shadow-2xs transition-all cursor-pointer"
+                    />
+                  ))}
                 </Suggestions>
               </div>
             )}
@@ -942,7 +1626,7 @@ export default function ChatInterface() {
           onModelChange={setSelectedModel}
           onSubmit={sendWithProvider}
           onFilesSelected={handleFiles}
-          placeholder="Ask a follow up question..."
+          placeholder={`Message ${SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}...`}
           searchLabel="Web Search"
         />
       </div>
