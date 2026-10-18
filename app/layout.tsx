@@ -4,6 +4,7 @@ import "./globals.css"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { QueryProvider } from "@/lib/providers/query-provider"
 import { Toaster } from "@/components/ui/sonner"
+import { SoundProvider } from "@/components/providers/sound-provider"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <QueryProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <SoundProvider>{children}</SoundProvider>
+          </TooltipProvider>
           <Toaster position="top-center" richColors />
         </QueryProvider>
       </body>

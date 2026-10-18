@@ -43,6 +43,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { CommandPalette } from "@/components/command-palette"
 import { QuickCreateLoad } from "@/components/quick-create-load"
 import { NotificationBellPopover } from "@/components/notifications/notification-bell-popover"
+import { SoundToggle } from "@/components/sound-toggle"
 import { toast } from "sonner"
 
 export function SiteHeader({
@@ -144,6 +145,9 @@ export function SiteHeader({
               <span className="hidden sm:inline">New load</span>
             </Button>
           )}
+
+          {/* Audio micro-interactions toggle */}
+          <SoundToggle />
 
           {/* Interactive Bell Popover */}
           <NotificationBellPopover />
