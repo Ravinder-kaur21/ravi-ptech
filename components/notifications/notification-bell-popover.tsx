@@ -200,7 +200,7 @@ export function NotificationBellPopover() {
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger
           render={
-            <div className="relative inline-flex items-center">
+            <button type="button" className="relative inline-flex items-center">
               <BellButton
                 variant="icon"
                 subscribed={unreadCount === 0}
@@ -215,7 +215,7 @@ export function NotificationBellPopover() {
                   <span className="relative">{unreadCount > 99 ? "99+" : unreadCount}</span>
                 </span>
               )}
-            </div>
+            </button>
           }
         />
 
