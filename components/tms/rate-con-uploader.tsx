@@ -18,10 +18,11 @@ import type { RateConfExtraction } from "@/lib/rate-conf-parser"
 
 interface RateConUploaderProps {
   onParsed: (data: RateConfExtraction) => void
+  defaultOpen?: boolean
 }
 
-export function RateConUploader({ onParsed }: RateConUploaderProps) {
-  const [isOpen, setIsOpen] = React.useState(false)
+export function RateConUploader({ onParsed, defaultOpen = true }: RateConUploaderProps) {
+  const [isOpen, setIsOpen] = React.useState(defaultOpen)
   const [isDragging, setIsDragging] = React.useState(false)
   const [isUploading, setIsUploading] = React.useState(false)
   const [fileName, setFileName] = React.useState<string | null>(null)
