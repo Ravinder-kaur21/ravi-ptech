@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Plus, Star, Truck, ArrowUpRight } from "lucide-react"
+import { Plus, Star, Truck, ArrowUpRight, DollarSign, CheckCircle2 } from "lucide-react"
 import { getSession, getLoadsForOrg } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
@@ -49,44 +49,52 @@ export default async function LoadsPage() {
         )}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">Active in Transit</p>
-            <Truck className="size-4 text-blue-600" />
+      {/* KPI Cards matching Dashboard Design Language */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-blue-600">{activeCount}</p>
-          <p className="text-[11px] text-brand-muted-soft mt-0.5">En route or dispatched</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">{activeCount}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active In-Transit</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">En route or dispatched on road</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">Ready for Booking</p>
-            <Plus className="size-4 text-brand-accent" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Plus className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">{availableCount}</p>
-          <p className="text-[11px] text-brand-muted-soft mt-0.5">Available for assignment</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">{availableCount}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Ready for Booking</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Tendered awaiting driver dispatch</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">Delivered Loads</p>
-            <Truck className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-emerald-600">{deliveredCount}</p>
-          <p className="text-[11px] text-brand-muted-soft mt-0.5">Completed freight runs</p>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">{deliveredCount}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Delivered Loads</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Completed freight runs</p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">Pipeline Value</p>
-            <span className="font-mono text-xs text-brand-accent font-semibold">$</span>
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <DollarSign className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             ${pipelineSum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </p>
-          <p className="text-[11px] text-brand-muted-soft mt-0.5">Total gross freight revenue</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pipeline Revenue</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Total gross freight billing</p>
         </Card>
       </div>
 

@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { AddTruckDialog } from "@/components/tms/add-truck-dialog"
 import { AddTrailerDialog } from "@/components/tms/add-trailer-dialog"
@@ -127,86 +128,71 @@ export function FleetView({ trucks, trailers, canCreate }: FleetViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* ─── HUD METRICS & FLEET READINESS ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* ─── HUD METRICS & FLEET READINESS (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Assets & Utilization */}
-        <div className="p-4 rounded-2xl border border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 shadow-xs relative overflow-hidden">
-          <div className="flex items-start justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] tracking-wider">
-              Total Fleet Assets
-            </span>
-            <div className="size-7 rounded-lg bg-[#eee9df] dark:bg-zinc-800 flex items-center justify-center text-[#16181d] dark:text-zinc-200">
-              <Truck className="size-3.5" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-[#16181d] dark:text-zinc-100">
-              {totalAssets}
-            </span>
-            <span className="text-xs text-[#73757a]">units ({trucks.length}P / {trailers.length}T)</span>
-          </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-[#73757a]">
-            <span className="font-mono font-bold text-[#d9622b]">{utilizationRate}%</span>
-            <span>fleet deployed on road</span>
-          </div>
-        </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {totalAssets}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">
+            Total Fleet Assets ({trucks.length}P / {trailers.length}T)
+          </p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {utilizationRate}% fleet deployed on road
+          </p>
+        </Card>
 
         {/* Ready Power Units */}
-        <div className="p-4 rounded-2xl border border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] tracking-wider">
-              Ready Power Units
-            </span>
-            <div className="size-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600">
-              <CheckCircle2 className="size-3.5" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-emerald-600">
-              {availableTrucks}
-            </span>
-            <span className="text-xs text-[#73757a]">of {trucks.length} tractors</span>
-          </div>
-          <p className="mt-2 text-[11px] text-[#73757a]">Unassigned & available in yard</p>
-        </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {availableTrucks}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Ready Power Units</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Of {trucks.length} tractors unassigned & ready
+          </p>
+        </Card>
 
         {/* Rolling on Run */}
-        <div className="p-4 rounded-2xl border border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] tracking-wider">
-              Rolling on Dispatches
-            </span>
-            <div className="size-7 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600">
-              <Truck className="size-3.5" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-blue-600">
-              {inUseTrucks}
-            </span>
-            <span className="text-xs text-[#73757a]">active tractors</span>
-          </div>
-          <p className="mt-2 text-[11px] text-[#73757a]">Under active load dispatches</p>
-        </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {inUseTrucks}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Rolling on Dispatches</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Tractors under active highway dispatches</p>
+        </Card>
 
         {/* Available Trailers */}
-        <div className="p-4 rounded-2xl border border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f] tracking-wider">
-              Available Trailers
-            </span>
-            <div className="size-7 rounded-lg bg-[#fff0e6] dark:bg-orange-950/40 flex items-center justify-center text-[#d9622b]">
-              <Box className="size-3.5" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Box className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-[#16181d] dark:text-zinc-100">
-              {availableTrailers}
-            </span>
-            <span className="text-xs text-[#73757a]">of {trailers.length} trailers</span>
-          </div>
-          <p className="mt-2 text-[11px] text-[#73757a]">Dry vans, reefers & flatbeds</p>
-        </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {availableTrailers}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Available Trailers</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Of {trailers.length} dry vans, reefers & flatbeds
+          </p>
+        </Card>
       </div>
 
       {/* ─── CONTROLS: TABS, SEARCH, FILTERS & VIEW MODE ─── */}

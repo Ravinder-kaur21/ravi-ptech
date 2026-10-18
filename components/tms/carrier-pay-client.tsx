@@ -158,82 +158,66 @@ export function CarrierPayClient({
 
   return (
     <div className="space-y-6">
-      {/* ─── KPI CARDS ─── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">
-              Pending Approval
-            </span>
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <Clock className="h-4 w-4" />
+      {/* ─── KPI CARDS (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl font-bold font-mono tracking-tight text-brand-ink">
-              ${pendingSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <p className="mt-1 text-xs text-brand-muted-soft">
-              {pendingCount} settlement{pendingCount === 1 ? "" : "s"} waiting for audit
-            </p>
-          </div>
+          <p className="font-serif text-3xl tracking-tight text-amber-700">
+            ${pendingSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Approval</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {pendingCount} settlement{pendingCount === 1 ? "" : "s"} waiting for audit
+          </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">
-              Ready to Pay
-            </span>
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <Banknote className="h-4 w-4" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Banknote className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl font-bold font-mono tracking-tight text-blue-600 dark:text-blue-400">
-              ${approvedSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <p className="mt-1 text-xs text-brand-muted-soft">
-              {approvedCount} approved for remittance
-            </p>
-          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            ${approvedSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Ready to Pay</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {approvedCount} approved for remittance
+          </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">
-              Settled / Remitted
-            </span>
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
-              ${paidSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <p className="mt-1 text-xs text-brand-muted-soft">
-              {paidCount} payment{paidCount === 1 ? "" : "s"} disbursed
-            </p>
-          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            ${paidSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Settled / Remitted</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {paidCount} payment{paidCount === 1 ? "" : "s"} disbursed
+          </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-brand-muted-soft">
-              Partner Carriers
-            </span>
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <Truck className="h-4 w-4" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
             </div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl font-bold font-mono tracking-tight text-brand-ink">
-              {carriers.length}
-            </span>
-            <p className="mt-1 text-xs text-brand-muted-soft">
-              Registered motor carriers on file
-            </p>
-          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {carriers.length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Partner Carriers</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Registered motor carriers on file
+          </p>
         </Card>
       </div>
 

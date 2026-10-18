@@ -78,49 +78,62 @@ export default async function PayrollPage() {
         )}
       </div>
 
-      {/* ─── KPI CARDS ─── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
-              Pending Disbursal
-            </span>
-            <Clock className="size-4 text-[#d9622b]" />
+      {/* ─── KPI CARDS (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-[#16181d] dark:text-zinc-100">
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">
             ${pendingSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-[#73757a]">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Disbursal</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             {pendingCount} driver {pendingCount === 1 ? "statement" : "statements"} awaiting payment
           </p>
         </Card>
 
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
-              Disbursed / Paid MTD
-            </span>
-            <CheckCircle2 className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-emerald-600">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             ${disbursedSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-[#73757a]">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Disbursed / Paid MTD</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             {disbursedCount} settled settlements
           </p>
         </Card>
 
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 sm:col-span-2 lg:col-span-1 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">
-              Fleet Drivers on Roster
-            </span>
-            <Users className="size-4 text-[#8a8b8f]" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Banknote className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-[#16181d] dark:text-zinc-100">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {payStubs.length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Statements</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Generated payroll vouchers</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Users className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             {drivers.length}
           </p>
-          <p className="mt-1 text-xs text-[#73757a]">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Fleet Drivers</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             Company & owner-operator roster
           </p>
         </Card>

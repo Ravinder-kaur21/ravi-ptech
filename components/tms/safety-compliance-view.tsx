@@ -140,64 +140,64 @@ export function SafetyComplianceView({
 
   return (
     <div className="space-y-6 w-full min-w-0">
-      {/* ─── KPI SUMMARY HUD ─── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              DOT Compliance Score
-            </span>
-            <ShieldCheck className="size-4 text-emerald-600" />
+      {/* ─── KPI SUMMARY HUD (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             {compliancePercentage}%
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">DOT Compliance Score</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             Overall driver qualification rating
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              CDL Expirations & Warnings
-            </span>
-            <ShieldAlert className="size-4 text-brand-accent" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <ShieldAlert className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-accent">
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">
             {cdlWarnings.length}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            {cdlWarnings.length === 1 ? "driver" : "drivers"} expiring within 30 days
+          <p className="text-xs mt-0.5 text-brand-muted-soft">CDL Warnings</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {cdlWarnings.length === 1 ? "1 driver license" : `${cdlWarnings.length} driver licenses`} expiring in 30d
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Fleet Inspection Readiness
-            </span>
-            <Truck className="size-4 text-blue-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             {activeEquipment} / {totalEquipment}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Power units & trailers in active service
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Fleet Inspection Readiness</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Power units & trailers in active road service
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Clearinghouse & Drug Pool
-            </span>
-            <CheckCircle2 className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-emerald-600">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             Compliant
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Clearinghouse & Drug Pool</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             FMCSA clearinghouse status current
           </p>
         </Card>

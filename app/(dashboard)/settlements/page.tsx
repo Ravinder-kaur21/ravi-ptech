@@ -98,65 +98,65 @@ export default async function SettlementsHubPage() {
         </div>
       </div>
 
-      {/* ─── KPI SUMMARY HUD ─── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Total Pending Settlements
-            </span>
-            <Clock className="size-4 text-brand-accent" />
+      {/* ─── KPI SUMMARY HUD (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">
             ${grandPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Pending Settlements</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             {driverPendingCount + carrierPendingCount} statements awaiting remittance
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Driver Payroll Pending
-            </span>
-            <Users className="size-4 text-blue-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Users className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             ${driverPendingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Driver Payroll Pending</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             {driverPendingCount} driver stubs awaiting payment
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Carrier Remittances Due
-            </span>
-            <Truck className="size-4 text-purple-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             ${carrierPendingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            {carrierPendingCount} broker / carrier pay records
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Carrier Remittances Due</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {carrierPendingCount} broker & carrier pay records
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Total Disbursed MTD
-            </span>
-            <CheckCircle2 className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-emerald-600">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             ${grandDisbursed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Settled disbursements
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Disbursed MTD</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Settled payroll & carrier disbursements
           </p>
         </Card>
       </div>

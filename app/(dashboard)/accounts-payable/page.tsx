@@ -94,65 +94,65 @@ export default async function AccountsPayablePage() {
         </div>
       </div>
 
-      {/* ─── KPI CARDS ─── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Pending Review
-            </span>
-            <AlertCircle className="size-4 text-brand-accent" />
+      {/* ─── KPI CARDS (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <AlertCircle className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">
             ${pendingTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Review</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
             {pendingCount} {pendingCount === 1 ? "expense" : "expenses"} awaiting approval
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Approved (Unsettled)
-            </span>
-            <Clock className="size-4 text-blue-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             ${approvedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            {approvedCount} approved for driver reimbursement
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Approved (Unsettled)</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {approvedCount} ready for driver reimbursement
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Reimbursed / Settled
-            </span>
-            <CheckCircle2 className="size-4 text-emerald-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-emerald-600">
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
             ${reimbursedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Total historical settlements
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Reimbursed / Settled</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Total historical payroll settlements
           </p>
         </Card>
 
-        <Card className="border-brand-rule bg-brand-card p-4 shadow-xs rounded-xl">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase font-semibold text-brand-muted-soft">
-              Fuel & DEF
-            </span>
-            <Fuel className="size-4 text-purple-600" />
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Fuel className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 text-2xl font-serif font-bold text-brand-ink">
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
             ${fuelTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="mt-1 text-xs text-brand-muted-soft">
-            Direct fuel expenditure
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Fuel & DEF Receipts</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Direct highway fuel expenditure
           </p>
         </Card>
       </div>

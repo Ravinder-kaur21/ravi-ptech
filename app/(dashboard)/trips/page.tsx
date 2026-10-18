@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Map, ArrowUpRight, Truck, User, Navigation, Phone, ExternalLink } from "lucide-react"
+import { Map, ArrowUpRight, Truck, User, Navigation, Phone, ExternalLink, Clock, CheckCircle2 } from "lucide-react"
 import { getSession, getTripsWithDetailsForOrg, getDriversForOrg } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
@@ -30,7 +30,8 @@ export default async function TripsPage() {
     getDriversForOrg(tenantId),
   ])
 
-  const activeTrips = trips.filter((t) => t.status === "in_progress" || t.status === "pending")
+  const activeTrips = trips.filter((t) => t.status === "in_progress")
+  const assignedTrips = trips.filter((t) => t.status === "pending" || t.status === "assigned" || t.status === "dispatched")
   const completedTrips = trips.filter((t) => t.status === "completed")
 
   const tripOptions = trips.map((t) => ({
@@ -68,28 +69,50 @@ export default async function TripsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 shadow-xs">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">Active In-Transit</p>
-            <Navigation className="size-4 text-[#d9622b]" />
+      {/* KPI Cards matching Dashboard Design Language */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Navigation className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl font-bold text-[#16181d] dark:text-zinc-100">{activeTrips.length}</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-accent">{activeTrips.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active In-Transit</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Rolling live on highway</p>
         </Card>
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 shadow-xs">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">Delivered / Completed</p>
-            <Truck className="size-4 text-emerald-600" />
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl font-bold text-emerald-600">{completedTrips.length}</p>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">{assignedTrips.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Dispatched / Loading</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Assigned awaiting pickup</p>
         </Card>
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-4 col-span-2 lg:col-span-1 shadow-xs">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-mono text-[10px] uppercase font-semibold text-[#8a8b8f]">Total Dispatched Runs</p>
-            <Map className="size-4 text-[#8a8b8f]" />
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
           </div>
-          <p className="mt-2 font-serif text-2xl font-bold text-[#16181d] dark:text-zinc-100">{trips.length}</p>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">{completedTrips.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Delivered & Complete</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">POD confirmed delivered</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Map className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">{trips.length}</p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Fleet Runs</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Dispatched cross-country trips</p>
         </Card>
       </div>
 
