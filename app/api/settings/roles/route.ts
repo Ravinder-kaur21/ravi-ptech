@@ -103,6 +103,22 @@ export async function POST(req: NextRequest) {
       metadata: { tenantId: t.tenantId, role, label, cloneFrom: cloneFrom || null },
     })
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: t.tenantId,
+        category: "team",
+        event: "team.role_updated",
+        severity: "info",
+        title: "Role Configured",
+        message: `Custom role "${label}" (${role}) was defined with ${grants.length} permissions.`,
+        link: "/settings/roles",
+        metadata: { roleId: newId, role, label },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching team.role_updated:", e)
+    }
+
     return NextResponse.json({
       success: true,
       role: {
@@ -299,6 +315,22 @@ export async function PUT(req: NextRequest) {
         onCount: grants.size,
       },
     })
+
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: t.tenantId,
+        category: "team",
+        event: "team.role_updated",
+        severity: "info",
+        title: "Role Permissions Updated",
+        message: `Role "${role}" was updated (${grants.size} active permissions).`,
+        link: "/settings/roles",
+        metadata: { role, permissionsCount: grants.size },
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching team.role_updated:", e)
+    }
 
     return NextResponse.json({
       success: true,

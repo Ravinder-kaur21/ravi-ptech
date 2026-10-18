@@ -171,6 +171,23 @@ export async function PUT(req: NextRequest) {
         target: { type: "member", id: body.userId },
         metadata: { from: target.role, to: body.role },
       })
+
+      try {
+        const { dispatchNotificationEvent } = await import("@/lib/notifications")
+        await dispatchNotificationEvent({
+          organizationId: t.tenantId,
+          category: "team",
+          event: "member.role_updated",
+          severity: "info",
+          title: "Member Role Changed",
+          message: `Team member role changed from "${target.role}" to "${body.role}".`,
+          link: "/settings/team",
+          metadata: { userId: body.userId, fromRole: target.role, toRole: body.role },
+        })
+      } catch (e) {
+        console.error("[NOTIFICATIONS] Error dispatching member.role_updated:", e)
+      }
+
       return NextResponse.json({ ok: true })
     }
 

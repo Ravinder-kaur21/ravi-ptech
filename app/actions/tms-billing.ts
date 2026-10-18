@@ -191,6 +191,31 @@ export async function voidInvoiceAction(invoiceId: string) {
       })
       .where(and(eq(invoice.id, invoiceId), eq(invoice.tenantId, ctx.tenantId)))
 
+    const [actor] = await db
+      .select({ email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, ctx.userId))
+      .limit(1)
+
+    await recordAuditEvent({
+      actor: { id: ctx.userId, email: actor?.email ?? "(unknown)" },
+      action: "invoice.update",
+      target: { type: "invoice", id: invoiceId, label: existing.invoiceNumber },
+      metadata: { tenantId: ctx.tenantId, invoiceNumber: existing.invoiceNumber, action: "void", status: "cancelled" },
+    })
+
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "invoice",
+      event: "invoice.voided",
+      severity: "warn",
+      title: "Invoice Cancelled / Voided",
+      message: `Invoice #${existing.invoiceNumber} for ${existing.customerName} was marked as cancelled.`,
+      link: "/invoices",
+      metadata: { invoiceId, invoiceNumber: existing.invoiceNumber, amount: existing.amount },
+    })
+
     revalidatePath("/invoices")
     return { ok: true }
   } catch (err: any) {

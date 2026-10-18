@@ -75,6 +75,21 @@ export async function POST(req: NextRequest) {
       .set({ logo: url })
       .where(eq(organization.id, t.tenantId))
 
+    try {
+      const { dispatchNotificationEvent } = await import("@/lib/notifications")
+      await dispatchNotificationEvent({
+        organizationId: t.tenantId,
+        category: "system",
+        event: "system.workspace_updated",
+        severity: "info",
+        title: "Company Logo Updated",
+        message: "New organization logo has been uploaded and applied.",
+        link: "/settings/workspace",
+      })
+    } catch (e) {
+      console.error("[NOTIFICATIONS] Error dispatching system.workspace_updated for logo:", e)
+    }
+
     return NextResponse.json({ url })
   } catch (err) {
     if (err instanceof TenantError) {
