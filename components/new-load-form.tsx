@@ -32,6 +32,8 @@ import {
   SALES_TAX_CONFIG,
   computeTaxAndFinalRate,
 } from "@/lib/tms-tax"
+import { RateConUploader } from "@/components/tms/rate-con-uploader"
+import type { RateConfExtraction } from "@/lib/rate-conf-parser"
 
 // ─── Equipment Types matching Onboarding Card Selection ───
 const EQUIPMENT_OPTIONS = [
@@ -210,6 +212,69 @@ export function NewLoadForm() {
     } else {
       setIsRefrigerated(false)
     }
+  }
+
+  // Auto-fill form state when a Rate Confirmation PDF is extracted by Gemini
+  const handleParsedRateCon = (data: RateConfExtraction) => {
+    if (data.customerName) setCustomerName(data.customerName)
+    if (data.tenderNumber || data.referenceNumber) {
+      setTenderNumber(data.tenderNumber || data.referenceNumber || "")
+    }
+    if (data.rate) setRate(String(data.rate))
+    if (data.currency) setCurrency(data.currency)
+    if (data.commodity) setCommodity(data.commodity)
+    if (data.weight) setWeight(String(data.weight))
+
+    // Equipment selection
+    if (data.equipmentType) {
+      const eq = data.equipmentType.toLowerCase()
+      if (eq.includes("reefer") || eq.includes("refrigerated") || eq.includes("temp")) {
+        handleSelectEquipment("Reefer")
+      } else if (eq.includes("flat")) {
+        handleSelectEquipment("Flatbed")
+      } else if (eq.includes("step")) {
+        handleSelectEquipment("Step Deck")
+      } else if (eq.includes("box")) {
+        handleSelectEquipment("Box Truck")
+      } else if (eq.includes("power")) {
+        handleSelectEquipment("Power Only")
+      } else {
+        handleSelectEquipment("Dry Van")
+      }
+    }
+
+    // Pickup stop details
+    const pu = data.pickupStops?.[0]
+    if (pu) {
+      if (pu.facilityName) setOriginFacility(pu.facilityName)
+      if (pu.address) setOriginAddress(pu.address)
+      if (pu.city) setOriginCity(pu.city)
+      if (pu.state) setOriginState(pu.state)
+      if (pu.zip) setOriginZip(pu.zip)
+      if (pu.appointmentDate) setOriginDate(pu.appointmentDate)
+      if (pu.appointmentStart) {
+        const t = pu.appointmentStart
+        setOriginTime(t.length === 4 ? `${t.slice(0, 2)}:${t.slice(2)}` : t)
+      }
+    }
+
+    // Delivery stop details
+    const doStop = data.deliveryStops?.[0]
+    if (doStop) {
+      if (doStop.facilityName) setDestFacility(doStop.facilityName)
+      if (doStop.address) setDestAddress(doStop.address)
+      if (doStop.city) setDestCity(doStop.city)
+      if (doStop.state) setDestState(doStop.state)
+      if (doStop.zip) setDestZip(doStop.zip)
+      if (doStop.appointmentDate) setDestDate(doStop.appointmentDate)
+      if (doStop.appointmentStart) {
+        const t = doStop.appointmentStart
+        setDestTime(t.length === 4 ? `${t.slice(0, 2)}:${t.slice(2)}` : t)
+      }
+    }
+
+    // Unlock all steps so dispatcher can jump directly to rate verification
+    setHighestReached(4)
   }
 
   // Financial calculations via shared tax engine
@@ -483,6 +548,8 @@ export function NewLoadForm() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
+              {/* AI Rate Confirmation Auto-fill banner */}
+              <RateConUploader onParsed={handleParsedRateCon} />
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label htmlFor="customerName" className="field-label mb-0">
