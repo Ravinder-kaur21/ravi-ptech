@@ -46,6 +46,8 @@ export type AuditAction =
   | "org.suspend"
   | "org.unsuspend"
   | "org.transfer-ownership"
+  | "session.create"
+  | "session.signin"
   | "session.revoke"
   | "session.revoke-all"
   | "system.maintenance"
@@ -193,10 +195,13 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
     if (!e.skipRequestContext) {
       try {
         const h = await headers()
-        ipAddress =
+        const rawIp =
           h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
           h.get("x-real-ip") ??
+          h.get("cf-connecting-ip") ??
+          h.get("true-client-ip") ??
           null
+        ipAddress = rawIp === "::1" ? "127.0.0.1" : rawIp
         userAgent = h.get("user-agent") ?? null
       } catch {
         // Not in a request context (background job). That's fine.

@@ -218,7 +218,7 @@ export function SessionsClient() {
                       <div className="flex items-center gap-3 text-[11px] text-brand-muted-soft font-mono">
                         <span className="flex items-center gap-1">
                           <Globe className="size-3 text-brand-muted-soft" />
-                          {sess.ipAddress || "127.0.0.1"}
+                          {formatSessionIp(sess.ipAddress)}
                         </span>
                         <span>•</span>
                         <span className="flex items-center gap-1">
@@ -250,4 +250,16 @@ export function SessionsClient() {
       </Card>
     </div>
   )
+}
+
+function formatSessionIp(ip?: string | null) {
+  if (
+    !ip ||
+    ip === "0000:0000:0000:0000:0000:0000:0000:0000" ||
+    ip === "::1" ||
+    ip === "127.0.0.1"
+  ) {
+    return "127.0.0.1 (Localhost)"
+  }
+  return ip
 }

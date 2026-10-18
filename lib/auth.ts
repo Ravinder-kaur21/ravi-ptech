@@ -272,7 +272,71 @@ export const auth = betterAuth({
   // cascade library is the only place that does workspace-scoped
   // cleanup, and it runs from a server action with proper audit.
   // This hook just logs the intent for debugging.
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: [
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "true-client-ip",
+        "x-client-ip",
+      ],
+      ipv6Subnet: 128,
+      disableIpTracking: false,
+    },
+  },
+
   databaseHooks: {
+    session: {
+      create: {
+        before: async (sess, ctx) => {
+          let resolvedIp = sess.ipAddress
+          if (
+            !resolvedIp ||
+            resolvedIp === "0000:0000:0000:0000:0000:0000:0000:0000" ||
+            resolvedIp === "::1"
+          ) {
+            const headerIp =
+              ctx?.request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+              ctx?.request?.headers?.get("x-real-ip") ||
+              ctx?.request?.headers?.get("cf-connecting-ip") ||
+              "127.0.0.1"
+            resolvedIp = headerIp === "::1" ? "127.0.0.1" : headerIp
+          }
+          return {
+            data: {
+              ...sess,
+              ipAddress: resolvedIp,
+            },
+          }
+        },
+        after: async (sess) => {
+          try {
+            await recordAuditEvent({
+              actor: {
+                id: sess.userId,
+                email: "(authenticated user)",
+              },
+              action: "session.create",
+              target: {
+                type: "session",
+                id: sess.id,
+                label: `Session on ${sess.ipAddress || "local"}`,
+              },
+              metadata: {
+                sessionId: sess.id,
+                ipAddress: sess.ipAddress,
+                userAgent: sess.userAgent,
+                createdAt: sess.createdAt,
+              },
+              skipRequestContext: true,
+            })
+          } catch (e) {
+            console.error("[AUTH] Failed to write session.create audit log:", e)
+          }
+        },
+      },
+    },
     user: {
       delete: {
         before: async (user) => {
