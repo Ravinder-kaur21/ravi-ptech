@@ -98,5 +98,22 @@ export async function removeMemberAction(input: {
     `[ACTION/REMOVE-MEMBER] ✅ done memberId=${input.memberId}`,
     result
   )
+
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.member_removed",
+      severity: "warn",
+      title: "Team Member Removed",
+      message: `A member was removed from the organization by ${actor.email}.`,
+      link: "/settings/team",
+      metadata: { memberId: target.id, actorId: actor.id },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching member removed event:", err)
+  }
+
   return result
 }

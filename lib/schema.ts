@@ -448,6 +448,72 @@ export const emailLog = pgTable(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ENTERPRISE NOTIFICATIONS & EVENT SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `notification` — in-app and browser push notifications for TMS events.
+//   Supports tiny events (member invited, load status, expense approved)
+//   and high-priority compliance/financial alerts (CDL expiry, overdue AR).
+//
+// `notification_preference` — user-level category & channel overrides.
+//   Allows dispatchers and admins to toggle off specific categories or channels.
+//
+
+export const notification = pgTable(
+  "notification",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Target user id; if null, broadcasts to all authorized members in the workspace. */
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    /** Category: "load" | "trip" | "invoice" | "expense" | "settlement" | "compliance" | "team" | "system" */
+    category: text("category").notNull(),
+    /** Exact event identifier, e.g. "member.invited", "load.dispatched", "invoice.overdue" */
+    event: text("event").notNull(),
+    /** "info" | "success" | "warn" | "error" */
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    /** Optional deep-link into the app, e.g. "/loads/id", "/invoices/id", "/settings/team" */
+    link: text("link"),
+    read: boolean("read").notNull().default(false),
+    readAt: timestamp("read_at"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("notification_org_created_idx").on(table.organizationId, table.createdAt),
+    index("notification_user_read_idx").on(table.userId, table.read),
+    index("notification_category_idx").on(table.organizationId, table.category),
+  ]
+)
+
+export const notificationPreference = pgTable(
+  "notification_preference",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Category to configure: "load" | "trip" | "invoice" | "expense" | "settlement" | "compliance" | "team" | "system" */
+    category: text("category").notNull(),
+    inApp: boolean("in_app").notNull().default(true),
+    browserPush: boolean("browser_push").notNull().default(true),
+    email: boolean("email").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("notif_pref_user_org_idx").on(table.userId, table.organizationId, table.category),
+  ]
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FEATURE FLAGS
 // ─────────────────────────────────────────────────────────────────────────────
 //

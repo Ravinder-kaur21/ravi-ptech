@@ -72,6 +72,18 @@ export async function createTruckAction(raw: z.infer<typeof truckSchema>) {
       metadata: { tenantId: ctx.tenantId, unitNumber: data.unitNumber },
     })
 
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "fleet",
+      event: "fleet.truck_added",
+      severity: "info",
+      title: "Power Unit Registered",
+      message: `Tractor unit #${data.unitNumber} (${data.make || ""} ${data.model || ""}) added to fleet.`,
+      link: "/fleet",
+      metadata: { truckId: id, unitNumber: data.unitNumber },
+    })
+
     revalidatePath("/fleet")
     return { ok: true, id, unitNumber: data.unitNumber }
   } catch (err: any) {
@@ -203,6 +215,18 @@ export async function createDriverAction(raw: z.infer<typeof driverSchema>) {
       metadata: { tenantId: ctx.tenantId },
     })
 
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "compliance",
+      event: "driver.created",
+      severity: "info",
+      title: "Commercial Driver Onboarded",
+      message: `${data.firstName} ${data.lastName} added to active driver roster.`,
+      link: "/drivers",
+      metadata: { driverId: id, name: `${data.firstName} ${data.lastName}` },
+    })
+
     revalidatePath("/drivers")
     return { ok: true, id, name: `${data.firstName} ${data.lastName}` }
   } catch (err: any) {
@@ -308,6 +332,18 @@ export async function dispatchLoadAction(raw: z.infer<typeof dispatchSchema>) {
       action: "trip.create",
       target: { type: "trip", id: tripId, label: generatedTripNumber },
       metadata: { tenantId: ctx.tenantId, loadId, truckId, driverId },
+    })
+
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "load",
+      event: "load.dispatched",
+      severity: "info",
+      title: "Commercial Load Dispatched",
+      message: `Load #${existingLoad.loadNumber || loadId.slice(0, 8)} dispatched onto Trip #${generatedTripNumber}.`,
+      link: "/trips",
+      metadata: { loadId, tripId, tripNumber: generatedTripNumber, driverId, truckId },
     })
 
     revalidatePath("/loads")

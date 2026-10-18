@@ -42,6 +42,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { CommandPalette } from "@/components/command-palette"
 import { QuickCreateLoad } from "@/components/quick-create-load"
+import { NotificationBellPopover } from "@/components/notifications/notification-bell-popover"
 import { toast } from "sonner"
 
 export function SiteHeader({
@@ -144,16 +145,8 @@ export function SiteHeader({
             </Button>
           )}
 
-          {/* Bell */}
-          <Button
-            variant="ghost"
-            size="icon"
-            render={<Link href="/notifications" />}
-            className="text-brand-ink/80 hover:text-brand-ink hover:bg-brand-cream-soft relative"
-          >
-            <Bell className="h-4 w-4" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          {/* Interactive Bell Popover */}
+          <NotificationBellPopover />
 
           {/* User dropdown */}
           <DropdownMenu>

@@ -63,6 +63,18 @@ export async function createExpenseAction(raw: z.infer<typeof createExpenseSchem
       metadata: { tenantId: ctx.tenantId, vendor: data.vendor, tripId: data.tripId },
     })
 
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "expense",
+      event: "expense.submitted",
+      severity: "info",
+      title: "New Trip Expense Logged",
+      message: `${data.vendor}: $${parseFloat(data.amount).toFixed(2)} (${data.type}) recorded and pending review.`,
+      link: "/accounts-payable",
+      metadata: { expenseId: id, vendor: data.vendor, amount: data.amount, type: data.type },
+    })
+
     revalidatePath("/accounts-payable")
     revalidatePath("/trips")
     return { success: true, id }
@@ -122,6 +134,18 @@ export async function updateExpenseStatusAction(raw: z.infer<typeof updateExpens
       action: "expense.update_status",
       target: { type: "expense", id: expenseId, label: `${existing.type} - $${existing.amount}` },
       metadata: { tenantId: ctx.tenantId, previousStatus: existing.status, newStatus: status },
+    })
+
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "expense",
+      event: `expense.${status}`,
+      severity: status === "approved" ? "success" : status === "rejected" ? "error" : "info",
+      title: `Expense ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      message: `${existing.vendor || existing.type} expense of $${parseFloat(existing.amount || "0").toFixed(2)} was marked ${status}.`,
+      link: "/accounts-payable",
+      metadata: { expenseId, status, amount: existing.amount, vendor: existing.vendor },
     })
 
     revalidatePath("/accounts-payable")

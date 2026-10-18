@@ -69,6 +69,18 @@ export async function createInvoiceAction(raw: z.infer<typeof createInvoiceSchem
       metadata: { tenantId: ctx.tenantId, amount: data.amount, customerName: data.customerName },
     })
 
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "invoice",
+      event: "invoice.created",
+      severity: "info",
+      title: "Customer Invoice Generated",
+      message: `Invoice #${data.invoiceNumber} ($${parseFloat(data.amount).toFixed(2)}) issued to ${data.customerName}.`,
+      link: `/invoices/${id}`,
+      metadata: { invoiceId: id, invoiceNumber: data.invoiceNumber, amount: data.amount },
+    })
+
     revalidatePath("/invoices")
     revalidatePath("/loads")
     return { ok: true, id, invoiceNumber: data.invoiceNumber }
@@ -134,6 +146,18 @@ export async function applyPaymentAction(raw: z.infer<typeof applyPaymentSchema>
       action: "invoice.update",
       target: { type: "invoice", id: invoiceId, label: existing.invoiceNumber },
       metadata: { tenantId: ctx.tenantId, status: "paid", referenceNumber },
+    })
+
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "invoice",
+      event: "invoice.paid",
+      severity: "success",
+      title: "Invoice Payment Reconciled",
+      message: `Invoice #${existing.invoiceNumber} paid in full ($${parseFloat(existing.amount).toFixed(2)}).`,
+      link: `/invoices/${invoiceId}`,
+      metadata: { invoiceId, invoiceNumber: existing.invoiceNumber, amount: existing.amount, referenceNumber },
     })
 
     revalidatePath("/invoices")

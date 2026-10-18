@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Loader2, Mail, CheckCircle2, XCircle, Building2, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
+import {
+  recordMemberAcceptedInvitationAction,
+  recordMemberDeclinedInvitationAction,
+} from "@/app/actions/invitation"
 
 type Invitation = {
   id: string
@@ -98,6 +102,15 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
     },
     onSuccess: async () => {
       console.log("[INVITE] accepted")
+      // Dispatch notification event to the workspace
+      if (invitation?.organizationId && invitation?.email) {
+        recordMemberAcceptedInvitationAction({
+          organizationId: invitation.organizationId,
+          email: invitation.email,
+          role: invitation.role,
+        }).catch((err) => console.error("[INVITE] Notification dispatch error:", err))
+      }
+
       // Activate the new org
       if (invitation?.organizationId) {
         await authClient.organization.setActive({
@@ -133,6 +146,12 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
     },
     onSuccess: () => {
       console.log("[INVITE] rejected")
+      if (invitation?.organizationId && invitation?.email) {
+        recordMemberDeclinedInvitationAction({
+          organizationId: invitation.organizationId,
+          email: invitation.email,
+        }).catch((err) => console.error("[INVITE] Notification dispatch error:", err))
+      }
       toast.success("Invitation declined")
       router.replace("/dashboard")
     },

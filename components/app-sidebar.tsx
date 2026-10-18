@@ -21,6 +21,8 @@ import {
   CreditCard,
   MoreHorizontal,
   Bot,
+  ShieldCheck,
+  Scale,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -93,6 +95,12 @@ const MAIN_NAV: NavItem[] = [
     permissions: ["drivers.module", "drivers.view_all", "drivers.view_own"],
   },
   {
+    label: "Safety & Compliance",
+    href: "/safety",
+    icon: ShieldCheck,
+    permissions: ["drivers.module", "fleet.module"],
+  },
+  {
     label: "Customers",
     href: "/customers",
     icon: Building2,
@@ -121,6 +129,12 @@ const MAIN_NAV: NavItem[] = [
     href: "/payroll",
     icon: ClipboardList,
     permissions: ["accounting.module", "accounting.payroll.view"],
+  },
+  {
+    label: "Settlements",
+    href: "/settlements",
+    icon: Scale,
+    permissions: ["accounting.module", "settlements.module", "settlements.view_all"],
   },
   {
     label: "Reports",

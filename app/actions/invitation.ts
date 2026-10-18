@@ -118,6 +118,22 @@ export async function resendInvitationAction(input: {
     metadata: { organizationId: ctx.tenantId, organizationName: org.name },
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.invitation_resent",
+      severity: "info",
+      title: "Workspace Invitation Resent",
+      message: `Invitation email was resent to ${inv.email}.`,
+      link: "/settings/team",
+      metadata: { invitationId: inv.id, email: inv.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation resent event:", err)
+  }
+
   revalidatePath("/settings/team")
   return { ok: true, invitationId: inv.id }
 }
@@ -229,6 +245,19 @@ export async function updateMemberRoleAction(input: {
       },
     },
   })
+
+  const { dispatchNotificationEvent } = await import("@/lib/notifications")
+  await dispatchNotificationEvent({
+    organizationId: ctx.tenantId,
+    category: "team",
+    event: "member.role_updated",
+    severity: "info",
+    title: "Member Role Updated",
+    message: `Team member role updated from ${target.role} to ${parsed.data.role}.`,
+    link: "/settings/team",
+    metadata: { memberId: target.id, previousRole: target.role, newRole: parsed.data.role },
+  })
+
   revalidatePath("/settings/team")
   return { ok: true }
 }
@@ -334,6 +363,22 @@ export async function suspendMemberAction(input: {
     },
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.member_suspended",
+      severity: "warn",
+      title: "Member Suspended",
+      message: `Team member ${target.userId} was suspended${input.reason ? `: ${input.reason}` : "."}`,
+      link: "/settings/team",
+      metadata: { memberId: target.id, userId: target.userId, reason: input.reason },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching member suspended event:", err)
+  }
+
   revalidatePath("/settings/team")
   return {
     ok: true,
@@ -393,6 +438,22 @@ export async function liftWorkspaceSuspensionAction(input: {
     target: { type: "user", id: target.userId, label: null },
     metadata: { organizationId: ctx.tenantId, memberId: target.id },
   })
+
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.member_reinstated",
+      severity: "info",
+      title: "Member Suspension Lifted",
+      message: `Suspension was lifted for team member ${target.userId}. Access restored.`,
+      link: "/settings/team",
+      metadata: { memberId: target.id, userId: target.userId },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching member reinstated event:", err)
+  }
 
   revalidatePath("/settings/team")
   return { ok: true }
@@ -506,6 +567,22 @@ export async function transferOwnershipAction(input: {
     })
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.ownership_transferred",
+      severity: "warn",
+      title: "Workspace Ownership Transferred",
+      message: `Ownership transferred to ${target.email || target.userId}.`,
+      link: "/settings/team",
+      metadata: { newOwnerId: target.userId, newOwnerEmail: target.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching transfer ownership event:", err)
+  }
+
   // Caller's role just dropped to admin. Their cached UI may still
   // show owner-only controls; force a layout-wide revalidation so the
   // dashboard layout's role-gating re-runs and the team page picks up
@@ -513,3 +590,59 @@ export async function transferOwnershipAction(input: {
   revalidatePath("/", "layout")
   return { ok: true, newOwnerUserId: target.userId }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Member Acceptance & Decline Notification Triggers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function recordMemberAcceptedInvitationAction(input: {
+  organizationId: string
+  email: string
+  role?: string | null
+}) {
+  console.log(
+    `[NOTIFICATIONS] member.invitation_accepted email=${input.email} org=${input.organizationId} role=${input.role}`,
+  )
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: input.organizationId,
+      category: "team",
+      event: "team.invitation_accepted",
+      severity: "info",
+      title: "New Team Member Joined",
+      message: `${input.email} accepted the invitation and joined as ${input.role || "member"}.`,
+      link: "/settings/team",
+      metadata: { email: input.email, role: input.role },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation accepted event:", err)
+  }
+  return { ok: true }
+}
+
+export async function recordMemberDeclinedInvitationAction(input: {
+  organizationId: string
+  email: string
+}) {
+  console.log(
+    `[NOTIFICATIONS] member.invitation_declined email=${input.email} org=${input.organizationId}`,
+  )
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: input.organizationId,
+      category: "team",
+      event: "team.invitation_declined",
+      severity: "info",
+      title: "Workspace Invitation Declined",
+      message: `${input.email} declined the invitation to join.`,
+      link: "/settings/team",
+      metadata: { email: input.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation declined event:", err)
+  }
+  return { ok: true }
+}
+

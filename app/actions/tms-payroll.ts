@@ -42,6 +42,18 @@ export async function generatePayStubAction(input: {
     notes: input.notes || null,
   })
 
+  const { dispatchNotificationEvent } = await import("@/lib/notifications")
+  await dispatchNotificationEvent({
+    organizationId: tenantId,
+    category: "settlement",
+    event: "settlement.generated",
+    severity: "info",
+    title: "Payroll Statement Generated",
+    message: `Driver payroll statement created: Gross $${input.grossPay} (Net $${input.netPay}).`,
+    link: "/payroll",
+    metadata: { payStubId: id, driverId: input.driverId, netPay: input.netPay },
+  })
+
   revalidatePath("/payroll")
   return { ok: true, payStubId: id }
 }
@@ -65,6 +77,18 @@ export async function markPayStubPaidAction(input: {
       updatedAt: new Date(),
     })
     .where(and(eq(payStub.id, input.payStubId), eq(payStub.tenantId, tenantId)))
+
+  const { dispatchNotificationEvent } = await import("@/lib/notifications")
+  await dispatchNotificationEvent({
+    organizationId: tenantId,
+    category: "settlement",
+    event: "settlement.paid",
+    severity: "success",
+    title: "Driver Payroll Disbursed",
+    message: `Driver settlement statement marked Paid and remittance released.`,
+    link: "/payroll",
+    metadata: { payStubId: input.payStubId },
+  })
 
   revalidatePath("/payroll")
   return { ok: true }
