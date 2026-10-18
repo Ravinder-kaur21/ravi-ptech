@@ -123,6 +123,9 @@ import {
   Cable,
   Mail,
   ExternalLink,
+  UserPlus,
+  Building2,
+  CircleDollarSign,
 } from "lucide-react";
 import { MuvxBot, type BotMood, type BotCoat, type BotRole } from "@/components/ai/muvx-bot";
 
@@ -964,6 +967,425 @@ function renderPart(
               ))}
             </div>
           </div>
+        </div>
+      );
+    }
+
+    // 2i. Update Load Card
+    if (toolName === "updateLoad") {
+      const loadData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Load #{loadData?.loadNumber || "LD"} Updated ({loadData?.status || "Active"})
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Truck className="size-3.5 text-brand-accent" />
+                Load #{loadData?.loadNumber || "LD"} Details
+              </span>
+              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase bg-brand-cream/80 text-brand-ink">
+                {loadData?.status || "Modified"}
+              </span>
+            </div>
+            {loadData?.rate && (
+              <p className="text-[11px] text-brand-muted-soft">
+                Updated Linehaul Rate: <strong className="font-mono text-brand-ink">${loadData.rate}</strong>
+              </p>
+            )}
+            {loadData?.specialInstructions && (
+              <p className="text-[10px] text-brand-muted-soft italic bg-brand-cream/30 p-2 rounded">
+                Instructions: {loadData.specialInstructions}
+              </p>
+            )}
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Confirm updates to active freight load?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Load updates authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Load updates cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Authorize Changes
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2j. Create Driver Card
+    if (toolName === "createDriver" || toolName === "updateDriver") {
+      const dData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Driver {dData?.name || `${dData?.firstName || ""} ${dData?.lastName || ""}`} Enrolled
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <UserPlus className="size-3.5 text-brand-accent" />
+                Commercial Driver Profile
+              </span>
+              <span className="font-mono text-[10px] text-emerald-600 font-bold">● Active Operator</span>
+            </div>
+            <div className="text-[11px] text-brand-ink font-semibold">
+              {dData?.name || `${dData?.firstName || ""} ${dData?.lastName || ""}`}
+            </div>
+            <div className="flex items-center gap-4 text-[10px] text-brand-muted-soft font-mono">
+              <span>CDL: {dData?.license || dData?.licenseNumber || "On File"}</span>
+              <span>Expires: {dData?.expiration || dData?.licenseExpiration || "TBD"}</span>
+            </div>
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Authorize adding driver to commercial fleet directory?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Driver authorized</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Driver enrollment cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm Driver
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2k. Create/Update Truck Asset Card
+    if (toolName === "createTruck" || toolName === "updateTruck") {
+      const tData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Tractor #{tData?.unitNumber} Registered ({tData?.status || "Available"})
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Truck className="size-3.5 text-brand-accent" />
+                Fleet Tractor Asset
+              </span>
+              <span className="font-mono text-[10px] text-emerald-600 font-bold uppercase">{tData?.status || "Available"}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-brand-ink">Unit #{tData?.unitNumber}</span>
+              <span className="font-mono text-brand-muted-soft text-[11px]">{tData?.makeModel || `${tData?.year || ""} ${tData?.make || ""}`}</span>
+            </div>
+            {tData?.odometer && (
+              <p className="text-[10px] font-mono text-brand-muted-soft">Odometer: {tData.odometer}</p>
+            )}
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Register tractor unit in active fleet inventory?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Tractor registered</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Tractor registration cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Authorize Tractor
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2l. Create Customer Card
+    if (toolName === "createCustomer") {
+      const cData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Customer '{cData?.name}' Added
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Building2 className="size-3.5 text-brand-accent" />
+                Shipper / Broker Directory
+              </span>
+              <span className="font-mono text-[10px] text-brand-ink bg-brand-cream/80 px-2 py-0.5 rounded">
+                {cData?.paymentTerms || "Net 30"}
+              </span>
+            </div>
+            <div className="text-xs font-semibold text-brand-ink">{cData?.name}</div>
+            <div className="flex items-center gap-3 text-[10px] font-mono text-brand-muted-soft">
+              <span>Credit Limit: {cData?.creditLimit || "Standard"}</span>
+              <span>Status: Active</span>
+            </div>
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Add customer to billing directory?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Customer added</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Customer cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm Customer
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 2m. Create Invoice & Mark Paid Cards
+    if (toolName === "createInvoice") {
+      const invData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Invoice #{invData?.invoiceNumber} Created ({invData?.amount})
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <Receipt className="size-3.5 text-brand-accent" />
+                AR Freight Invoice Generated
+              </span>
+              <span className="font-mono text-xs font-bold text-brand-ink">{invData?.amount}</span>
+            </div>
+            <p className="text-[11px] text-brand-muted-soft">
+              Bill to: <strong className="text-brand-ink">{invData?.customerName || "Customer"}</strong> · Due: {invData?.dueDate || "Net 30"}
+            </p>
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Generate accounts receivable invoice?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Invoice generated</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Invoice cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Generate Invoice
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    if (toolName === "markInvoicePaid") {
+      const pData = output ?? input;
+      return (
+        <div key={key} className="my-2 max-w-xl">
+          <Checkpoint className="my-2">
+            <CheckpointIcon className="text-emerald-500" />
+            <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+              Invoice #{pData?.invoiceNumber} Marked Paid ({pData?.amount} on {pData?.paidDate || "Today"})
+            </span>
+          </Checkpoint>
+        </div>
+      );
+    }
+
+    // 2n. Log Trip Expense Card
+    if (toolName === "logTripExpense") {
+      const eData = output ?? input;
+      const isApproved = toolPart.state === "output-available" || approval?.approved === true;
+
+      return (
+        <div key={key} className="my-2 space-y-2 max-w-xl">
+          {isApproved && (
+            <Checkpoint className="my-2">
+              <CheckpointIcon className="text-emerald-500" />
+              <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">
+                Expense Logged: {eData?.category} ({eData?.amount})
+              </span>
+            </Checkpoint>
+          )}
+
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-3.5 shadow-2xs space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-brand-ink flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                <CircleDollarSign className="size-3.5 text-brand-accent" />
+                Trip AP Expense
+              </span>
+              <span className="font-mono text-xs font-bold text-brand-ink">{eData?.amount}</span>
+            </div>
+            <p className="text-[11px] text-brand-muted-soft">
+              Vendor: <strong className="text-brand-ink">{eData?.vendor || "Vendor"}</strong> · Category: <span className="capitalize">{eData?.category}</span>
+            </p>
+          </div>
+
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state}>
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || "Log AP expense for financial settlement?"}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Expense logged</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Expense cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm Expense
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
         </div>
       );
     }
