@@ -135,11 +135,11 @@ export function SiteHeader({
             <Kbd className="ml-auto">⌘K</Kbd>
           </Button>
 
-          {/* + New load */}
+          {/* + New load (Opens full load creator with AI Rate-Con extraction) */}
           {canCreateLoad && (
             <Button
-              onClick={() => setCreateOpen(true)}
-              className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft"
+              render={<Link href="/loads/new" />}
+              className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">New load</span>
