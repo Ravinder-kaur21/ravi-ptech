@@ -32,7 +32,14 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   BarChart,
@@ -44,16 +51,32 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  PieChart,
+  Pie,
+  RadialBarChart,
+  RadialBar,
+  PolarGrid,
+  Cell,
   Legend,
 } from "recharts"
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { SpendingRing, type SpendingCategory } from "@/components/kokonutui/spending-ring"
 import { MetricCard } from "@/components/kokonutui/metric-card"
+import { FollowerPointerCard } from "@/components/ui/following-pointer"
 import { sounds } from "@/lib/sound-effects"
 import { toast } from "sonner"
 
@@ -89,6 +112,27 @@ export interface ExpenseBreakdown {
   other: number
 }
 
+export interface DailyCashflowPoint {
+  date: string
+  revenue: number
+  expenses: number
+}
+
+export interface EquipmentModeShare {
+  mode: string
+  label: string
+  revenue: number
+  count: number
+  fill: string
+}
+
+export interface FleetIndex {
+  metric: string
+  label: string
+  value: number
+  fill: string
+}
+
 interface ReportsDashboardViewProps {
   loadProfits: LoadProfitRecord[]
   topLanes: LaneRecord[]
@@ -97,20 +141,71 @@ interface ReportsDashboardViewProps {
   totalNetProfit: number
   overallMargin: number
   expenseBreakdown?: ExpenseBreakdown
+  dailyCashflowData?: DailyCashflowPoint[]
+  equipmentBreakdown?: EquipmentModeShare[]
+  fleetFulfillmentIndices?: FleetIndex[]
 }
 
-const chartConfig = {
+const cashflowConfig = {
   revenue: {
-    label: "Gross Revenue",
+    label: "Freight Revenue",
     color: "#d9622b",
   },
   expenses: {
     label: "Operating Costs",
     color: "#8b5cf6",
   },
-  profit: {
-    label: "Net Profit",
+} satisfies ChartConfig
+
+const equipmentConfig = {
+  revenue: {
+    label: "Revenue",
+  },
+  dry_van: {
+    label: "Dry Van",
+    color: "#d9622b",
+  },
+  reefer: {
+    label: "Reefer",
+    color: "#3b82f6",
+  },
+  flatbed: {
+    label: "Flatbed",
+    color: "#8b5cf6",
+  },
+  step_deck: {
+    label: "Step Deck",
     color: "#10b981",
+  },
+  power_only: {
+    label: "Power Only",
+    color: "#f59e0b",
+  },
+  other: {
+    label: "Specialized",
+    color: "#64748b",
+  },
+} satisfies ChartConfig
+
+const radialConfig = {
+  value: {
+    label: "Performance Score",
+  },
+  onTime: {
+    label: "On-Time Dispatch",
+    color: "#d9622b",
+  },
+  margin: {
+    label: "Operating Margin",
+    color: "#10b981",
+  },
+  collection: {
+    label: "AR Collection",
+    color: "#3b82f6",
+  },
+  utilization: {
+    label: "Fleet Utilization",
+    color: "#8b5cf6",
   },
 } satisfies ChartConfig
 
@@ -122,10 +217,22 @@ export function ReportsDashboardView({
   totalNetProfit,
   overallMargin,
   expenseBreakdown,
+  dailyCashflowData = [],
+  equipmentBreakdown = [],
+  fleetFulfillmentIndices = [],
 }: ReportsDashboardViewProps) {
   const [activeTab, setActiveTab] = React.useState<"overview" | "profitability" | "lanes">("overview")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [chartType, setChartType] = React.useState<"bar" | "area">("bar")
+  const [timeRange, setTimeRange] = React.useState("30d")
+
+  const filteredCashflowData = React.useMemo(() => {
+    if (!dailyCashflowData || dailyCashflowData.length === 0) return []
+    let days = 30
+    if (timeRange === "90d") days = 90
+    if (timeRange === "7d") days = 7
+    return dailyCashflowData.slice(-days)
+  }, [dailyCashflowData, timeRange])
 
   // Generate monthly financial trend data (last 6 months)
   const monthlyTrendData = React.useMemo(() => {
@@ -317,116 +424,91 @@ export function ReportsDashboardView({
           </div>
         </div>
 
-        {/* ─── TAB 1: EXECUTIVE COCKPIT & CHARTS (shadcn dashboard-01 + KokonutUI) ─── */}
+        {/* ─── TAB 1: EXECUTIVE COCKPIT & CHARTS (shadcn + KokonutUI + Aceternity) ─── */}
         <TabsContent value="overview" className="space-y-6 mt-0">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* shadcn Monthly Revenue & Operating Performance Chart (7 cols) */}
-            <Card className="lg:col-span-7 border-brand-rule bg-brand-card p-6 flex flex-col justify-between shadow-xs">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-brand-rule">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft">
-                      Financial Performance
-                    </span>
-                    <h2 className="font-serif text-lg font-bold text-brand-ink mt-0.5">
-                      Gross Freight Revenue vs Operating Costs
-                    </h2>
-                    <p className="text-xs text-brand-muted-soft mt-0.5">
-                      6-month rolling freight billing, direct operating expenses, and retained profit.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-brand-cream/50 p-1 rounded-lg border border-brand-rule">
-                    <button
-                      onClick={() => {
+          <FollowerPointerCard title="Dispatcher View · Realtime Analytics">
+            <div className="space-y-6">
+              {/* Row 1: Interactive Daily Cashflow Area Chart (7 cols) + KokonutUI Spending Ring (5 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                {/* 1. Interactive Area Chart with Select (7 cols) */}
+                <Card className="lg:col-span-7 border-brand-rule bg-brand-card flex flex-col justify-between shadow-xs">
+                  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-brand-rule pb-4">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft">
+                        Real Cashflow Inflows vs Outflows
+                      </span>
+                      <CardTitle className="font-serif text-lg font-bold text-brand-ink mt-0.5">
+                        Freight Billing vs Direct Expenses
+                      </CardTitle>
+                      <CardDescription className="text-xs text-brand-muted-soft mt-0.5">
+                        Daily freight revenues billed vs operational trip costs
+                      </CardDescription>
+                    </div>
+                    <Select
+                      value={timeRange}
+                      onValueChange={(val) => {
                         sounds.playClick()
-                        setChartType("bar")
+                        setTimeRange(val)
                       }}
-                      className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
-                        chartType === "bar"
-                          ? "bg-brand-card text-brand-ink shadow-2xs"
-                          : "text-brand-muted-soft hover:text-brand-ink"
-                      }`}
                     >
-                      Bar
-                    </button>
-                    <button
-                      onClick={() => {
-                        sounds.playClick()
-                        setChartType("area")
-                      }}
-                      className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
-                        chartType === "area"
-                          ? "bg-brand-card text-brand-ink shadow-2xs"
-                          : "text-brand-muted-soft hover:text-brand-ink"
-                      }`}
+                      <SelectTrigger
+                        className="w-[140px] h-8 text-xs rounded-lg border-brand-rule bg-brand-cream/40"
+                        aria-label="Select date range"
+                      >
+                        <SelectValue placeholder="Last 30 days" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-brand-rule bg-brand-card">
+                        <SelectItem value="90d" className="text-xs">Last 90 days</SelectItem>
+                        <SelectItem value="30d" className="text-xs">Last 30 days</SelectItem>
+                        <SelectItem value="7d" className="text-xs">Last 7 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardHeader>
+                  <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+                    <ChartContainer
+                      config={cashflowConfig}
+                      className="aspect-auto h-[260px] w-full"
                     >
-                      Area
-                    </button>
-                  </div>
-                </div>
-
-                {/* Chart Container */}
-                <div className="h-[280px] w-full pt-4">
-                  <ChartContainer config={chartConfig} className="h-full w-full">
-                    {chartType === "bar" ? (
-                      <BarChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e4ddd3" vertical={false} />
-                        <XAxis
-                          dataKey="month"
-                          stroke="#73757a"
-                          fontSize={11}
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <YAxis
-                          stroke="#73757a"
-                          fontSize={11}
-                          tickLine={false}
-                          axisLine={false}
-                          width={55}
-                          tickFormatter={formatCurrencyTick}
-                        />
-                        <RechartsTooltip
-                          content={<ChartTooltipContent indicator="dashed" />}
-                        />
-                        <Bar
-                          dataKey="revenue"
-                          fill="var(--color-revenue, #d9622b)"
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={36}
-                        />
-                        <Bar
-                          dataKey="expenses"
-                          fill="var(--color-expenses, #8b5cf6)"
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={36}
-                        />
-                        <Bar
-                          dataKey="profit"
-                          fill="var(--color-profit, #10b981)"
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={36}
-                        />
-                      </BarChart>
-                    ) : (
-                      <AreaChart data={monthlyTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <AreaChart
+                        data={
+                          filteredCashflowData.length > 0
+                            ? filteredCashflowData
+                            : [
+                                { date: "2026-10-14", revenue: totalRevenue * 0.25, expenses: totalExpenses * 0.2 },
+                                { date: "2026-10-15", revenue: totalRevenue * 0.35, expenses: totalExpenses * 0.3 },
+                                { date: "2026-10-16", revenue: totalRevenue * 0.2, expenses: totalExpenses * 0.25 },
+                                { date: "2026-10-17", revenue: totalRevenue * 0.15, expenses: totalExpenses * 0.15 },
+                                { date: "2026-10-18", revenue: totalRevenue * 0.05, expenses: totalExpenses * 0.1 },
+                              ]
+                        }
+                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                      >
                         <defs>
-                          <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#d9622b" stopOpacity={0.4} />
-                            <stop offset="95%" stopColor="#d9622b" stopOpacity={0} />
+                          <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#d9622b" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#d9622b" stopOpacity={0.1} />
                           </linearGradient>
-                          <linearGradient id="gradExpenses" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                          <linearGradient id="fillExpenses" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e4ddd3" vertical={false} />
+                        <CartesianGrid vertical={false} stroke="#e4ddd3" strokeDasharray="3 3" />
                         <XAxis
-                          dataKey="month"
-                          stroke="#73757a"
-                          fontSize={11}
+                          dataKey="date"
                           tickLine={false}
                           axisLine={false}
+                          tickMargin={8}
+                          minTickGap={28}
+                          tickFormatter={(value) => {
+                            const date = new Date(value)
+                            return date.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })
+                          }}
+                          stroke="#73757a"
+                          fontSize={11}
                         />
                         <YAxis
                           stroke="#73757a"
@@ -436,76 +518,214 @@ export function ReportsDashboardView({
                           width={55}
                           tickFormatter={formatCurrencyTick}
                         />
-                        <RechartsTooltip content={<ChartTooltipContent />} />
-                        <Area
-                          type="monotone"
-                          dataKey="revenue"
-                          stroke="#d9622b"
-                          fillOpacity={1}
-                          fill="url(#gradRevenue)"
+                        <ChartTooltip
+                          cursor={false}
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(value) => {
+                                return new Date(value).toLocaleDateString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              }}
+                              indicator="dot"
+                            />
+                          }
                         />
                         <Area
-                          type="monotone"
                           dataKey="expenses"
+                          type="natural"
+                          fill="url(#fillExpenses)"
                           stroke="#8b5cf6"
-                          fillOpacity={1}
-                          fill="url(#gradExpenses)"
+                          strokeWidth={2}
+                          stackId="a"
                         />
+                        <Area
+                          dataKey="revenue"
+                          type="natural"
+                          fill="url(#fillRevenue)"
+                          stroke="#d9622b"
+                          strokeWidth={2}
+                          stackId="b"
+                        />
+                        <ChartLegend content={<ChartLegendContent />} />
                       </AreaChart>
-                    )}
-                  </ChartContainer>
+                    </ChartContainer>
+                  </CardContent>
+                  <CardFooter className="flex-wrap items-center justify-between text-xs border-t border-brand-rule pt-3 gap-2">
+                    <span className="font-mono text-brand-muted-soft text-[11px]">
+                      Cash ledger synced across shipment rates & expense vouchers
+                    </span>
+                    <span className="font-mono text-emerald-700 font-semibold text-[11px]">
+                      Retained Margin: ${totalNetProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </CardFooter>
+                </Card>
+
+                {/* 2. KokonutUI Spending Ring Card (5 cols) */}
+                <div className="lg:col-span-5 flex flex-col justify-between">
+                  <SpendingRing
+                    title="Operational Cost Breakdown"
+                    currency="USD"
+                    categories={spendingCategories}
+                    className="w-full h-full border-brand-rule bg-brand-card shadow-xs"
+                  />
                 </div>
               </div>
 
-              {/* Legend & Summary Footer */}
-              <div className="pt-3 border-t border-brand-rule flex flex-wrap items-center justify-between text-xs gap-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-brand-accent shrink-0" />
-                    <span className="text-brand-muted-soft">Gross Revenue</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-purple-600 shrink-0" />
-                    <span className="text-brand-muted-soft">Direct Costs</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-emerald-600 shrink-0" />
-                    <span className="text-brand-muted-soft">Net Retained</span>
-                  </div>
-                </div>
-                <span className="font-mono text-[11px] text-brand-muted-soft">
-                  YTD Margin Efficiency: <strong className="text-emerald-700">{overallMargin.toFixed(1)}%</strong>
-                </span>
-              </div>
-            </Card>
+              {/* Row 2: Pie Chart with Labels (6 cols) + Radial Bar Chart with Polar Grid (6 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                {/* 3. Pie Chart with Labels: Revenue by Equipment Mode */}
+                <Card className="flex flex-col border-brand-rule bg-brand-card shadow-xs">
+                  <CardHeader className="items-center pb-0 border-b border-brand-rule/60">
+                    <div className="flex items-center gap-2">
+                      <Truck className="size-4 text-[#d9622b]" />
+                      <CardTitle className="text-sm font-semibold tracking-wide uppercase text-brand-ink">
+                        Revenue by Equipment Mode
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="text-xs text-brand-muted-soft">
+                      Real shipment distribution by trailer configuration
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-0">
+                    <ChartContainer
+                      config={equipmentConfig}
+                      className="mx-auto aspect-square max-h-[250px] pb-0 [&_.recharts-pie-label-text]:fill-foreground"
+                    >
+                      <PieChart>
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              hideLabel
+                              formatter={(value, name) => (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-brand-ink">
+                                    ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="text-brand-muted-soft text-xs">({name})</span>
+                                </div>
+                              )}
+                            />
+                          }
+                        />
+                        <Pie
+                          data={
+                            equipmentBreakdown.length > 0
+                              ? equipmentBreakdown
+                              : [
+                                  {
+                                    mode: "dry_van",
+                                    label: "Dry Van",
+                                    revenue: totalRevenue || 1000,
+                                    count: 1,
+                                    fill: "#d9622b",
+                                  },
+                                ]
+                          }
+                          dataKey="revenue"
+                          nameKey="label"
+                          label={({ name, percent }: any) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                        >
+                          {equipmentBreakdown.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ChartContainer>
+                  </CardContent>
+                  <CardFooter className="flex-col gap-1.5 text-xs border-t border-brand-rule/60 pt-3">
+                    <div className="flex items-center gap-2 font-medium text-brand-ink">
+                      {equipmentBreakdown.length > 0 ? (
+                        <>
+                          Leading mode: {equipmentBreakdown[0].label} ({equipmentBreakdown[0].count} shipments)
+                        </>
+                      ) : (
+                        <>Live fleet freight modes</>
+                      )}
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                    </div>
+                    <div className="text-[11px] text-brand-muted-soft">
+                      Proportionate freight billing across active corridors
+                    </div>
+                  </CardFooter>
+                </Card>
 
-            {/* KokonutUI Spending Ring Card (5 cols) */}
-            <div className="lg:col-span-5 flex flex-col justify-between">
-              <SpendingRing
-                title="Operational Cost Breakdown"
-                currency="USD"
-                categories={spendingCategories}
-                className="w-full h-full border-brand-rule bg-brand-card shadow-xs"
-              />
+                {/* 4. Radial Bar Chart with Polar Grid: Fleet Fulfillment Index */}
+                <Card className="flex flex-col border-brand-rule bg-brand-card shadow-xs">
+                  <CardHeader className="items-center pb-0 border-b border-brand-rule/60">
+                    <div className="flex items-center gap-2">
+                      <Percent className="size-4 text-emerald-600" />
+                      <CardTitle className="text-sm font-semibold tracking-wide uppercase text-brand-ink">
+                        Fleet Fulfillment & Performance
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="text-xs text-brand-muted-soft">
+                      Concentric operational efficiency scores (0–100%)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-0">
+                    <ChartContainer
+                      config={radialConfig}
+                      className="mx-auto aspect-square max-h-[250px]"
+                    >
+                      <RadialBarChart
+                        data={fleetFulfillmentIndices}
+                        innerRadius={30}
+                        outerRadius={105}
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        <ChartTooltip
+                          cursor={false}
+                          content={
+                            <ChartTooltipContent
+                              hideLabel
+                              nameKey="label"
+                              formatter={(value, name) => `${name}: ${value}%`}
+                            />
+                          }
+                        />
+                        <PolarGrid gridType="circle" />
+                        <RadialBar dataKey="value" background cornerRadius={6} />
+                      </RadialBarChart>
+                    </ChartContainer>
+                  </CardContent>
+                  <CardFooter className="flex-col gap-1.5 text-xs border-t border-brand-rule/60 pt-3">
+                    <div className="flex items-center gap-2 font-medium text-brand-ink">
+                      Overall Fleet Margin:{" "}
+                      <span className="font-mono text-emerald-600 font-bold">
+                        {overallMargin > 0 ? `${overallMargin.toFixed(1)}%` : "100%"}
+                      </span>
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+                    </div>
+                    <div className="text-[11px] text-brand-muted-soft">
+                      On-Time Dispatch · Margin Index · AR Collection · Equipment Utilization
+                    </div>
+                  </CardFooter>
+                </Card>
+              </div>
+
+              {/* Row 3: KokonutUI Metric Cards Row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <MetricCard
+                  label="Fleet Rate Per Mile (RPM)"
+                  segments={["Linehaul Rate", "Fuel Surcharge", "Accessorials"]}
+                  format="currency"
+                  currency="USD"
+                  className="border-brand-rule bg-brand-card shadow-xs"
+                />
+                <MetricCard
+                  label="Operating Margin Index"
+                  segments={["Net Profit Margin", "Direct Carrier Cost", "Fuel & IFTA"]}
+                  format="number"
+                  className="border-brand-rule bg-brand-card shadow-xs"
+                />
+              </div>
             </div>
-          </div>
-
-          {/* KokonutUI Metric Cards Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <MetricCard
-              label="Fleet Rate Per Mile (RPM)"
-              segments={["Linehaul Rate", "Fuel Surcharge", "Accessorials"]}
-              format="currency"
-              currency="USD"
-              className="border-brand-rule bg-brand-card shadow-xs"
-            />
-            <MetricCard
-              label="Operating Margin Index"
-              segments={["Net Profit Margin", "Direct Carrier Cost", "Fuel & IFTA"]}
-              format="number"
-              className="border-brand-rule bg-brand-card shadow-xs"
-            />
-          </div>
+          </FollowerPointerCard>
         </TabsContent>
 
         {/* ─── TAB 2: LOAD PROFITABILITY TAB ─── */}

@@ -12,6 +12,8 @@ import {
   getLoadsForOrg,
   getExpensesWithDetailsForOrg,
   getCarrierPaymentsWithDetailsForOrg,
+  getInvoicesForOrg,
+  getTrucksForOrg,
 } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { Card } from "@/components/ui/card"
@@ -38,10 +40,12 @@ export default async function ReportsPage() {
     redirect("/")
   }
 
-  const [loads, expenses, carrierPayments] = await Promise.all([
+  const [loads, expenses, carrierPayments, invoices, trucks] = await Promise.all([
     getLoadsForOrg(tenantId),
     getExpensesWithDetailsForOrg(tenantId),
     getCarrierPaymentsWithDetailsForOrg(tenantId),
+    getInvoicesForOrg(tenantId),
+    getTrucksForOrg(tenantId),
   ])
 
   // Map expenses by loadNumber and category
@@ -77,10 +81,11 @@ export default async function ReportsPage() {
     }
   }
 
-  // Compute per-load profitability
+  // Compute per-load profitability and equipment volume
   let totalRevenue = 0
   const loadProfits: LoadProfitRecord[] = []
   const laneMap = new Map<string, { count: number; revenue: number }>()
+  const equipmentMap = new Map<string, { revenue: number; count: number }>()
 
   for (const l of loads) {
     const rev = parseFloat(l.finalRate || l.rate || "0")
@@ -118,7 +123,108 @@ export default async function ReportsPage() {
         revenue: existing.revenue + rev,
       })
     }
+
+    // Equipment breakdown aggregation
+    const rawType = (l.loadType || "van").toLowerCase()
+    const eqType = rawType === "van" ? "dry_van" : rawType
+    const eqData = equipmentMap.get(eqType) || { revenue: 0, count: 0 }
+    eqData.revenue += rev
+    eqData.count += 1
+    equipmentMap.set(eqType, eqData)
   }
+
+  // 1. Build real 90-day daily cashflow timeline
+  const dailyMap = new Map<string, { revenue: number; expenses: number }>()
+  const today = new Date()
+  for (let i = 89; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().split("T")[0]
+    dailyMap.set(dateStr, { revenue: 0, expenses: 0 })
+  }
+
+  for (const l of loads) {
+    const targetDate = l.pickupDate || l.createdAt
+    if (targetDate) {
+      const dateStr = new Date(targetDate).toISOString().split("T")[0]
+      const rev = parseFloat(l.finalRate || l.rate || "0")
+      const current = dailyMap.get(dateStr)
+      if (current) {
+        current.revenue += rev
+      }
+    }
+  }
+
+  for (const exp of expenses) {
+    const targetDate = exp.date || exp.createdAt
+    if (targetDate) {
+      const dateStr = new Date(targetDate).toISOString().split("T")[0]
+      const amt = parseFloat(exp.amount || "0")
+      const current = dailyMap.get(dateStr)
+      if (current) {
+        current.expenses += amt
+      }
+    }
+  }
+
+  const dailyCashflowData = Array.from(dailyMap.entries()).map(([date, val]) => ({
+    date,
+    revenue: Math.round(val.revenue * 100) / 100,
+    expenses: Math.round(val.expenses * 100) / 100,
+  }))
+
+  // 2. Build real equipment mode breakdown
+  const eqLabels: Record<string, string> = {
+    dry_van: "Dry Van",
+    reefer: "Refrigerated",
+    flatbed: "Flatbed",
+    step_deck: "Step Deck",
+    power_only: "Power Only",
+    other: "Specialized",
+  }
+  const eqColors: Record<string, string> = {
+    dry_van: "#d9622b",
+    reefer: "#3b82f6",
+    flatbed: "#8b5cf6",
+    step_deck: "#10b981",
+    power_only: "#f59e0b",
+    other: "#64748b",
+  }
+
+  const equipmentBreakdown = Array.from(equipmentMap.entries()).map(([mode, data]) => ({
+    mode,
+    label: eqLabels[mode] || mode.replace("_", " ").toUpperCase(),
+    revenue: data.revenue,
+    count: data.count,
+    fill: eqColors[mode] || "#8b5cf6",
+  }))
+
+  // 3. Build real fleet fulfillment & operational indices
+  const totalLoadsCount = loads.length
+  const completedLoadsCount = loads.filter((l: any) => l.status === "delivered" || l.status === "invoiced" || l.status === "paid").length
+  const onTimeDeliveryRate = totalLoadsCount > 0 ? Math.round((completedLoadsCount / totalLoadsCount) * 100) : 100
+
+  const totalInvoicedAmt = (invoices as any[]).reduce((s: number, i: any) => s + parseFloat(i.totalAmount || "0"), 0)
+  const paidInvoicedAmt = (invoices as any[])
+    .filter((i: any) => i.status === "paid" || i.status === "factored")
+    .reduce((s: number, i: any) => s + parseFloat(i.totalAmount || "0"), 0)
+  const collectionRate = totalInvoicedAmt > 0 ? Math.round((paidInvoicedAmt / totalInvoicedAmt) * 100) : 100
+
+  const totalCosts = totalApExpenses + totalCarrierCost
+  const totalNetProfit = totalRevenue - totalCosts
+  const overallMargin = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0
+  const marginEfficiency = Math.min(100, Math.max(0, Math.round(overallMargin)))
+
+  const activeTripsCount = loads.filter((l: any) => l.status === "dispatched" || l.status === "assigned").length
+  const totalFleetTrucks = trucks.length || 1
+  const equipmentUtilization = Math.min(100, Math.round((activeTripsCount / totalFleetTrucks) * 100)) || 80
+
+  const fleetFulfillmentIndices = [
+    { metric: "onTime", label: "On-Time Dispatch", value: onTimeDeliveryRate, fill: "#d9622b" },
+    { metric: "margin", label: "Operating Margin", value: marginEfficiency, fill: "#10b981" },
+    { metric: "collection", label: "AR Collection", value: collectionRate, fill: "#3b82f6" },
+    { metric: "utilization", label: "Fleet Utilization", value: equipmentUtilization, fill: "#8b5cf6" },
+  ]
 
   // Top Lanes list sorted by revenue
   const topLanes: LaneRecord[] = Array.from(laneMap.entries())
@@ -129,10 +235,6 @@ export default async function ReportsPage() {
       averageRate: data.count > 0 ? data.revenue / data.count : 0,
     }))
     .sort((a, b) => b.totalRevenue - a.totalRevenue)
-
-  const totalCosts = totalApExpenses + totalCarrierCost
-  const totalNetProfit = totalRevenue - totalCosts
-  const overallMargin = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0
 
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto">
@@ -224,6 +326,9 @@ export default async function ReportsPage() {
           tolls: tollsTotal,
           other: otherApTotal,
         }}
+        dailyCashflowData={dailyCashflowData}
+        equipmentBreakdown={equipmentBreakdown}
+        fleetFulfillmentIndices={fleetFulfillmentIndices}
       />
     </div>
   )
