@@ -79,6 +79,61 @@ export function BillingClient() {
         </div>
       </div>
 
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <CreditCard className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            $149<span className="text-sm font-sans font-normal text-brand-muted-soft">/mo</span>
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Current Rate Plan</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Muvx Growth Subscription</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-blue-700">
+            8 <span className="text-sm font-sans font-normal text-brand-muted-soft">/ 20</span>
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Enrolled Power Units</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">12 vehicle slots available</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <Users className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            5 <span className="text-sm font-sans font-normal text-brand-muted-soft">/ 10</span>
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active Operator Seats</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">5 teammate seats remaining</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Zap className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-purple-700">
+            Active
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Account Standing</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Automated Stripe billing</p>
+        </Card>
+      </div>
+
       {/* Plan Card */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-brand-rule bg-brand-card p-6 space-y-6">

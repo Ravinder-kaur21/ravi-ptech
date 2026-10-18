@@ -95,6 +95,7 @@ import {
   ChevronRight,
   ArrowLeftRight,
   Ban,
+  KeyRound,
 } from "lucide-react"
 
 // ─── Role metadata — SINGLE SOURCE OF TRUTH ──────────────────────────
@@ -701,6 +702,61 @@ function TeamSettingsInner() {
             </Dialog>
           )}
         </div>
+      </div>
+
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Users className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {membersQuery.isLoading ? "—" : members.length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Team Members</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Assigned workspace operators</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {membersQuery.isLoading ? "—" : members.filter((m) => !m.banned).length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active Operators</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Full operational access</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700">
+              <Mail className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-amber-700">
+            {invitesQuery.isLoading ? "—" : pendingCount}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Invitations</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Awaiting email acceptance</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <KeyRound className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {membersQuery.isLoading ? "—" : new Set(members.map((m) => m.role)).size}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Configured Roles</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Distinct functional personas</p>
+        </Card>
       </div>
 
       {/* ─── Members ─── */}

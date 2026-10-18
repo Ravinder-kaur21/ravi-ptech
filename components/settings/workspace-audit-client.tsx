@@ -17,6 +17,8 @@ import {
   Filter,
   RefreshCw,
   Loader2,
+  KeyRound,
+  Activity,
 } from "lucide-react"
 
 type AuditEvent = {
@@ -97,6 +99,67 @@ export function WorkspaceAuditClient() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <History className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {isLoading ? "—" : events.length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Audit Records</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Immutable ledger entries</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <KeyRound className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-blue-700">
+            {isLoading
+              ? "—"
+              : events.filter((e) => e.action.includes("role") || e.action.includes("permission") || e.action.includes("owner")).length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Security & Roles</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Access grant & revoke actions</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <User className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {isLoading
+              ? "—"
+              : events.filter((e) => e.action.includes("invite") || e.action.includes("member") || e.action.includes("user")).length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Team & Membership</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Invitations & roster modifications</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Activity className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-purple-700">
+            {isLoading
+              ? "—"
+              : events.filter((e) => e.action.includes("workspace") || e.action.includes("load") || e.action.includes("invoice") || e.action.includes("trip")).length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Operations & System</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Workspace lifecycle activities</p>
+        </Card>
       </div>
 
       {/* Filter toolbar */}

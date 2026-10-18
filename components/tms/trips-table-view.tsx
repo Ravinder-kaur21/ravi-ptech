@@ -123,31 +123,31 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
           onValueChange={(v) => setActiveTab(v as "all" | "active" | "completed")}
           className="w-full sm:w-auto"
         >
-          <TabsList className="bg-[#f2eee6] dark:bg-zinc-900 border border-[#e4ddd3] dark:border-zinc-800 p-0.5 h-8.5 rounded-lg">
+          <TabsList className="bg-brand-cream/50 border border-brand-rule p-0.5 h-8.5 rounded-lg">
             <TabsTrigger
               value="all"
-              className="text-xs px-3 data-[state=active]:bg-[#fdfbf7] dark:data-[state=active]:bg-zinc-950 data-[state=active]:text-[#16181d] dark:data-[state=active]:text-zinc-100 rounded-md gap-1.5 transition-all"
+              className="text-xs px-3 data-[state=active]:bg-brand-card data-[state=active]:text-brand-ink rounded-md gap-1.5 transition-all"
             >
               All Trips
-              <span className="font-mono text-[10px] text-[#8a8b8f] px-1 bg-black/5 dark:bg-white/10 rounded-full">
+              <span className="font-mono text-[10px] text-brand-muted-soft px-1 bg-black/5 dark:bg-white/10 rounded-full">
                 {trips.length}
               </span>
             </TabsTrigger>
             <TabsTrigger
               value="active"
-              className="text-xs px-3 data-[state=active]:bg-[#fdfbf7] dark:data-[state=active]:bg-zinc-950 data-[state=active]:text-[#16181d] dark:data-[state=active]:text-zinc-100 rounded-md gap-1.5 transition-all"
+              className="text-xs px-3 data-[state=active]:bg-brand-card data-[state=active]:text-brand-ink rounded-md gap-1.5 transition-all"
             >
               Rolling & Active
-              <span className="font-mono text-[10px] text-[#d9622b] font-semibold px-1 bg-[#fff0e6] dark:bg-orange-950/40 rounded-full">
+              <span className="font-mono text-[10px] text-brand-accent font-semibold px-1 bg-brand-accent-tint rounded-full">
                 {activeCount}
               </span>
             </TabsTrigger>
             <TabsTrigger
               value="completed"
-              className="text-xs px-3 data-[state=active]:bg-[#fdfbf7] dark:data-[state=active]:bg-zinc-950 data-[state=active]:text-[#16181d] dark:data-[state=active]:text-zinc-100 rounded-md gap-1.5 transition-all"
+              className="text-xs px-3 data-[state=active]:bg-brand-card data-[state=active]:text-brand-ink rounded-md gap-1.5 transition-all"
             >
               Delivered
-              <span className="font-mono text-[10px] text-emerald-600 font-semibold px-1 bg-emerald-50 dark:bg-emerald-950/40 rounded-full">
+              <span className="font-mono text-[10px] text-emerald-700 font-semibold px-1 bg-emerald-500/10 rounded-full">
                 {completedCount}
               </span>
             </TabsTrigger>
@@ -155,17 +155,17 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
         </Tabs>
 
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-[#8a8b8f]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-brand-muted-soft" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search trips, loads, drivers, units..."
-            className="h-8.5 pl-8.5 text-xs bg-[#fdfbf7] dark:bg-zinc-950 border-[#e4ddd3] dark:border-zinc-800 rounded-lg placeholder:text-[#8a8b8f]"
+            className="h-8.5 pl-8.5 text-xs bg-brand-card border-brand-rule rounded-lg placeholder:text-brand-muted-soft"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#8a8b8f] hover:text-[#16181d] dark:hover:text-zinc-100"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-brand-muted-soft hover:text-brand-ink"
             >
               Clear
             </button>
@@ -174,43 +174,43 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
       </div>
 
       {/* ─── Shadcn Table ─── */}
-      <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 overflow-hidden shadow-xs rounded-xl">
+      <Card className="border-brand-rule bg-brand-card overflow-hidden shadow-xs rounded-xl">
         <Table>
-          <TableHeader className="bg-[#f7f3ec]/80 dark:bg-zinc-900/60 border-b border-[#e4ddd3] dark:border-zinc-800">
-            <TableRow className="hover:bg-transparent border-[#e4ddd3] dark:border-zinc-800">
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+          <TableHeader className="bg-brand-cream/60 border-b border-brand-rule">
+            <TableRow className="hover:bg-transparent border-brand-rule">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Trip #
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Linked Load
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Route & Nav
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Driver
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Equipment
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4">
                 Status
               </TableHead>
-              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#8a8b8f] h-9 px-4 text-right">
+              <TableHead className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand-muted-soft h-9 px-4 text-right">
                 Actions
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody className="divide-y divide-[#e4ddd3] dark:divide-zinc-800/80">
+          <TableBody className="divide-y divide-brand-rule">
             {filteredTrips.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-xs text-[#8a8b8f]">
+                <TableCell colSpan={7} className="h-32 text-center text-xs text-brand-muted-soft">
                   <div className="flex flex-col items-center justify-center gap-1.5">
-                    <Truck className="size-5 text-[#8a8b8f]/60" />
-                    <p className="font-medium text-[#16181d] dark:text-zinc-200">
+                    <Truck className="size-5 text-brand-muted-soft/60" />
+                    <p className="font-medium text-brand-ink">
                       No matching trips found
                     </p>
-                    <p className="text-[11px] text-[#8a8b8f]">
+                    <p className="text-[11px] text-brand-muted-soft">
                       {searchQuery
                         ? "Try adjusting your search criteria"
                         : "No trips currently match this status filter"}
@@ -230,10 +230,10 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                 return (
                   <TableRow
                     key={t.id}
-                    className="hover:bg-[#f7f3ec]/60 dark:hover:bg-zinc-900/50 transition-colors border-[#e4ddd3] dark:border-zinc-800/80"
+                    className="hover:bg-brand-cream/40 transition-colors border-brand-rule"
                   >
                     {/* Trip # */}
-                    <TableCell className="px-4 py-3 font-mono text-xs font-semibold text-[#16181d] dark:text-zinc-100">
+                    <TableCell className="px-4 py-3 font-mono text-xs font-semibold text-brand-ink">
                       {t.tripNumber}
                     </TableCell>
 
@@ -242,22 +242,22 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                       {t.loadId ? (
                         <Link
                           href={`/loads/${t.loadId}`}
-                          className="font-mono text-xs text-[#d9622b] hover:underline inline-flex items-center gap-1 font-semibold"
+                          className="font-mono text-xs text-brand-accent hover:underline inline-flex items-center gap-1 font-semibold"
                         >
                           {t.loadNumber || "View Load"}
                           <ArrowUpRight className="size-3" />
                         </Link>
                       ) : (
-                        <span className="text-[#8a8b8f] font-mono text-xs">—</span>
+                        <span className="text-brand-muted-soft font-mono text-xs">—</span>
                       )}
                     </TableCell>
 
                     {/* Route & Nav */}
-                    <TableCell className="px-4 py-3 text-xs text-[#16181d] dark:text-zinc-200">
+                    <TableCell className="px-4 py-3 text-xs text-brand-ink">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate max-w-[200px]">
                           {t.originCity ? `${t.originCity}, ${t.originState || ""}` : "—"}{" "}
-                          <span className="text-[#8a8b8f]">→</span>{" "}
+                          <span className="text-brand-muted-soft">→</span>{" "}
                           {t.destCity ? `${t.destCity}, ${t.destState || ""}` : "—"}
                         </span>
                         {mapUrl && (
@@ -266,7 +266,7 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Open route in Google Maps"
-                            className="text-[#8a8b8f] hover:text-[#d9622b] transition-colors shrink-0"
+                            className="text-brand-muted-soft hover:text-brand-accent transition-colors shrink-0"
                           >
                             <ExternalLink className="size-3" />
                           </a>
@@ -278,8 +278,8 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                     <TableCell className="px-4 py-3 text-xs">
                       {t.driverFirstName ? (
                         <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 font-medium text-[#16181d] dark:text-zinc-100">
-                            <User className="size-3.5 text-[#8a8b8f] shrink-0" />
+                          <div className="flex items-center gap-1.5 font-medium text-brand-ink">
+                            <User className="size-3.5 text-brand-muted-soft shrink-0" />
                             <span>
                               {t.driverFirstName} {t.driverLastName}
                             </span>
@@ -287,7 +287,7 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                           {t.driverPhone && (
                             <a
                               href={`tel:${t.driverPhone}`}
-                              className="inline-flex items-center gap-1 font-mono text-[10px] text-[#d9622b] hover:underline"
+                              className="inline-flex items-center gap-1 font-mono text-[10px] text-brand-accent hover:underline"
                             >
                               <Phone className="size-2.5" />
                               <span>{t.driverPhone}</span>
@@ -295,18 +295,18 @@ export function TripsTableView({ trips, drivers }: TripsTableViewProps) {
                           )}
                         </div>
                       ) : (
-                        <span className="text-[#8a8b8f] text-xs">Unassigned</span>
+                        <span className="text-brand-muted-soft text-xs">Unassigned</span>
                       )}
                     </TableCell>
 
                     {/* Equipment */}
                     <TableCell className="px-4 py-3 text-xs">
                       <div className="flex flex-col gap-0.5 font-mono text-[11px]">
-                        <span className="text-[#16181d] dark:text-zinc-100">
+                        <span className="text-brand-ink">
                           Power: {t.truckUnitNumber ? `#${t.truckUnitNumber}` : "—"}
                         </span>
                         {t.trailerUnitNumber && (
-                          <span className="text-[#8a8b8f]">
+                          <span className="text-brand-muted-soft">
                             TLR: #{t.trailerUnitNumber}
                           </span>
                         )}

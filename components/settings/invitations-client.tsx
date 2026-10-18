@@ -79,6 +79,7 @@ import {
   ArrowLeft,
   Ban,
   Check,
+  CheckCircle2,
   Clock,
   Inbox,
   Loader2,
@@ -286,7 +287,62 @@ export function InvitationsClient() {
           </div>
         </div>
 
-        {/* ─── Expiring alert ─── */}
+        {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-700">
+              <Clock className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-amber-700">
+            {counts.pending}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Pending Invitations</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Awaiting recipient acceptance</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {counts.accepted}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Accepted & Joined</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Onboarded into workspace</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-red-500/10 text-red-700">
+              <AlertTriangle className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-red-700">
+            {expiringSoon}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Expiring (≤3 Days)</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Requires re-sending</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Mail className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {counts.all}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Total Lifetime Sent</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Historical invite records</p>
+        </Card>
+      </div>
+
+      {/* ─── Expiring alert ─── */}
         {expiringSoon > 0 && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />

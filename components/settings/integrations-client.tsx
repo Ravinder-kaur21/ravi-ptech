@@ -173,6 +173,61 @@ export function IntegrationsClient() {
         </div>
       </div>
 
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {INTEGRATIONS.filter((i) => i.status === "connected").length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active Integrations</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Connected & syncing webhooks</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            Samsara
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">ELD & GPS Fleet Sync</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">HOS & telematics live</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Receipt className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-blue-700">
+            QuickBooks
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Ledger Synchronization</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Invoices & payables posted</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Plug className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-purple-700">
+            DAT One
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Direct Capacity Postings</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Freight matching active</p>
+        </Card>
+      </div>
+
       {/* Filters Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-sm">

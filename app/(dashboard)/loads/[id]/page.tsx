@@ -231,19 +231,88 @@ export default async function LoadDetailPage({
         canUpdateStatus={canUpdateStatus}
       />
 
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <DollarSign className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {currencySymbol}{shipperRateNum > 0 ? shipperRateNum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : "0"}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Billed Shipper Rate</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {load.customerName || "Customer contract rate"}
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <TrendingUp className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            {carrierRateNum > 0
+              ? `${grossMargin >= 0 ? "+" : ""}${currencySymbol}${grossMargin.toFixed(0)}`
+              : `${currencySymbol}${shipperRateNum.toFixed(0)}`}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">
+            {carrierRateNum > 0 ? `Spread Margin (${marginPercentage.toFixed(0)}%)` : "Full House Revenue"}
+          </p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {carrierRateNum > 0 ? `After ${currencySymbol}${carrierRateNum.toFixed(0)} carrier pay` : "Direct fleet dispatch"}
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Navigation className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {load.miles ? `${load.miles}` : "Direct"}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">
+            {load.miles ? "Loaded Miles" : "Intercity Route"}
+          </p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {load.originState && load.destState ? `${load.originState} → ${load.destState}` : "Highway lane"}
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Truck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {stops.length > 0 ? `${stops.length} Stops` : "2 Stops"}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">{load.loadType || "Dry Van"}</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {load.weight ? `${load.weight} lbs payload` : "Standard payload"}
+          </p>
+        </Card>
+      </div>
+
       {/* ─── ASSIGNED FLEET & DRIVER COCKPIT (When Dispatched) ─── */}
       {load.trip && (
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-5 shadow-xs">
-          <div className="flex items-center justify-between border-b border-[#eee9df] dark:border-zinc-800/80 pb-3 mb-4">
+        <Card className="border-brand-rule bg-brand-card p-5 shadow-xs">
+          <div className="flex items-center justify-between border-b border-brand-rule pb-3 mb-4">
             <div className="flex items-center gap-2">
-              <Truck className="size-4 text-[#d9622b]" />
-              <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a8b8f]">
+              <Truck className="size-4 text-brand-accent" />
+              <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.05em] text-brand-muted-soft">
                 Active Dispatch Assignment · Trip {load.trip.tripNumber}
               </h2>
             </div>
             <Link
               href="/trips"
-              className="font-mono text-xs text-[#d9622b] hover:underline inline-flex items-center gap-1"
+              className="font-mono text-xs text-brand-accent hover:underline inline-flex items-center gap-1"
             >
               <span>View Trip Details</span>
               <ArrowUpRight className="size-3" />
@@ -252,27 +321,27 @@ export default async function LoadDetailPage({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Driver Card */}
-            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 flex items-start gap-3">
-              <div className="size-9 rounded-full bg-[#f7f3ec] dark:bg-zinc-800 flex items-center justify-center text-[#d9622b] shrink-0 font-bold text-xs">
+            <div className="p-3.5 rounded-xl border border-brand-rule bg-brand-cream/30 flex items-start gap-3">
+              <div className="size-9 rounded-full bg-brand-accent-tint flex items-center justify-center text-brand-accent shrink-0 font-bold text-xs">
                 {load.trip.driverFirstName?.[0] || "D"}
                 {load.trip.driverLastName?.[0] || ""}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Assigned Driver</p>
-                <p className="text-sm font-semibold text-[#16181d] dark:text-zinc-100 truncate">
+                <p className="text-[10px] font-mono uppercase text-brand-muted-soft">Assigned Driver</p>
+                <p className="text-sm font-semibold text-brand-ink truncate">
                   {load.trip.driverFirstName
                     ? `${load.trip.driverFirstName} ${load.trip.driverLastName}`
                     : "Unassigned Driver"}
                 </p>
                 {load.trip.driverLicenseNumber && (
-                  <p className="text-[11px] font-mono text-[#73757a] mt-0.5">
+                  <p className="text-[11px] font-mono text-brand-muted-soft mt-0.5">
                     CDL: {load.trip.driverLicenseNumber}
                   </p>
                 )}
                 {load.trip.driverPhone && (
                   <a
                     href={`tel:${load.trip.driverPhone}`}
-                    className="inline-flex items-center gap-1 text-[11px] text-[#d9622b] hover:underline font-mono mt-1"
+                    className="inline-flex items-center gap-1 text-[11px] text-brand-accent hover:underline font-mono mt-1"
                   >
                     <Phone className="size-3" />
                     <span>{load.trip.driverPhone}</span>
@@ -282,17 +351,17 @@ export default async function LoadDetailPage({
             </div>
 
             {/* Power Unit & Trailer */}
-            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 space-y-2">
-              <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Assigned Fleet Units</p>
+            <div className="p-3.5 rounded-xl border border-brand-rule bg-brand-cream/30 space-y-2">
+              <p className="text-[10px] font-mono uppercase text-brand-muted-soft">Assigned Fleet Units</p>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#73757a]">Tractor Unit:</span>
-                <span className="font-mono font-semibold text-[#16181d] dark:text-zinc-100">
+                <span className="text-brand-muted-soft">Tractor Unit:</span>
+                <span className="font-mono font-semibold text-brand-ink">
                   {load.trip.truckUnitNumber ? `Unit #${load.trip.truckUnitNumber}` : "Outside Power"}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#73757a]">Trailer:</span>
-                <span className="font-mono font-semibold text-[#16181d] dark:text-zinc-100">
+                <span className="text-brand-muted-soft">Trailer:</span>
+                <span className="font-mono font-semibold text-brand-ink">
                   {load.trip.trailerUnitNumber
                     ? `Trailer #${load.trip.trailerUnitNumber}`
                     : "Carrier Trailer"}
@@ -301,27 +370,27 @@ export default async function LoadDetailPage({
             </div>
 
             {/* Financial Spread & Margin */}
-            <div className="p-3.5 rounded-xl border border-[#e4ddd3] dark:border-zinc-800 bg-white dark:bg-zinc-900/60 space-y-2">
-              <p className="text-[10px] font-mono uppercase text-[#8a8b8f]">Gross Spread & Yield</p>
+            <div className="p-3.5 rounded-xl border border-brand-rule bg-brand-cream/30 space-y-2">
+              <p className="text-[10px] font-mono uppercase text-brand-muted-soft">Gross Spread & Yield</p>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#73757a]">Shipper Revenue:</span>
-                <span className="font-mono font-bold text-[#16181d] dark:text-zinc-100">
+                <span className="text-brand-muted-soft">Shipper Revenue:</span>
+                <span className="font-mono font-bold text-brand-ink">
                   ${shipperRateNum.toFixed(2)}
                 </span>
               </div>
               {carrierRateNum > 0 && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#73757a]">Carrier Cost:</span>
-                  <span className="font-mono font-semibold text-[#8a8b8f]">
+                  <span className="text-brand-muted-soft">Carrier Cost:</span>
+                  <span className="font-mono font-semibold text-brand-muted-soft">
                     - ${carrierRateNum.toFixed(2)}
                   </span>
                 </div>
               )}
-              <div className="border-t border-[#eee9df] dark:border-zinc-800 pt-1.5 flex items-center justify-between text-xs font-semibold">
-                <span className="text-[#16181d] dark:text-zinc-200">Gross Margin:</span>
+              <div className="border-t border-brand-rule pt-1.5 flex items-center justify-between text-xs font-semibold">
+                <span className="text-brand-ink">Gross Margin:</span>
                 <span
                   className={`font-mono ${
-                    grossMargin >= 0 ? "text-emerald-600" : "text-red-600"
+                    grossMargin >= 0 ? "text-emerald-700" : "text-red-700"
                   }`}
                 >
                   ${grossMargin.toFixed(2)} ({marginPercentage.toFixed(1)}%)

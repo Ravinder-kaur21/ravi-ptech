@@ -110,6 +110,61 @@ export function SessionsClient() {
         </div>
       </div>
 
+      {/* ─── KPI Dashboard Cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <Laptop className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {isLoading ? "—" : sessions.length}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Active Sessions</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Connected login tokens</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            Current
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Primary Session</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">This active browser instance</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Smartphone className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-blue-700">
+            {isLoading ? "—" : Math.max(0, sessions.length - 1)}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Other Devices</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Secondary logged-in devices</p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Globe className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-purple-700">
+            Secured
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Encryption Level</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">Better Auth HTTPS cookies</p>
+        </Card>
+      </div>
+
       {/* Sessions List */}
       <Card className="border-brand-rule bg-brand-card overflow-hidden">
         <div className="p-4 border-b border-brand-rule flex items-center justify-between">

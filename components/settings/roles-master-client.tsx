@@ -9,6 +9,7 @@ import { PRESETS, presetKeys, PRESET_LIST, presetOnCount } from "@/lib/role-pres
 import { ALL_PERMISSION_KEYS, MODULE_GROUPS, type PermissionEntry } from "@/lib/permissions-catalog"
 import { type RoleId } from "@/lib/auth-roles"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -206,26 +207,34 @@ export function RolesMasterClient() {
       </div>
 
       {/* KPI Stats Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
+          icon={KeyRound}
+          tint="bg-brand-accent-tint text-brand-accent"
           label="Starter Roles"
           value={String(data?.starter.length ?? 6)}
           sub="Pre-tuned TMS personas"
           isLoading={isLoading}
         />
         <StatCard
+          icon={ShieldCheck}
+          tint="bg-blue-500/10 text-blue-700"
           label="Custom Roles"
           value={String(data?.custom.length ?? 0)}
           sub="Workspace defined"
           isLoading={isLoading}
         />
         <StatCard
+          icon={LayoutGrid}
+          tint="bg-emerald-500/10 text-emerald-700"
           label="Operational Modules"
           value={String(MODULE_GROUPS.length)}
           sub="Loads, Fleet, Billing, etc."
           isLoading={false}
         />
         <StatCard
+          icon={Shield}
+          tint="bg-purple-500/10 text-purple-700"
           label="Catalog Action Gates"
           value={String(ALL_PERMISSION_KEYS.length)}
           sub="Granular security keys"
@@ -587,26 +596,33 @@ export function RolesMasterClient() {
 }
 
 function StatCard({
+  icon: Icon,
+  tint,
   label,
   value,
   sub,
   isLoading,
 }: {
+  icon: any
+  tint: string
   label: string
   value: string
   sub: string
   isLoading: boolean
 }) {
   return (
-    <div className="rounded-xl border border-brand-rule bg-brand-card p-4 shadow-xs">
-      <p className="text-[11px] font-mono uppercase tracking-[0.06em] text-brand-muted-soft">
-        {label}
-      </p>
-      <p className="mt-1 font-serif text-2xl text-brand-ink">
+    <Card className="border-brand-rule bg-brand-card p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className={cn("flex size-9 items-center justify-center rounded-lg", tint)}>
+          <Icon className="h-4 w-4" strokeWidth={1.8} />
+        </div>
+      </div>
+      <p className="font-serif text-3xl tracking-tight text-brand-ink">
         {isLoading ? "—" : value}
       </p>
-      <p className="text-[10px] text-brand-muted-soft mt-0.5">{sub}</p>
-    </div>
+      <p className="text-xs mt-0.5 text-brand-muted-soft">{label}</p>
+      <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">{sub}</p>
+    </Card>
   )
 }
 

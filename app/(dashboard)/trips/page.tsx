@@ -118,12 +118,12 @@ export default async function TripsPage() {
 
       {/* Trips Table */}
       {trips.length === 0 ? (
-        <Card className="border-[#e4ddd3] dark:border-zinc-800 bg-[#fdfbf7] dark:bg-zinc-950 p-12 text-center shadow-xs">
-          <div className="mx-auto size-12 rounded-full bg-[#fff0e6] dark:bg-orange-950/40 text-[#d9622b] flex items-center justify-center mb-4">
-            <Map className="size-5 text-[#d9622b]" />
+        <Card className="border-brand-rule bg-brand-card p-12 text-center shadow-xs">
+          <div className="mx-auto size-12 rounded-full bg-brand-accent-tint text-brand-accent flex items-center justify-center mb-4">
+            <Map className="size-5" />
           </div>
-          <p className="font-medium text-[#16181d] dark:text-zinc-100">No trips dispatched yet</p>
-          <p className="mt-1 text-sm text-[#73757a]">
+          <p className="font-serif text-xl tracking-tight text-brand-ink font-semibold">No trips dispatched yet</p>
+          <p className="mt-1 text-sm text-brand-muted-soft max-w-md mx-auto">
             Trips are automatically created when a load is dispatched with an assigned driver and power unit.
           </p>
           <Link
