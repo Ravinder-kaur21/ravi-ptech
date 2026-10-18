@@ -20,9 +20,11 @@ import {
   getActiveDriversCount,
   getLoadsForOrg,
 } from "@/lib/dal"
+import { getNotificationsForUser } from "@/lib/notifications"
 import { StatusBadge } from "@/components/status-badge"
 import { getEffectivePermissions } from "@/lib/can"
 import { ShieldCheck, FileText } from "lucide-react"
+import { DashboardAlertsStack } from "@/components/dashboard/dashboard-alerts-stack"
 
 // Server actions / dynamic data — opt out of instant-navigation validation
 export const instant = false
@@ -33,14 +35,19 @@ export default async function DashboardHomePage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
-  // [DASHBOARD] Fetch all KPIs and user's permissions in parallel
-  const [activeLoads, monthlyRevenue, activeDrivers, recentLoads, permissions] =
+  // [DASHBOARD] Fetch all KPIs, user permissions, and alerts in parallel
+  const [activeLoads, monthlyRevenue, activeDrivers, recentLoads, permissions, alertsData] =
     await Promise.all([
       getActiveLoadsCount(tenantId),
       getMonthlyRevenue(tenantId),
       getActiveDriversCount(tenantId),
       getLoadsForOrg(tenantId),
       getEffectivePermissions(session.user.id, tenantId),
+      getNotificationsForUser({
+        organizationId: tenantId,
+        userId: session.user.id,
+        limit: 5,
+      }),
     ])
 
   const canViewRevenue = permissions.has("invoices.module") || permissions.has("reports.module")
@@ -207,6 +214,9 @@ export default async function DashboardHomePage() {
               )}
             </div>
           </Card>
+
+          {/* Live Fleet Alerts Stack (Kokonut UI) */}
+          <DashboardAlertsStack notifications={alertsData.notifications as any} />
 
           {canManageFleet && (
             <Card className="border-brand-rule bg-brand-card p-5">

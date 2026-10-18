@@ -91,9 +91,11 @@ export interface BellButtonProps {
   label?: string;
   subscribedLabel?: string;
   className?: string;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  title?: string;
 }
 
-export default function BellButton({
+export function BellButton({
   variant = "default",
   subscribed: subscribedProp,
   defaultSubscribed = false,
@@ -102,6 +104,8 @@ export default function BellButton({
   label = "Notify me",
   subscribedLabel = "Subscribed",
   className,
+  onClick,
+  title,
 }: BellButtonProps) {
   const [internal, setInternal] = useState(defaultSubscribed);
   const subscribed = subscribedProp ?? internal;
@@ -247,7 +251,8 @@ export default function BellButton({
     };
   }, []);
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    onClick?.(e);
     const next = !subscribed;
     if (subscribedProp === undefined) {
       setInternal(next);
@@ -293,6 +298,7 @@ export default function BellButton({
     <button
       aria-label={variant === "icon" ? label : undefined}
       aria-pressed={subscribed}
+      title={title}
       className={cn(
         "inline-flex h-11 select-none items-center gap-2.5 rounded-full border font-medium text-sm outline-none transition-colors duration-200 ease-out focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:ring-offset-zinc-950",
         variant === "default" && "pr-1.5 pl-4",

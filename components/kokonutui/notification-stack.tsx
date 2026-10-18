@@ -167,7 +167,7 @@ export interface NotificationStackProps {
   className?: string;
 }
 
-export default function NotificationStack({
+export function NotificationStack({
   notifications = DEFAULT_NOTIFICATIONS,
   onDismiss,
   className,

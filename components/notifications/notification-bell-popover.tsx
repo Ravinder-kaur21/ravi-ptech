@@ -37,6 +37,7 @@ import {
   deleteNotificationAction,
 } from "@/app/actions/notifications"
 import { NotificationPreferencesDialog } from "@/components/notifications/notification-preferences-dialog"
+import { BellButton } from "@/components/kokonutui/bell-button"
 
 export interface NotificationItem {
   id: string
@@ -199,21 +200,22 @@ export function NotificationBellPopover() {
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger
           render={
-            <button
-              type="button"
-              className="group relative flex size-9 items-center justify-center rounded-full text-brand-ink/80 hover:text-brand-ink hover:bg-brand-cream-soft transition-all cursor-pointer focus:outline-none"
-              aria-label="Open notifications"
-            >
-              <Bell className="size-4.5 transition-transform duration-300 group-hover:rotate-12 group-active:scale-90" />
-              
-              {/* Animated Unread Counter Pill */}
+            <div className="relative inline-flex items-center">
+              <BellButton
+                variant="icon"
+                subscribed={unreadCount === 0}
+                label="Notifications"
+                subscribedLabel="Caught up"
+                title="Notifications"
+                className="size-9 h-9 w-9 p-0 rounded-full border border-brand-rule bg-brand-card hover:bg-brand-cream-soft text-brand-ink/90 cursor-pointer shadow-2xs flex items-center justify-center transition-all"
+              />
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-full bg-brand-accent text-white font-mono text-[10px] font-bold shadow-xs animate-in zoom-in-50 duration-200">
+                <span className="pointer-events-none absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-full bg-brand-accent text-white font-mono text-[10px] font-bold shadow-xs animate-in zoom-in-50 duration-200">
                   <span className="absolute -inset-0.5 rounded-full bg-brand-accent/40 animate-ping" />
                   <span className="relative">{unreadCount > 99 ? "99+" : unreadCount}</span>
                 </span>
               )}
-            </button>
+            </div>
           }
         />
 
