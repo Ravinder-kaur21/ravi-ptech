@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
-import { invoice, load, user as userTable } from "@/lib/schema"
+import { invoice, load, organization, user as userTable } from "@/lib/schema"
 import { requireTenant, TenantError } from "@/lib/dal"
 import { requireCatalogPermission } from "@/lib/can"
 import { recordAuditEvent } from "@/lib/audit"
@@ -221,5 +221,66 @@ export async function voidInvoiceAction(invoiceId: string) {
   } catch (err: any) {
     if (err instanceof TenantError) return { ok: false, error: err.code }
     return { ok: false, error: err.message || "Failed to void invoice" }
+  }
+}
+
+// ─── 4. SEND INVOICE EMAIL ──────────────────────────────────────────────────
+
+export async function sendInvoiceEmailAction(input: {
+  invoiceId: string
+  recipientEmail: string
+  customMessage?: string
+}) {
+  try {
+    const ctx = await requireTenant()
+    await requireCatalogPermission("accounting.invoices.view")
+
+    const [inv] = await db
+      .select()
+      .from(invoice)
+      .where(and(eq(invoice.id, input.invoiceId), eq(invoice.tenantId, ctx.tenantId)))
+      .limit(1)
+
+    if (!inv) return { ok: false, error: "Invoice not found" }
+
+    const [org] = await db
+      .select({ name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, ctx.tenantId))
+      .limit(1)
+
+    const orgName = org?.name || "Muvx Logistics"
+    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000"
+    const invoiceUrl = `${baseUrl}/invoices/${inv.id}`
+
+    const { sendInvoiceEmail } = await import("@/lib/email")
+    await sendInvoiceEmail({
+      to: input.recipientEmail,
+      invoiceNumber: inv.invoiceNumber,
+      customerName: inv.customerName || "Valued Customer",
+      amount: parseFloat(inv.amount || "0"),
+      currency: "USD",
+      dueDate: inv.dueDate ? new Date(inv.dueDate).toISOString().slice(0, 10) : "Due Upon Receipt",
+      organizationName: orgName,
+      invoiceUrl,
+      customMessage: input.customMessage,
+    })
+
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "invoice",
+      event: "invoice.emailed",
+      severity: "info",
+      title: "Invoice Sent to Customer",
+      message: `Invoice #${inv.invoiceNumber} was successfully emailed to ${input.recipientEmail}.`,
+      link: `/invoices/${inv.id}`,
+      metadata: { invoiceId: inv.id, recipient: input.recipientEmail },
+    })
+
+    return { ok: true }
+  } catch (err: any) {
+    if (err instanceof TenantError) return { ok: false, error: err.code }
+    return { ok: false, error: err.message || "Failed to send invoice email" }
   }
 }

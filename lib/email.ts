@@ -336,3 +336,82 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
 }
+
+/**
+ * Send an Invoice Package email with payment link and breakdown to customer / broker.
+ */
+export async function sendInvoiceEmail(data: {
+  to: string
+  cc?: string[]
+  invoiceNumber: string
+  customerName: string
+  amount: number
+  currency: string
+  dueDate: string
+  organizationName: string
+  invoiceUrl: string
+  customMessage?: string
+}) {
+  const subject = `Invoice ${data.invoiceNumber} from ${data.organizationName} — ${data.customerName}`
+  const formattedAmount = `${data.currency} ${data.amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; color: #16181d;">
+      <div style="background: #16181d; padding: 24px; text-align: center; border-radius: 12px 12px 0 0;">
+        <h1 style="color: #f5f2ec; font-size: 22px; margin: 0;">${escapeHtml(data.organizationName)}</h1>
+        <p style="color: #a1a1aa; font-size: 13px; margin: 4px 0 0;">Freight Transportation & Logistics Invoice</p>
+      </div>
+      <div style="background: #ffffff; padding: 32px; border-radius: 0 0 12px 12px; border: 1px solid #e5e5e5;">
+        <p style="font-size: 15px; margin: 0 0 16px;">Dear <b>${escapeHtml(data.customerName)}</b>,</p>
+        <p style="font-size: 14px; color: #4a4e57; margin: 0 0 24px; line-height: 1.5;">
+          ${data.customMessage ? escapeHtml(data.customMessage) : `Please find attached the freight invoice package for <b>Invoice #${escapeHtml(data.invoiceNumber)}</b>.`}
+        </p>
+
+        <div style="background: #faf8f5; border: 1px solid #ece5dd; border-radius: 8px; padding: 18px 20px; margin: 0 0 24px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="color: #71717a; padding-bottom: 8px;">Invoice Number:</td>
+              <td style="text-align: right; font-weight: 600; padding-bottom: 8px;">${escapeHtml(data.invoiceNumber)}</td>
+            </tr>
+            <tr>
+              <td style="color: #71717a; padding-bottom: 8px;">Total Amount Due:</td>
+              <td style="text-align: right; font-weight: 700; color: #d9622b; font-size: 16px; padding-bottom: 8px;">${formattedAmount}</td>
+            </tr>
+            <tr>
+              <td style="color: #71717a;">Payment Due Date:</td>
+              <td style="text-align: right; font-weight: 500;">${escapeHtml(data.dueDate)}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="text-align: center; margin: 0 0 24px;">
+          <a href="${data.invoiceUrl}" style="display: inline-block; background: #16181d; color: #f5f2ec; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            View & Download Invoice
+          </a>
+        </div>
+
+        <p style="color: #71717a; font-size: 12px; line-height: 1.5; margin: 24px 0 0; border-top: 1px solid #f4f4f5; pt: 16px;">
+          If you have questions regarding this freight invoice or remittance details, please reply directly to this email.
+        </p>
+      </div>
+    </div>
+  `
+
+  const text =
+    `Invoice ${data.invoiceNumber} from ${data.organizationName}\n\n` +
+    `Dear ${data.customerName},\n\n` +
+    `Amount Due: ${formattedAmount}\n` +
+    `Due Date: ${data.dueDate}\n\n` +
+    `View Invoice: ${data.invoiceUrl}\n`
+
+  return sendTransactionalEmail({
+    to: data.to,
+    subject,
+    html,
+    text,
+    kind: "transactional",
+  })
+}

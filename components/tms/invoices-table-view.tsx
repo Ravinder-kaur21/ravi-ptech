@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { StatusBadge } from "@/components/status-badge"
 import { ApplyPaymentDialog } from "@/components/tms/apply-payment-dialog"
+import { SendInvoiceEmailDialog } from "@/components/tms/send-invoice-email-dialog"
 import { formatWorkspaceDate } from "@/lib/timezone"
 
 export interface InvoiceRecord {
@@ -360,19 +361,28 @@ export function InvoicesTableView({
 
                   {/* Actions */}
                   <TableCell className="px-4 py-3 text-right">
-                    {inv.status !== "paid" && canApplyPayment ? (
-                      <ApplyPaymentDialog
+                    <div className="flex items-center justify-end gap-1.5">
+                      <SendInvoiceEmailDialog
                         invoiceId={inv.id}
                         invoiceNumber={inv.invoiceNumber}
-                        totalAmount={inv.amount}
-                        customerName={inv.customerName}
+                        customerName={inv.customerName || "Customer"}
+                        customerEmail={inv.customerEmail}
+                        amount={inv.amount}
                       />
-                    ) : (
-                      <span className="text-[11px] font-medium text-emerald-600 inline-flex items-center gap-1 justify-end">
-                        <CheckCircle2 className="size-3" />
-                        Reconciled
-                      </span>
-                    )}
+                      {inv.status !== "paid" && canApplyPayment ? (
+                        <ApplyPaymentDialog
+                          invoiceId={inv.id}
+                          invoiceNumber={inv.invoiceNumber}
+                          totalAmount={inv.amount}
+                          customerName={inv.customerName}
+                        />
+                      ) : (
+                        <span className="text-[11px] font-medium text-emerald-600 inline-flex items-center gap-1">
+                          <CheckCircle2 className="size-3" />
+                          Reconciled
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

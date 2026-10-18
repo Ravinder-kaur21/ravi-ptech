@@ -50,3 +50,16 @@
 - Field-level redaction (R-02)
 - Driver-scoped loads (R-03)
 - The 12 negative-test scenarios (Phase 8)
+
+---
+
+## Task — Firestore Rules (Client Contract) vs. MUVX Gap Analysis
+
+Completed audit comparing the Firestore security rules at `/Users/apple/work/TMS-project/firestore.rules` (the original client-server database access contract) against the MUVX implementation at `/Users/apple/work/muvx`.
+
+**Result:** Full comparison matrix in `docs/audits/firestore-rules-vs-muvx-comparison.md`
+
+- ✅ **14 collections fully preserved/improved**: users, loads, loadStatusOverrides, invoices, trips, drivers, trucks, trailers, carriers, apExpenses, payItems, carrierPayments, payStubs, auditLog, companyProfile/settings
+- ⚠️ **5 collections consolidated/changed**: rateConfParseLogs, facilities, arPayments, customerLedger, fuelExpenses, documents, revenueOverrides, tripExpenses
+- ❌ **7 collections MISSING**: customBrokers (entire role absent), unitCosts, unitCostConfigs, truckPositions (GPS), yards, truckStatements, internalNotes
+- 🔐 Security: Firestore's client-bypassable rules replaced with server-side enforcement in every Server Action via `requireTenant()` + `requireCatalogPermission()` + tenant-scoped SQL queries + `recordAuditEvent()`
