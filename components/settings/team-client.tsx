@@ -1,18 +1,21 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
 import { removeMemberAction } from "@/app/actions/remove-member"
 import {
+  createWhatsAppInvitationAction,
+  resendWhatsAppInvitationAction,
   resendInvitationAction,
   suspendMemberAction,
   liftWorkspaceSuspensionAction,
   transferOwnershipAction,
   updateMemberRoleAction,
 } from "@/app/actions/invitation"
+import { InternationalPhoneInput } from "@/components/settings/international-phone-input"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -70,6 +73,7 @@ import {
   MoreHorizontal,
   ArrowLeftRight,
   Ban,
+  MessageCircle,
 } from "lucide-react"
 
 // ─── Role metadata (matches Better Auth org plugin roles in lib/auth-roles.ts) ──
@@ -84,6 +88,15 @@ const ROLES = [
 
 const ROLE_VALUES = ROLES.map((r) => r.value)
 type Role = (typeof ROLES)[number]["value"]
+type InviteMutationVariables =
+  | { channel: "email"; role: Role }
+  | {
+      channel: "whatsapp"
+      whatsappWindow: Window
+      whatsappBaseUrl: string
+      phone: string
+      role: Role
+    }
 
 // Better Auth returns the active member via getActiveMember (and it's on
 // session.user.role too). We treat owner / admin as full-access; everyone
@@ -205,7 +218,9 @@ function TeamSettingsInner() {
       console.log(`[TEAM] workspace-invitations: ${data.length ?? 0} rows`)
       return data as Array<{
         id: string
-        email: string
+        email: string | null
+        invitationMethod: "email" | "whatsapp"
+        recipientPhone: string | null
         role: string | null
         status: string
         expiresAt: string
@@ -250,8 +265,14 @@ function TeamSettingsInner() {
 
   // ─── Invite dialog state ──
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteMethod, setInviteMethod] = useState<"email" | "whatsapp">("email")
   const [inviteEmail, setInviteEmail] = useState("")
+  const [invitePhone, setInvitePhone] = useState("")
+  const [phoneInputKey, setPhoneInputKey] = useState(0)
+  const [inviteEmailError, setInviteEmailError] = useState("")
+  const [invitePhoneError, setInvitePhoneError] = useState("")
   const [inviteRole, setInviteRole] = useState<Role>("dispatcher")
+  const inviteSubmitting = useRef(false)
 
   // ─── Suspend / lift / transfer state (WS-26, WS-28) ──
   const [suspendTarget, setSuspendTarget] = useState<
@@ -263,36 +284,91 @@ function TeamSettingsInner() {
     { id: string; name: string; email: string } | null
   >(null)
   const [transferOpen, setTransferOpen] = useState(false)
+  const resendWhatsAppWindow = useRef<Window | null>(null)
 
   const inviteMutation = useMutation({
-    mutationFn: async () => {
-      const email = inviteEmail.trim().toLowerCase()
-      console.log(`[TEAM] inviteMember → ${email} as ${inviteRole}`)
-      const { data, error } = await authClient.organization.inviteMember({
-        email,
-        role: inviteRole,
+    mutationFn: async (variables: InviteMutationVariables) => {
+      if (variables.channel === "email") {
+        const email = inviteEmail.trim().toLowerCase()
+        const { data, error } = await authClient.organization.inviteMember({
+          email,
+          role: variables.role,
+        })
+        if (error) throw new Error(error.message || "Failed to send invite")
+        if (!data?.id) throw new Error("Invitation was created without an ID")
+        return { invitationId: data.id, variables, workspaceName: null }
+      }
+
+      const result = await createWhatsAppInvitationAction({
+        phone: variables.phone,
+        role: variables.role,
       })
-      if (error) throw new Error(error.message || "Failed to send invite")
-      return data
+      return {
+        invitationId: result.id,
+        variables,
+        workspaceName: result.workspaceName,
+      }
     },
-    onSuccess: () => {
-      toast.success(`Invitation sent to ${inviteEmail}`)
-      setInviteEmail("")
-      setInviteRole("dispatcher")
-      setInviteOpen(false)
+    onSuccess: ({ invitationId, variables, workspaceName }) => {
       queryClient.invalidateQueries({ queryKey: ["workspace-invitations"] })
       queryClient.invalidateQueries({ queryKey: ["workspace-recent-events"] })
+
+      if (variables.channel === "whatsapp") {
+        const inviteUrl = new URL(
+          `/invite/${encodeURIComponent(invitationId)}`,
+          variables.whatsappBaseUrl,
+        ).toString()
+        const roleLabel =
+          ROLES.find((role) => role.value === variables.role)?.label ??
+          variables.role
+        const workspaceLabel = workspaceName
+          ? ` ${workspaceName}`
+          : " our workspace"
+        const message =
+          `Hello! You've been invited to join${workspaceLabel} on MuvxTMS as a ${roleLabel}. ` +
+          `Click the link below to accept your invitation: ${inviteUrl}`
+        const whatsappNumber = variables.phone.replace(/\D/g, "")
+        const whatsappUrl =
+          `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`
+
+        try {
+          if (variables.whatsappWindow.closed) throw new Error("WhatsApp tab was closed")
+          variables.whatsappWindow.opener = null
+          variables.whatsappWindow.location.replace(whatsappUrl)
+          toast.success(
+            "Invitation created. Review the WhatsApp message and press Send there.",
+          )
+        } catch {
+          variables.whatsappWindow.close()
+          toast.error(
+            "The invitation was created, but WhatsApp could not be opened. Copy the invitation link from the Invitations list and share it manually.",
+          )
+          return
+        }
+      } else {
+        toast.success(`Invitation sent to ${inviteEmail}`)
+      }
+      setInviteEmail("")
+      setInvitePhone("")
+      setPhoneInputKey((key) => key + 1)
+      setInviteEmailError("")
+      setInvitePhoneError("")
+      setInviteMethod("email")
+      setInviteRole("dispatcher")
+      setInviteOpen(false)
     },
-    onError: (err: Error) => {
-      console.error("[TEAM] inviteMember failed:", err)
+    onError: (err: Error, variables) => {
+      if (variables.channel === "whatsapp") variables.whatsappWindow.close()
       toast.error(err.message)
+    },
+    onSettled: () => {
+      inviteSubmitting.current = false
     },
   })
 
   // ─── Cancel invitation (Better Auth client; status="canceled") ──
   const cancelInviteMutation = useMutation({
     mutationFn: async (invitationId: string) => {
-      console.log("[TEAM] cancelInvitation →", invitationId)
       const { error } = await authClient.organization.cancelInvitation({
         invitationId,
       })
@@ -313,7 +389,6 @@ function TeamSettingsInner() {
   // ─── Resend invitation (WS-20) ──
   const resendInviteMutation = useMutation({
     mutationFn: async (invitationId: string) => {
-      console.log("[TEAM] resendInvitation →", invitationId)
       return await resendInvitationAction({ invitationId })
     },
     onSuccess: () => {
@@ -324,6 +399,43 @@ function TeamSettingsInner() {
     onError: (err: Error) => {
       console.error("[TEAM] resend failed:", err)
       toast.error(err.message)
+    },
+  })
+
+  const resendWhatsAppInviteMutation = useMutation({
+    mutationFn: (invitationId: string) =>
+      resendWhatsAppInvitationAction({ invitationId }),
+    onSuccess: (result) => {
+      const whatsappWindow = resendWhatsAppWindow.current
+      if (!whatsappWindow || whatsappWindow.closed) {
+        toast.error("The invitation remains pending, but WhatsApp could not be opened.")
+        return
+      }
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BETTER_AUTH_URL || window.location.origin
+      const invitationUrl = new URL(
+        `/invite/${encodeURIComponent(result.id)}`,
+        baseUrl,
+      ).toString()
+      const roleLabel =
+        ROLES.find((role) => role.value === result.role)?.label ?? result.role
+      const message =
+        `Hello! You're invited to join${activeOrg?.name ? ` ${activeOrg.name}` : " our workspace"} on MuvxTMS as a ${roleLabel}. ` +
+        `Click the link below to accept your invitation: ${invitationUrl}`
+      const whatsappNumber = result.phone.replace(/\D/g, "")
+      whatsappWindow.opener = null
+      whatsappWindow.location.replace(
+        `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`,
+      )
+      toast.success("WhatsApp opened. Review the message and press Send there.")
+      queryClient.invalidateQueries({ queryKey: ["workspace-invitations"] })
+    },
+    onError: (error: Error) => {
+      resendWhatsAppWindow.current?.close()
+      toast.error(error.message)
+    },
+    onSettled: () => {
+      resendWhatsAppWindow.current = null
     },
   })
 
@@ -524,7 +636,16 @@ function TeamSettingsInner() {
             {viewerRole}
           </Badge>
           {canManage && (
-            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <Dialog
+              open={inviteOpen}
+              onOpenChange={(open) => {
+                setInviteOpen(open)
+                if (!open) {
+                  setInviteEmailError("")
+                  setInvitePhoneError("")
+                }
+              }}
+            >
               <DialogTrigger
                 render={
                   <Button className="h-9 px-4 rounded-full bg-brand-ink hover:bg-brand-ink-soft text-brand-cream text-sm" />
@@ -537,37 +658,147 @@ function TeamSettingsInner() {
                 <DialogHeader>
                   <DialogTitle>Invite a teammate</DialogTitle>
                   <DialogDescription>
-                    They&apos;ll receive an email with a link to join
-                    {activeOrg?.name ? ` ${activeOrg.name}` : " your workspace"}.
+                    {inviteMethod === "email"
+                      ? `Send an email invitation to join${activeOrg?.name ? ` ${activeOrg.name}` : " your workspace"}.`
+                      : `Create an invitation for${activeOrg?.name ? ` ${activeOrg.name}` : " your workspace"} and send it yourself in WhatsApp.`}
                   </DialogDescription>
                 </DialogHeader>
-                <form
-                  className="space-y-4"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    if (
-                      inviteEmail &&
-                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)
-                    ) {
-                      inviteMutation.mutate()
-                    } else {
-                      toast.error("Enter a valid email address")
-                    }
+                <Tabs
+                  value={inviteMethod}
+                  onValueChange={(value) => {
+                    setInviteMethod(value as "email" | "whatsapp")
+                    setInviteEmailError("")
+                    setInvitePhoneError("")
                   }}
                 >
-                  <div className="space-y-1.5">
-                    <Label htmlFor="invite-email">Email</Label>
-                    <Input
-                      id="invite-email"
-                      type="email"
-                      placeholder="teammate@company.com"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      className="h-10"
-                      autoFocus
-                      required
-                    />
-                  </div>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="email">
+                      <Mail className="mr-2 size-4" />
+                      Email
+                    </TabsTrigger>
+                    <TabsTrigger value="whatsapp">
+                      <MessageCircle className="mr-2 size-4" />
+                      WhatsApp
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <form
+                  className="space-y-4"
+                  noValidate
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (inviteSubmitting.current || inviteMutation.isPending) return
+
+                    if (inviteMethod === "email") {
+                      const email = inviteEmail.trim()
+                      if (!email) {
+                        setInviteEmailError("Email address is required.")
+                        return
+                      }
+                      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                        setInviteEmailError("Enter a valid email address.")
+                        return
+                      }
+                      inviteSubmitting.current = true
+                      setInviteEmailError("")
+                      inviteMutation.mutate({
+                        channel: "email",
+                        role: inviteRole,
+                      })
+                      return
+                    }
+
+                    if (!invitePhone) {
+                      setInvitePhoneError(
+                        "Choose a country and enter a valid complete phone number.",
+                      )
+                      return
+                    }
+
+                    const configuredBaseUrl =
+                      process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+                      window.location.origin
+                    let whatsappBaseUrl: string
+                    try {
+                      const parsedBaseUrl = new URL(configuredBaseUrl)
+                      if (
+                        parsedBaseUrl.protocol !== "http:" &&
+                        parsedBaseUrl.protocol !== "https:"
+                      ) {
+                        throw new Error("Unsupported application URL")
+                      }
+                      whatsappBaseUrl = parsedBaseUrl.origin
+                    } catch {
+                      toast.error(
+                        "The configured public app URL is invalid. No invitation was created.",
+                      )
+                      return
+                    }
+
+                    const whatsappWindow = window.open("about:blank", "_blank")
+                    if (!whatsappWindow) {
+                      toast.error(
+                        "Allow pop-ups for this site to open WhatsApp. No invitation was created.",
+                      )
+                      return
+                    }
+
+                    inviteSubmitting.current = true
+                    setInvitePhoneError("")
+                    inviteMutation.mutate({
+                      channel: "whatsapp",
+                      whatsappWindow,
+                      whatsappBaseUrl,
+                      phone: invitePhone,
+                      role: inviteRole,
+                    })
+                  }}
+                >
+                  {inviteMethod === "email" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="invite-email">Email</Label>
+                      <Input
+                        id="invite-email"
+                        type="email"
+                        placeholder="teammate@company.com"
+                        value={inviteEmail}
+                        onChange={(event) => {
+                          setInviteEmail(event.target.value)
+                          setInviteEmailError("")
+                        }}
+                        className="h-10"
+                        autoFocus
+                        required
+                        aria-invalid={Boolean(inviteEmailError)}
+                        aria-describedby={
+                          inviteEmailError ? "invite-email-error" : undefined
+                        }
+                      />
+                      {inviteEmailError && (
+                        <p
+                          id="invite-email-error"
+                          className="text-xs text-destructive"
+                          role="alert"
+                        >
+                          {inviteEmailError}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="whatsapp-phone">Phone number</Label>
+                      <InternationalPhoneInput
+                        key={phoneInputKey}
+                        id="whatsapp-phone"
+                        value={invitePhone}
+                        onChange={(value) => {
+                          setInvitePhone(value)
+                          if (value) setInvitePhoneError("")
+                        }}
+                        error={invitePhoneError}
+                      />
+                    </div>
+                  )}
                   <div className="space-y-1.5">
                     <Label htmlFor="invite-role">Role</Label>
                     <Select
@@ -596,23 +827,34 @@ function TeamSettingsInner() {
                       type="button"
                       variant="ghost"
                       onClick={() => setInviteOpen(false)}
+                      disabled={inviteMutation.isPending}
                     >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
-                      className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+                      variant={inviteMethod === "whatsapp" ? "outline" : "default"}
+                      className={
+                        inviteMethod === "whatsapp"
+                          ? "border-green-700/30 text-green-800 hover:bg-green-50"
+                          : "bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+                      }
                       disabled={inviteMutation.isPending}
                     >
                       {inviteMutation.isPending ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Sending…
+                          Creating…
+                        </>
+                      ) : inviteMethod === "whatsapp" ? (
+                        <>
+                          <MessageCircle className="h-4 w-4 mr-2 text-green-700" />
+                          Invite via WhatsApp
                         </>
                       ) : (
                         <>
                           <Send className="h-4 w-4 mr-2" />
-                          Send invite
+                          Send Email Invitation
                         </>
                       )}
                     </Button>
@@ -925,18 +1167,27 @@ function TeamSettingsInner() {
                 className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
               >
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-accent-tint text-brand-accent">
-                  <Mail className="h-4 w-4" />
+                  {inv.invitationMethod === "whatsapp" ? (
+                    <MessageCircle className="h-4 w-4" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="truncate text-sm font-medium text-brand-ink">
-                      {inv.email}
+                      {inv.invitationMethod === "whatsapp"
+                        ? inv.recipientPhone
+                        : inv.email}
                     </p>
                     <Badge
                       variant="secondary"
                       className="h-5 text-[10px] uppercase"
                     >
                       {inv.status}
+                    </Badge>
+                    <Badge variant="outline" className="h-5 text-[10px] uppercase">
+                      {inv.invitationMethod}
                     </Badge>
                   </div>
                   <p className="truncate text-xs text-brand-muted-soft">
@@ -960,17 +1211,42 @@ function TeamSettingsInner() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => resendInviteMutation.mutate(inv.id)}
-                      disabled={resendInviteMutation.isPending}
+                      onClick={() => {
+                        if (inv.invitationMethod === "whatsapp") {
+                          const whatsappWindow = window.open("about:blank", "_blank")
+                          if (!whatsappWindow) {
+                            toast.error(
+                              "Allow pop-ups for this site to resend the WhatsApp invitation.",
+                            )
+                            return
+                          }
+                          resendWhatsAppWindow.current = whatsappWindow
+                          resendWhatsAppInviteMutation.mutate(inv.id)
+                        } else {
+                          resendInviteMutation.mutate(inv.id)
+                        }
+                      }}
+                      disabled={
+                        resendInviteMutation.isPending ||
+                        resendWhatsAppInviteMutation.isPending
+                      }
                       className="text-brand-muted-soft hover:text-brand-ink"
                     >
-                      {resendInviteMutation.isPending &&
-                      resendInviteMutation.variables === inv.id ? (
+                      {(resendInviteMutation.isPending &&
+                        resendInviteMutation.variables === inv.id) ||
+                      (resendWhatsAppInviteMutation.isPending &&
+                        resendWhatsAppInviteMutation.variables === inv.id) ? (
                         <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
                       ) : (
-                        <Send className="h-3.5 w-3.5 mr-1" />
+                        inv.invitationMethod === "whatsapp" ? (
+                          <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5 mr-1" />
+                        )
                       )}
-                      Resend
+                      {inv.invitationMethod === "whatsapp"
+                        ? "Resend via WhatsApp"
+                        : "Resend"}
                     </Button>
                     <Button
                       variant="ghost"

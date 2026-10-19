@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
+import { getAuthErrorDetails, getAuthErrorMessage } from "@/lib/auth-error"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -144,13 +145,17 @@ export function LoginForm({
         callbackURL: "/auth-redirect",
       })
       if (result.error) {
-        console.error("[LOGIN] Google login error:", result.error)
-        setError(result.error.message || "Google sign-in failed")
+        const details = getAuthErrorDetails(result.error)
+        console.error("[LOGIN] Google login error:", details)
+        setError(getAuthErrorMessage(details, "Google sign-in failed"))
         setGoogleLoading(false)
       }
     } catch (err) {
-      console.error("[LOGIN] Google login exception:", err)
-      setError("An unexpected error occurred with Google sign-in")
+      const details = getAuthErrorDetails(err)
+      console.error("[LOGIN] Google login exception:", details)
+      setError(
+        getAuthErrorMessage(details, "An unexpected error occurred with Google sign-in"),
+      )
       setGoogleLoading(false)
     }
   }

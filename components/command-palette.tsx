@@ -50,7 +50,7 @@ const ENTRIES: NavEntry[] = [
   { label: "Reports", href: "/reports", icon: TrendingUp, group: "Pages" },
   { label: "Create new load", href: "/loads/new", icon: Plus, shortcut: "C", group: "Actions" },
   { label: "Notifications", href: "/notifications", icon: Bell, group: "Account" },
-  { label: "Members", href: "/settings/members", icon: UserCog, group: "Account" },
+  { label: "Members", href: "/settings/team", icon: UserCog, group: "Account" },
   { label: "Settings", href: "/settings", icon: Settings, group: "Account" },
   { label: "Billing", href: "/settings/billing", icon: CreditCard, group: "Account" },
 ]

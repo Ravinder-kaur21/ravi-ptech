@@ -16,11 +16,13 @@
  * No raw Date params in `sql\`${...}\`` (postgres-js binding).
  */
 import { z } from "zod"
-import { eq, and, gt } from "drizzle-orm"
+import { randomBytes } from "node:crypto"
+import { isValidPhoneNumber } from "libphonenumber-js/max"
+import { eq, and, gt, lte } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
 import { member, invitation, user, organization, session as sessionTable } from "@/lib/schema"
-import { requireTenant } from "@/lib/dal"
+import { getSession, requireTenant } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
 import { sendInvitationEmail } from "@/lib/email"
 
@@ -33,6 +35,351 @@ const resendSchema = z.object({
 })
 
 export type ResendInvitationResult = { ok: true; invitationId: string }
+
+const whatsappInvitationSchema = z.object({
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{7,14}$/, "Invalid international phone number")
+    .refine(isValidPhoneNumber, "Invalid international phone number"),
+  role: z.enum([
+    "admin",
+    "member",
+    "operations_manager",
+    "dispatcher",
+    "accounting",
+    "driver",
+    "safety",
+  ]),
+})
+
+const whatsappInvitationIdSchema = z.string().min(1).max(128)
+const WHATSAPP_INVITATION_EXPIRY_MS = 48 * 60 * 60 * 1000
+
+function getDatabaseErrorMetadata(error: unknown) {
+  if (typeof error !== "object" || error === null) return {}
+  return {
+    code: "code" in error && typeof error.code === "string" ? error.code : undefined,
+    column:
+      "column" in error && typeof error.column === "string"
+        ? error.column
+        : undefined,
+    constraint:
+      "constraint" in error && typeof error.constraint === "string"
+        ? error.constraint
+        : undefined,
+  }
+}
+
+async function requireInvitationManager() {
+  const ctx = await requireTenant()
+  const [actorMember] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
+    )
+    .limit(1)
+  if (!actorMember || !["owner", "admin"].includes(actorMember.role)) {
+    throw new Error("Only workspace owners and administrators can invite teammates")
+  }
+
+  const [actor] = await db
+    .select({ id: user.id, email: user.email, name: user.name })
+    .from(user)
+    .where(eq(user.id, ctx.userId))
+    .limit(1)
+  if (!actor) throw new Error("Invitation creator was not found")
+
+  return { ...ctx, actor }
+}
+
+export async function createWhatsAppInvitationAction(input: {
+  phone: string
+  role: string
+}): Promise<{ id: string; expiresAt: string; workspaceName: string }> {
+  const parsed = whatsappInvitationSchema.safeParse(input)
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid WhatsApp invitation")
+  }
+
+  const ctx = await requireInvitationManager()
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + WHATSAPP_INVITATION_EXPIRY_MS)
+  const id = randomBytes(32).toString("base64url")
+
+  const [workspace] = await db
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, ctx.tenantId))
+    .limit(1)
+  if (!workspace) throw new Error("Workspace was not found")
+
+  let created: { id: string; expiresAt: Date } | undefined
+  try {
+    const createdRows = await db.transaction(async (tx) => {
+      await tx
+        .update(invitation)
+        .set({ status: "canceled" })
+        .where(
+          and(
+            eq(invitation.organizationId, ctx.tenantId),
+            eq(invitation.invitationMethod, "whatsapp"),
+            eq(invitation.recipientPhone, parsed.data.phone),
+            eq(invitation.status, "pending"),
+            lte(invitation.expiresAt, now),
+          ),
+        )
+
+      return tx
+        .insert(invitation)
+        .values({
+          id,
+          organizationId: ctx.tenantId,
+          email: null,
+          invitationMethod: "whatsapp",
+          recipientPhone: parsed.data.phone,
+          role: parsed.data.role,
+          status: "pending",
+          expiresAt,
+          inviterId: ctx.userId,
+          inviterEmail: ctx.actor.email,
+        })
+        .onConflictDoNothing()
+        .returning({ id: invitation.id, expiresAt: invitation.expiresAt })
+    })
+    created = createdRows[0]
+  } catch (error) {
+    const metadata = getDatabaseErrorMetadata(error)
+    console.error("[ACTION/WHATSAPP-INVITE] database operation failed", metadata)
+    if (
+      metadata.code === "42703" &&
+      (metadata.column === "invitation_method" ||
+        metadata.column === "recipient_phone")
+    ) {
+      throw new Error(
+        "WhatsApp invitation database setup is incomplete. Run the pending database migrations and try again.",
+      )
+    }
+    throw new Error("Could not create the WhatsApp invitation. Please try again.")
+  }
+  if (!created) {
+    throw new Error("A pending WhatsApp invitation already exists for this phone number")
+  }
+
+  await recordAuditEvent({
+    actor: { id: ctx.actor.id, email: ctx.actor.email },
+    action: "user.invite-to-org",
+    target: { type: "invitation", label: "WhatsApp invitation" },
+    metadata: {
+      organizationId: ctx.tenantId,
+      organizationName: workspace.name,
+      role: parsed.data.role,
+      method: "whatsapp",
+    },
+  })
+
+  revalidatePath("/settings/team")
+  return {
+    id: created.id,
+    expiresAt: created.expiresAt.toISOString(),
+    workspaceName: workspace.name,
+  }
+}
+
+export async function getWhatsAppInvitationAction(input: {
+  invitationId: string
+}) {
+  const parsed = whatsappInvitationIdSchema.safeParse(input.invitationId)
+  if (!parsed.success) return null
+
+  const session = await getSession()
+  if (!session?.user) throw new Error("Sign in to view this invitation")
+
+  const [inv] = await db
+    .select()
+    .from(invitation)
+    .where(
+      and(
+        eq(invitation.id, parsed.data),
+        eq(invitation.invitationMethod, "whatsapp"),
+      ),
+    )
+    .limit(1)
+  if (!inv) return null
+
+  const [workspace] = await db
+    .select({ id: organization.id, name: organization.name, slug: organization.slug })
+    .from(organization)
+    .where(eq(organization.id, inv.organizationId))
+    .limit(1)
+  if (!workspace) return null
+
+  const [inviter] = inv.inviterId
+    ? await db
+        .select({ id: user.id, name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, inv.inviterId))
+        .limit(1)
+    : []
+
+  return {
+    id: inv.id,
+    organizationId: inv.organizationId,
+    email: null,
+    invitationMethod: "whatsapp" as const,
+    role: inv.role ?? "member",
+    status: inv.status,
+    expiresAt: inv.expiresAt.toISOString(),
+    organization: workspace,
+    inviter: inviter ?? null,
+  }
+}
+
+export async function acceptWhatsAppInvitationAction(input: {
+  invitationId: string
+}): Promise<{ organizationId: string }> {
+  const parsed = whatsappInvitationIdSchema.safeParse(input.invitationId)
+  if (!parsed.success) throw new Error("Invitation was not found")
+  const session = await getSession()
+  if (!session?.user) throw new Error("Sign in to accept this invitation")
+  if (!session.user.emailVerified) {
+    throw new Error("Verify your account email before accepting this invitation")
+  }
+
+  const accepted = await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select()
+      .from(invitation)
+      .where(
+        and(
+          eq(invitation.id, parsed.data),
+          eq(invitation.invitationMethod, "whatsapp"),
+          eq(invitation.status, "pending"),
+        ),
+      )
+      .limit(1)
+      .for("update")
+
+    if (!inv) throw new Error("This invitation is canceled or already used")
+    if (inv.expiresAt <= new Date()) throw new Error("This invitation has expired")
+
+    const [workspace] = await tx
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, inv.organizationId))
+      .for("update")
+    if (!workspace) throw new Error("The invited workspace no longer exists")
+
+    const [existingMember] = await tx
+      .select({ id: member.id })
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, inv.organizationId),
+          eq(member.userId, session.user.id),
+        ),
+      )
+      .limit(1)
+    if (existingMember) throw new Error("You are already a member of this workspace")
+
+    const [updated] = await tx
+      .update(invitation)
+      .set({ status: "accepted" })
+      .where(
+        and(eq(invitation.id, inv.id), eq(invitation.status, "pending")),
+      )
+      .returning({ id: invitation.id })
+    if (!updated) throw new Error("This invitation was already used")
+
+    await tx.insert(member).values({
+      id: randomBytes(24).toString("base64url"),
+      organizationId: inv.organizationId,
+      userId: session.user.id,
+      role: inv.role ?? "member",
+      createdAt: new Date(),
+    })
+
+    return { organizationId: inv.organizationId, role: inv.role ?? "member" }
+  })
+
+  await recordAuditEvent({
+    actor: { id: session.user.id, email: session.user.email },
+    action: "user.invite-to-org",
+    target: { type: "member", label: "Accepted WhatsApp invitation" },
+    metadata: {
+      organizationId: accepted.organizationId,
+      role: accepted.role,
+      method: "whatsapp",
+    },
+  })
+  revalidatePath("/settings/team")
+  return { organizationId: accepted.organizationId }
+}
+
+export async function rejectWhatsAppInvitationAction(input: {
+  invitationId: string
+}): Promise<void> {
+  const parsed = whatsappInvitationIdSchema.safeParse(input.invitationId)
+  if (!parsed.success) throw new Error("Invitation was not found")
+  const session = await getSession()
+  if (!session?.user) throw new Error("Sign in to decline this invitation")
+
+  const [updated] = await db
+    .update(invitation)
+    .set({ status: "rejected" })
+    .where(
+      and(
+        eq(invitation.id, parsed.data),
+        eq(invitation.invitationMethod, "whatsapp"),
+        eq(invitation.status, "pending"),
+        gt(invitation.expiresAt, new Date()),
+      ),
+    )
+    .returning({ id: invitation.id })
+  if (!updated) throw new Error("This invitation is expired, canceled, or already used")
+  revalidatePath("/settings/team")
+}
+
+export async function resendWhatsAppInvitationAction(input: {
+  invitationId: string
+}): Promise<{ id: string; phone: string; role: string; expiresAt: string }> {
+  const parsed = whatsappInvitationIdSchema.safeParse(input.invitationId)
+  if (!parsed.success) throw new Error("Invitation was not found")
+  const ctx = await requireInvitationManager()
+  const [inv] = await db
+    .select({
+      id: invitation.id,
+      phone: invitation.recipientPhone,
+      role: invitation.role,
+      expiresAt: invitation.expiresAt,
+      status: invitation.status,
+    })
+    .from(invitation)
+    .where(
+      and(
+        eq(invitation.id, parsed.data),
+        eq(invitation.organizationId, ctx.tenantId),
+        eq(invitation.invitationMethod, "whatsapp"),
+        eq(invitation.status, "pending"),
+        gt(invitation.expiresAt, new Date()),
+      ),
+    )
+    .limit(1)
+  if (!inv?.phone) throw new Error("WhatsApp invitation was not found or has expired")
+
+  await recordAuditEvent({
+    actor: { id: ctx.actor.id, email: ctx.actor.email },
+    action: "user.invite-resent",
+    target: { type: "invitation", label: "WhatsApp invitation" },
+    metadata: { organizationId: ctx.tenantId, method: "whatsapp" },
+  })
+  return {
+    id: inv.id,
+    phone: inv.phone,
+    role: inv.role ?? "member",
+    expiresAt: inv.expiresAt.toISOString(),
+  }
+}
 
 const assignableRoleSchema = z.enum([
   "admin",
@@ -63,7 +410,7 @@ export async function resendInvitationAction(input: {
   const ctx = await requireTenant()
 
   console.log(
-    `[ACTION/INVITE-RESEND] invitationId=${input.invitationId} actor=${ctx.userId} tenant=${ctx.tenantId}`,
+    `[ACTION/INVITE-RESEND] actor=${ctx.userId} tenant=${ctx.tenantId}`,
   )
 
   const [inv] = await db
@@ -80,6 +427,9 @@ export async function resendInvitationAction(input: {
   if (!inv) throw new Error("Invitation was not found or has expired")
   if (inv.status !== "pending") {
     throw new Error(`Cannot resend: invitation is ${inv.status}`)
+  }
+  if (inv.invitationMethod !== "email" || !inv.email) {
+    throw new Error("Use WhatsApp to resend this invitation")
   }
 
   const [actor] = await db

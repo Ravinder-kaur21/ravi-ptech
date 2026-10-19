@@ -1,23 +1,31 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import {
+  acceptWhatsAppInvitationAction,
+  getWhatsAppInvitationAction,
+  rejectWhatsAppInvitationAction,
+} from "@/app/actions/invitation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Loader2, Mail, CheckCircle2, XCircle, Building2, ArrowRight } from "lucide-react"
+import { Loader2, Mail, XCircle, Building2, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
 
 type Invitation = {
   id: string
   organizationId: string
-  email: string
+  email: string | null
+  phone?: string | null
+  invitationMethod?: "email" | "whatsapp"
   role: string
   status: "pending" | "accepted" | "rejected" | "canceled"
   expiresAt: string | Date
+  isExpired?: boolean
   organization?: {
     id: string
     name: string
@@ -36,7 +44,6 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
 
   // Gate: must be signed in
   useEffect(() => {
-    console.log("[INVITE] invitationId:", invitationId)
     if (!invitationId) return
     let cancelled = false
     ;(async () => {
@@ -62,7 +69,17 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
   const inviteQuery = useQuery({
     queryKey: ["invitation", invitationId],
     queryFn: async () => {
-      console.log("[INVITE] getInvitation →", invitationId)
+      const whatsappInvitation = await getWhatsAppInvitationAction({
+        invitationId: invitationId!,
+      })
+      if (whatsappInvitation) {
+        return {
+          ...whatsappInvitation,
+          isExpired:
+            new Date(whatsappInvitation.expiresAt).getTime() <= Date.now(),
+        } as Invitation
+      }
+
       const { data, error } = await authClient.organization.getInvitation({
         query: { id: invitationId! },
       })
@@ -70,18 +87,21 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
         console.error("[INVITE] getInvitation error:", error)
         throw new Error(error.message || "Failed to load invitation")
       }
-      console.log("[INVITE] invitation:", data)
-      return data as Invitation | null
+      if (!data) return null
+      const invitation = data as Invitation
+      return {
+        ...invitation,
+        isExpired: new Date(invitation.expiresAt).getTime() <= Date.now(),
+      }
     },
     enabled: Boolean(invitationId && sessionReady),
     retry: false,
   })
 
   const invitation = inviteQuery.data
-  const expired =
-    invitation?.expiresAt &&
-    new Date(invitation.expiresAt).getTime() < Date.now()
+  const expired = invitation?.isExpired
   const wrongEmail =
+    invitation?.invitationMethod !== "whatsapp" &&
     invitation?.email &&
     sessionUser &&
     invitation.email.toLowerCase() !== sessionUser.email.toLowerCase()
@@ -89,7 +109,9 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
   // ─── Accept ───
   const acceptMutation = useMutation({
     mutationFn: async () => {
-      console.log("[INVITE] acceptInvitation →", invitationId)
+      if (invitation?.invitationMethod === "whatsapp") {
+        return acceptWhatsAppInvitationAction({ invitationId: invitationId! })
+      }
       const { data, error } = await authClient.organization.acceptInvitation({
         invitationId: invitationId!,
       })
@@ -124,7 +146,10 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
   // ─── Reject ───
   const rejectMutation = useMutation({
     mutationFn: async () => {
-      console.log("[INVITE] rejectInvitation →", invitationId)
+      if (invitation?.invitationMethod === "whatsapp") {
+        await rejectWhatsAppInvitationAction({ invitationId: invitationId! })
+        return true
+      }
       const { error } = await authClient.organization.rejectInvitation({
         invitationId: invitationId!,
       })
@@ -187,6 +212,22 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
               Back to dashboard
             </Button>
           </div>
+        ) : invitation.status !== "pending" ? (
+          <div className="py-8 text-center">
+            <XCircle className="h-10 w-10 mx-auto text-brand-accent" />
+            <h1 className="font-serif text-2xl mt-3 text-brand-ink">
+              Invitation unavailable
+            </h1>
+            <p className="mt-2 text-sm text-brand-muted-soft">
+              This invitation has already been accepted, declined, or canceled.
+            </p>
+            <Button
+              onClick={() => router.replace("/dashboard")}
+              className="mt-6 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
+            >
+              Go to dashboard
+            </Button>
+          </div>
         ) : wrongEmail ? (
           <div className="py-8 text-center">
             <Mail className="h-10 w-10 mx-auto text-brand-accent" />
@@ -216,16 +257,18 @@ export function InviteClient({ invitationId }: { invitationId: string }) {
               >
                 Sign out
               </Button>
-              <Button
-                render={
-                  <Link
-                    href={`/signup?email=${encodeURIComponent(invitation.email)}&next=${encodeURIComponent(`/invite/${invitationId}`)}`}
-                    className="h-10 px-5 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream inline-flex items-center justify-center gap-2 rounded-full"
-                  />
-                }
-              >
-                Sign up with this email
-              </Button>
+              {invitation.email && (
+                <Button
+                  render={
+                    <Link
+                      href={`/signup?email=${encodeURIComponent(invitation.email)}&next=${encodeURIComponent(`/invite/${invitationId}`)}`}
+                      className="h-10 px-5 bg-brand-ink hover:bg-brand-ink-soft text-brand-cream inline-flex items-center justify-center gap-2 rounded-full"
+                    />
+                  }
+                >
+                  Sign up with this email
+                </Button>
+              )}
             </div>
           </div>
         ) : (

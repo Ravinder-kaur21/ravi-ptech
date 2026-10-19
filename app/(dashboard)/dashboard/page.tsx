@@ -21,6 +21,7 @@ import {
   getLoadsForOrg,
 } from "@/lib/dal"
 import { StatusBadge } from "@/components/status-badge"
+import { FleetInsights } from "@/components/fleet-insights"
 
 // Server actions / dynamic data — opt out of instant-navigation validation
 export const instant = false
@@ -67,6 +68,8 @@ export default async function DashboardHomePage() {
         <KpiCard label="Revenue MTD" value={formatCurrency(monthlyRevenue)} icon={DollarSign} />
         <KpiCard label="On-time %" value="—" icon={CheckCircle2} hint="Available after first delivery" />
       </div>
+
+      <FleetInsights />
 
       {/* Active loads + Quick actions */}
       <div className="grid gap-6 lg:grid-cols-3">

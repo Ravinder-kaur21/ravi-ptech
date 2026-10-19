@@ -260,7 +260,6 @@ export async function sendInvitationEmail(data: {
 }) {
   console.log("[EMAIL] === sendInvitationEmail called ===")
   console.log("[EMAIL] Params:", {
-    id: data.id,
     email: data.email,
     role: data.role,
     org: data.organization?.name,

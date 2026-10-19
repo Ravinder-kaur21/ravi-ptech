@@ -15,6 +15,16 @@ export default function DashboardHomeLoading() {
         ))}
       </div>
 
+      <div className="space-y-3">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-96 max-w-full" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 rounded-lg" />
+          ))}
+        </div>
+      </div>
+
       {/* Active loads + Quick actions */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-3">

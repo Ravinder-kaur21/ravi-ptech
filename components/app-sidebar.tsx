@@ -78,7 +78,7 @@ const MAIN_NAV: NavItem[] = [
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Members", href: "/settings/members", icon: UserCog },
+  { label: "Members", href: "/settings/team", icon: UserCog },
   { label: "Billing", href: "/settings/billing", icon: CreditCard },
   { label: "Settings", href: "/settings", icon: Settings },
 ]

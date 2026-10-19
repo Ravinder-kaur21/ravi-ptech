@@ -1507,6 +1507,8 @@ export async function listInvitationsForOrg(
     .select({
       id: invitation.id,
       email: invitation.email,
+      invitationMethod: invitation.invitationMethod,
+      recipientPhone: invitation.recipientPhone,
       role: invitation.role,
       status: invitation.status,
       expiresAt: invitation.expiresAt,

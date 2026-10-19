@@ -32,9 +32,45 @@ console.log("[AUTH] Better Auth URL:", process.env.BETTER_AUTH_URL)
 console.log("[AUTH] Google Client ID exists:", !!process.env.GOOGLE_CLIENT_ID)
 console.log("[AUTH] Resend API Key exists:", !!process.env.RESEND_API_KEY)
 
+function redactAuthLogText(value: string): string {
+  return value
+    .replace(
+      /\b(password|secret|token|authorization|cookie|codeVerifier|oauthState|access_token|refresh_token)\b(["']?\s*[:=]\s*["']?)[^,\s}"']+/gi,
+      "$1$2[REDACTED]",
+    )
+    .replace(/\bparams:\s*[\s\S]*$/i, "params: [REDACTED]")
+    .replace(
+      /\b(postgres(?:ql)?|https?):\/\/[^\s/@]+:[^\s/@]+@/gi,
+      "$1://[REDACTED]@",
+    )
+}
+
+function summarizeAuthLogError(error: Error) {
+  const cause = (error as Error & { cause?: unknown }).cause
+  const source = cause instanceof Error ? cause : error
+  const code =
+    "code" in source && typeof source.code === "string"
+      ? source.code
+      : undefined
+
+  return {
+    name: source.name,
+    message: redactAuthLogText(source.message),
+    ...(code ? { code } : {}),
+  }
+}
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,
+  logger: {
+    log(level, message, ...args) {
+      const safeArgs = args.map((arg) =>
+        arg instanceof Error ? summarizeAuthLogError(arg) : "[details omitted]",
+      )
+      console[level](redactAuthLogText(message), ...safeArgs)
+    },
+  },
 
   plugins: [
     username(),
@@ -102,7 +138,7 @@ export const auth = betterAuth({
         }
       }) {
         console.log(
-          `[AUTH] organization.sendInvitationEmail id=${data.id} email=${data.email} role=${data.role} org=${data.organization?.name}`,
+          `[AUTH] organization.sendInvitationEmail email=${data.email} role=${data.role} org=${data.organization?.name}`,
         )
         try {
           await sendInvitationEmail({

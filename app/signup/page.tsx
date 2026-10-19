@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { authClient } from "@/lib/auth-client"
+import { getAuthErrorDetails, getAuthErrorMessage } from "@/lib/auth-error"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -134,13 +135,17 @@ function SignupContent() {
         callbackURL: "/auth-redirect",
       })
       if (result.error) {
-        console.error("[SIGNUP] Google signup error:", result.error)
-        setError(result.error.message || "Google sign-up failed")
+        const details = getAuthErrorDetails(result.error)
+        console.error("[SIGNUP] Google signup error:", details)
+        setError(getAuthErrorMessage(details, "Google sign-up failed"))
         setGoogleLoading(false)
       }
     } catch (err) {
-      console.error("[SIGNUP] Google signup exception:", err)
-      setError("An unexpected error occurred with Google sign-up")
+      const details = getAuthErrorDetails(err)
+      console.error("[SIGNUP] Google signup exception:", details)
+      setError(
+        getAuthErrorMessage(details, "An unexpected error occurred with Google sign-up"),
+      )
       setGoogleLoading(false)
     }
   }
