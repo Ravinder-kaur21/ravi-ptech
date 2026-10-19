@@ -70,11 +70,22 @@ export const ChainOfThought = memo(
 
 export type ChainOfThoughtHeaderProps = ComponentProps<
   typeof CollapsibleTrigger
->;
+> & {
+  /**
+   * Replaces the default Brain glyph. Pass `null` together with children to
+   * render a completely bare header (no icon, no default label) — that is
+   * what a product wants when it renders its own avatar, since two faces or a
+   * generic "Chain of Thought" string next to a branded avatar reads as a bug.
+   */
+  headerIcon?: ReactNode | null;
+};
 
 export const ChainOfThoughtHeader = memo(
-  ({ className, children, ...props }: ChainOfThoughtHeaderProps) => {
+  ({ className, children, headerIcon, ...props }: ChainOfThoughtHeaderProps) => {
     const { isOpen, setIsOpen } = useChainOfThought();
+    // Only fall back to the Brain glyph + default label when the caller opted
+    // out of them entirely (undefined). An explicit `null` means "no glyph".
+    const hasCustomHeader = headerIcon !== undefined;
 
     return (
       <Collapsible onOpenChange={setIsOpen} open={isOpen}>
@@ -85,10 +96,15 @@ export const ChainOfThoughtHeader = memo(
           )}
           {...props}
         >
-          <BrainIcon className="size-4" />
-          <span className="flex-1 text-left">
-            {children ?? "Chain of Thought"}
-          </span>
+          {hasCustomHeader ? headerIcon : <BrainIcon className="size-4" />}
+          {!hasCustomHeader && (
+            <span className="flex-1 text-left">
+              {children ?? "Chain of Thought"}
+            </span>
+          )}
+          {hasCustomHeader && children && (
+            <span className="flex-1 text-left">{children}</span>
+          )}
           <ChevronDownIcon
             className={cn(
               "size-4 transition-transform",
@@ -106,6 +122,13 @@ export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
   label: ReactNode;
   description?: ReactNode;
   status?: "complete" | "active" | "pending";
+  /**
+   * Renders the vertical rail that visually links this step to the next one.
+   * Off by default: a trailing rail on the final step dangles below the last
+   * icon with nothing to connect to. The container sets this automatically for
+   * all but the last child.
+   */
+  showConnector?: boolean;
 };
 
 const stepStatusStyles = {
@@ -121,23 +144,31 @@ export const ChainOfThoughtStep = memo(
     label,
     description,
     status = "complete",
+    showConnector = false,
     children,
     ...props
   }: ChainOfThoughtStepProps) => (
     <div
       className={cn(
-        "flex gap-2 text-sm",
+        "group/step relative flex gap-2 text-sm",
         stepStatusStyles[status],
         "fade-in-0 slide-in-from-top-2 animate-in",
         className
       )}
       {...props}
     >
-      <div className="relative mt-0.5">
+      {/* Icon column. `after:` draws the rail as a pseudo-element so it never
+          affects layout and is hidden cleanly on the last step. */}
+      <div className="relative mt-0.5 flex size-4 shrink-0 justify-center">
         <Icon className="size-4" />
-        <div className="absolute top-7 bottom-0 left-1/2 -mx-px w-px bg-border" />
+        {showConnector && (
+          <span
+            aria-hidden
+            className="absolute top-6 left-1/2 h-[calc(100%+0.5rem)] w-px -translate-x-1/2 bg-border"
+          />
+        )}
       </div>
-      <div className="flex-1 space-y-2 overflow-hidden">
+      <div className="flex-1 space-y-2 overflow-hidden pb-2 last:pb-0">
         <div>{label}</div>
         {description && (
           <div className="text-muted-foreground text-xs">{description}</div>

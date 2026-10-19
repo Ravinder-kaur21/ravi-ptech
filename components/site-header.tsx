@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
+import { usePermissions } from "@/lib/permissions-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -41,6 +42,8 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { CommandPalette } from "@/components/command-palette"
 import { QuickCreateLoad } from "@/components/quick-create-load"
+import { NotificationBellPopover } from "@/components/notifications/notification-bell-popover"
+import { SoundToggle } from "@/components/sound-toggle"
 import { toast } from "sonner"
 
 export function SiteHeader({
@@ -59,6 +62,9 @@ export function SiteHeader({
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [createOpen, setCreateOpen] = React.useState(false)
 
+  const perms = usePermissions()
+  const canCreateLoad = perms.has("loads.create")
+
   // [SITE-HEADER] ⌘K / Ctrl+K to open command palette
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -74,6 +80,7 @@ export function SiteHeader({
   // [SITE-HEADER] "C" to quick-create a load (when not in an input)
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (!canCreateLoad) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = (e.target as HTMLElement)?.tagName
       if (t === "INPUT" || t === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return
@@ -84,7 +91,7 @@ export function SiteHeader({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [])
+  }, [canCreateLoad])
 
   const handleStopImpersonating = async () => {
     console.log("[SITE-HEADER] stopping impersonation")
@@ -128,25 +135,22 @@ export function SiteHeader({
             <Kbd className="ml-auto">⌘K</Kbd>
           </Button>
 
-          {/* + New load */}
-          <Button
-            onClick={() => setCreateOpen(true)}
-            className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New load</span>
-          </Button>
+          {/* + New load (Opens full load creator with AI Rate-Con extraction) */}
+          {canCreateLoad && (
+            <Button
+              render={<Link href="/loads/new" />}
+              className="h-9 gap-1.5 rounded-full bg-brand-ink px-4 text-[13px] font-medium text-brand-cream hover:bg-brand-ink-soft cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">New load</span>
+            </Button>
+          )}
 
-          {/* Bell */}
-          <Button
-            variant="ghost"
-            size="icon"
-            render={<Link href="/notifications" />}
-            className="text-brand-ink/80 hover:text-brand-ink hover:bg-brand-cream-soft relative"
-          >
-            <Bell className="h-4 w-4" />
-            <span className="sr-only">Notifications</span>
-          </Button>
+          {/* Audio micro-interactions toggle */}
+          <SoundToggle />
+
+          {/* Interactive Bell Popover */}
+          <NotificationBellPopover />
 
           {/* User dropdown */}
           <DropdownMenu>
@@ -211,12 +215,6 @@ export function SiteHeader({
                 >
                   <CreditCard className="mr-2 size-4 text-brand-muted-soft" />
                   Billing
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  render={<Link href="/admin" className="rounded-md cursor-pointer" />}
-                >
-                  <ShieldCheck className="mr-2 size-4 text-brand-accent" />
-                  Admin console
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator className="bg-brand-rule" />

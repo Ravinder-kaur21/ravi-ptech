@@ -1,9 +1,15 @@
 import { Wrench } from "lucide-react"
 import { getMaintenanceSnapshot } from "@/lib/request-gate"
+import { formatWorkspaceDate, DEFAULT_TIMEZONE } from "@/lib/timezone"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
+import { connection } from "next/server"
+
+export const instant = false
+
 export default async function MaintenancePage() {
+  await connection()
   console.log("[MAINTENANCE-PAGE] rendering")
   const snap = await getMaintenanceSnapshot()
   return (
@@ -33,10 +39,10 @@ export default async function MaintenancePage() {
           {snap.startedAt && (
             <p>
               Started{" "}
-              {new Date(snap.startedAt).toLocaleString("en-US", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {formatWorkspaceDate(
+                new Date(snap.startedAt),
+                DEFAULT_TIMEZONE,
+              )}
             </p>
           )}
           {snap.startedByEmail && (
@@ -47,10 +53,10 @@ export default async function MaintenancePage() {
           {snap.endsAt && (
             <p>
               Scheduled to end{" "}
-              {new Date(snap.endsAt).toLocaleString("en-US", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {formatWorkspaceDate(
+                new Date(snap.endsAt),
+                DEFAULT_TIMEZONE,
+              )}
             </p>
           )}
         </CardContent>

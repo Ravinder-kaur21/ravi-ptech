@@ -18,6 +18,7 @@ type Organization = {
   name: string
   slug: string
   logo?: string | null
+  timeZone?: string | null
   // metadata comes from Better Auth as a record/object, not a string
   metadata?: Record<string, any> | null
 }

@@ -31,7 +31,13 @@ const publicRoutes = ["/login", "/signup", "/signup/verify"]
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-  console.log(`[PROXY] ${request.method} ${pathname}`)
+  const rawIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    request.headers.get("cf-connecting-ip") ||
+    request.headers.get("true-client-ip") ||
+    "127.0.0.1"
+  const clientIp = rawIp === "::1" ? "127.0.0.1" : rawIp
 
   const isProtectedRoute = protectedRoutes.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
@@ -54,8 +60,15 @@ export async function proxy(request: NextRequest) {
   const hasOrg = !!session?.session?.activeOrganizationId
 
   console.log(
-    `[PROXY] Path: ${pathname} | Auth: ${isAuthenticated} | HasOrg: ${hasOrg}`
+    `[PROXY] ${request.method} ${pathname} | IP: ${clientIp} | Auth: ${isAuthenticated} (${session?.user?.email ?? "anon"}) | Org: ${session?.session?.activeOrganizationId ?? "none"}`
   )
+
+  // Enrich request headers with validated client IP for downstream server actions & audit
+  const requestHeaders = new Headers(request.headers)
+  if (!requestHeaders.get("x-forwarded-for")) {
+    requestHeaders.set("x-forwarded-for", clientIp)
+  }
+  requestHeaders.set("x-real-ip", clientIp)
 
   // Case 1: Unauthenticated user trying to access protected routes
   if (isProtectedRoute && !isAuthenticated) {
@@ -93,7 +106,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth-redirect", request.url))
   }
 
-  return NextResponse.next()
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 }
 
 export const config = {

@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 type AppealRow = {
   id: string
@@ -53,6 +54,7 @@ export function AppealsTable({
 }: {
   initialAppeals: AppealRow[]
 }) {
+  const { formatDate } = useWorkspaceDate()
   const queryClient = useQueryClient()
   const [active, setActive] = React.useState<AppealRow | null>(null)
   const [decision, setDecision] = React.useState<"approved" | "denied" | null>(
@@ -261,7 +263,7 @@ export function AppealsTable({
               {active?.suspendedUntil && (
                 <p className="mt-2 text-[11px] text-amber-900/70">
                   Auto-lifts on{" "}
-                  {new Date(active.suspendedUntil).toLocaleDateString()}
+                  {formatDate(new Date(active.suspendedUntil))}
                 </p>
               )}
             </div>

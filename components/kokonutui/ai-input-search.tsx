@@ -14,13 +14,8 @@ import { Globe, Paperclip, Send } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ModelPicker, type AIModelItem } from "@/components/ai/model-picker";
+import { MessageFileAttachment } from "@/components/chat/message-file-attachment";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 
@@ -36,16 +31,16 @@ function formatModelLabel(model: string): string {
 export interface AIInputSearchProps {
   placeholder?: string;
   searchLabel?: string;
-  /** Available model IDs to show in the selector. */
-  models: string[];
+  /** Available models (IDs or rich items) to show in the selector. */
+  models: (string | AIModelItem)[];
   /** Currently selected model (controlled). */
   selectedModel: string;
   /** Called when the user picks a different model. */
   onModelChange: (model: string) => void;
-  /** Receives the text, web-search flag, and selected model. */
+  /** Receives the text, web-search flag, selected model, and staged files. */
   onSubmit?: (
     value: string,
-    options: { webSearch: boolean; model: string | null }
+    options: { webSearch: boolean; model: string | null; files?: File[] }
   ) => void;
   /** Called with the files picked through the attach button. */
   onFilesSelected?: (files: File[]) => void;
@@ -70,6 +65,8 @@ export default function AI_Input_Search({
   className,
 }: AIInputSearchProps) {
   const [value, setValue] = useState("");
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 52,
     maxHeight: 200,
@@ -88,11 +85,16 @@ export default function AI_Input_Search({
   };
 
   const handleSubmit = () => {
-    if (!value.trim()) {
+    if (!value.trim() && stagedFiles.length === 0) {
       return;
     }
-    onSubmit?.(value, { webSearch, model: selectedModel });
+    onSubmit?.(value, {
+      webSearch,
+      model: selectedModel,
+      files: stagedFiles.length > 0 ? stagedFiles : undefined,
+    });
     setValue("");
+    setStagedFiles([]);
     adjustHeight(true);
   };
 
@@ -105,22 +107,41 @@ export default function AI_Input_Search({
     textareaRef.current?.focus();
   };
 
-  const canSubmit = value.trim().length > 0;
+  const handleAddFiles = (files: File[]) => {
+    setStagedFiles((prev) => [...prev, ...files]);
+    onFilesSelected?.(files);
+  };
+
+  const canSubmit = value.trim().length > 0 || stagedFiles.length > 0;
 
   return (
-    <div className={cn("w-full py-4", className)}>
-      <div className="relative mx-auto w-full max-w-xl">
+    <div className={cn("w-full", className)}>
+      <div className="relative mx-auto w-full max-w-2xl px-4 sm:px-0">
         {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents lint/a11y/noNoninteractiveElementInteractions: pointer-only shortcut; the textarea and buttons inside are keyboard reachable */}
         <div
           className={cn(
-            "relative flex w-full cursor-text flex-col rounded-xl text-left transition-shadow duration-200",
-            "has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-sky-600 dark:has-[textarea:focus-visible]:ring-sky-500"
+            "relative flex w-full cursor-text flex-col rounded-2xl text-left transition-all duration-200 border border-brand-rule bg-brand-card shadow-xs",
+            "has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-brand-accent/20 has-[textarea:focus-visible]:border-brand-accent/40",
+            isDragging && "ring-2 ring-brand-accent/40 border-brand-accent bg-brand-cream/40"
           )}
           onClick={(e) => handleContainerClick(e.target)}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            const dropped = Array.from(e.dataTransfer.files ?? []);
+            if (dropped.length > 0) {
+              handleAddFiles(dropped);
+            }
+          }}
         >
           <Textarea
             aria-label={placeholder}
-            className="min-h-[52px] w-full resize-none rounded-xl rounded-b-none border-none bg-black/5 px-4 py-3 leading-[1.2] placeholder:text-black/70 focus-visible:ring-0 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+            className="min-h-[56px] w-full resize-none rounded-2xl rounded-b-none border-none bg-transparent px-4 py-3.5 text-sm leading-relaxed placeholder:text-brand-muted-soft focus-visible:ring-0 text-brand-ink outline-none"
             onChange={(e) => {
               setValue(e.target.value);
               adjustHeight();
@@ -140,30 +161,41 @@ export default function AI_Input_Search({
             value={value}
           />
 
-          <div className="flex items-center justify-between rounded-b-xl bg-black/5 px-3 pt-1 pb-3 dark:bg-white/5">
+          {/* Staged files — compact cards matching the message treatment. Same
+              component so a file looks identical before and after sending. */}
+          {stagedFiles.length > 0 && (
+            <div className="flex flex-wrap items-start gap-1.5 px-3.5 pb-2 pt-1">
+              {stagedFiles.map((file, idx) => (
+                <MessageFileAttachment
+                  key={`${file.name}-${idx}`}
+                  id={`staged-${file.name}-${idx}`}
+                  part={{
+                    type: "file",
+                    mediaType: file.type || "application/octet-stream",
+                    filename: file.name,
+                    url: "",
+                    size: file.size,
+                  }}
+                  className="group/attachment"
+                  onRemove={() =>
+                    setStagedFiles((prev) => prev.filter((_, i) => i !== idx))
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded-b-2xl bg-brand-cream/30 px-3 pt-1.5 pb-2.5 border-t border-brand-rule/60">
             <div className="flex items-center gap-2">
-              {/* Model selector */}
-              <Select
-                value={selectedModel}
-                onValueChange={(v) => v && onModelChange(v)}
+              {/* Model selector with authentic Lobehub icons */}
+              <ModelPicker
+                models={models.map((m) =>
+                  typeof m === "string" ? { id: m, name: formatModelLabel(m) } : m
+                )}
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
                 disabled={models.length === 0}
-              >
-                <SelectTrigger className="h-8 w-[180px] border-none bg-transparent text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((model) => (
-                    <SelectItem key={model} value={model}>
-                      <div className="flex flex-col">
-                        <span>{formatModelLabel(model)}</span>
-                        <span className="text-xs text-muted-foreground/60">
-                          {model}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
 
               <label className="group/attach cursor-pointer rounded-lg bg-black/5 p-2 transition-transform has-focus-visible:ring-2 has-focus-visible:ring-sky-600 motion-safe:active:scale-[0.97] dark:bg-white/5 dark:has-focus-visible:ring-sky-500">
                 <input
@@ -174,9 +206,10 @@ export default function AI_Input_Search({
                     // Clear so picking the same file again still fires onChange.
                     e.target.value = "";
                     if (files.length > 0) {
-                      onFilesSelected?.(files);
+                      handleAddFiles(files);
                     }
                   }}
+                  multiple
                   type="file"
                 />
                 <Paperclip className="h-4 w-4 text-black/40 transition-colors group-hover/attach:text-black dark:text-white/40 dark:group-hover/attach:text-white" />

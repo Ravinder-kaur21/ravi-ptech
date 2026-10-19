@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { authClient } from "@/lib/auth-client"
 import { useAuthStore } from "@/lib/stores/auth-store"
-import { updateWorkspaceProfileAction, type UpdateWorkspaceProfileInput } from "@/app/actions/workspace"
+import {
+  updateWorkspaceProfileAction,
+  type UpdateWorkspaceProfileInput,
+} from "@/app/actions/workspace"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
@@ -20,63 +24,108 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, Building2, Check, AlertCircle, Lock } from "lucide-react"
+import {
+  Loader2,
+  Building2,
+  Check,
+  AlertCircle,
+  Lock,
+  Upload,
+  X,
+  Truck,
+  Compass,
+  Package,
+  Target,
+} from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
-// ─── Phase 3 — workspace profile (WS-09, WS-10, WS-14) ──────────────────────
-// Owner/admin can edit business type, regulatory IDs, contact, and ops
-// defaults. Non-admins see the same form as read-only (the "read" scope
-// is included on every role; the server action enforces "update" for
-// owner + admin only).
+import { getAvailableTimezones } from "@/lib/timezone"
+import { getAllCurrencies } from "@/lib/currencies"
+import { getAllCountries } from "@/lib/geography"
 
 const BUSINESS_TYPES = [
-  { value: "broker", label: "Broker" },
-  { value: "carrier", label: "Carrier" },
-  { value: "shipper", label: "Shipper" },
-  { value: "3pl", label: "3PL" },
-  { value: "other", label: "Other" },
+  { value: "carrier", label: "Carrier (Own trucks & drivers)" },
+  { value: "broker", label: "Freight Broker (Non-asset logistics)" },
+  { value: "both", label: "Both (Asset carrier + Brokerage)" },
+  { value: "3pl", label: "3PL (Third-party logistics provider)" },
+  { value: "shipper", label: "Direct Shipper / Private Fleet" },
+  { value: "other", label: "Other Logistics Service" },
 ]
 
-const CURRENCIES = [
-  { value: "USD", label: "USD — US Dollar" },
-  { value: "CAD", label: "CAD — Canadian Dollar" },
-  { value: "MXN", label: "MXN — Mexican Peso" },
-  { value: "EUR", label: "EUR — Euro" },
-  { value: "GBP", label: "GBP — British Pound" },
+const FLEET_SIZES = [
+  { value: "1-5", label: "1–5 trucks (Small Fleet / Owner-Op)" },
+  { value: "6-20", label: "6–20 trucks (Growing Fleet)" },
+  { value: "21-50", label: "21–50 trucks (Mid-Size Carrier)" },
+  { value: "51-100", label: "51–100 trucks (Commercial Fleet)" },
+  { value: "100+", label: "100+ trucks (Enterprise Fleet)" },
 ]
 
-const TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "America/Toronto",
-  "America/Vancouver",
-  "America/Mexico_City",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Tokyo",
-  "UTC",
+const TEAM_SIZES = [
+  { value: "just-me", label: "Just me (Owner-Operator)" },
+  { value: "2-5", label: "2–5 people (Lean Team)" },
+  { value: "6-20", label: "6–20 people (Growing Office)" },
+  { value: "21-50", label: "21–50 people (Multi-Department)" },
+  { value: "50+", label: "50+ people (Enterprise)" },
 ]
+
+const SCOPES = [
+  { value: "local", label: "Local (Metro / Single Region)" },
+  { value: "regional", label: "Regional (Multi-State Corridors)" },
+  { value: "national", label: "National (Coast-to-Coast 48 States)" },
+  { value: "international", label: "Cross-Border (US, Canada, Mexico)" },
+]
+
+const TOOLS = [
+  { value: "spreadsheet", label: "Spreadsheets (Excel / Google Sheets)" },
+  { value: "another-tms", label: "Another TMS (Migrating to Muvx)" },
+  { value: "multiple-tools", label: "Patchwork of disjointed tools" },
+  { value: "manual", label: "Manual (Phone / SMS / Paper dispatching)" },
+]
+
+const FREIGHT_TYPES = [
+  { id: "dry-van", label: "Dry Van (53')", desc: "General enclosed freight" },
+  { id: "reefer", label: "Refrigerated (Reefer)", desc: "Temperature-controlled" },
+  { id: "flatbed", label: "Flatbed & Stepdeck", desc: "Open deck & machinery" },
+  { id: "ltl", label: "LTL Consolidated", desc: "Less-than-truckload partials" },
+  { id: "specialized", label: "Specialized / Heavy Haul", desc: "Overweight & oversize" },
+  { id: "intermodal", label: "Intermodal & Drayage", desc: "Port & rail containers" },
+]
+
+const STRATEGIC_GOALS = [
+  "Dispatch faster",
+  "Track loads in real time",
+  "Keep documents together",
+  "Invoice and get paid quicker",
+  "Cut down manual paperwork",
+  "Manage drivers and equipment",
+  "Reduce empty miles",
+  "Improve on-time delivery",
+]
+
+const DYNAMIC_CURRENCIES = getAllCurrencies()
+const DYNAMIC_TIMEZONES = getAvailableTimezones()
+const DYNAMIC_COUNTRIES = getAllCountries()
 
 const FISCAL_YEAR_STARTS = [
-  { value: "01-01", label: "January 1 (Calendar year)" },
-  { value: "04-01", label: "April 1" },
-  { value: "07-01", label: "July 1" },
-  { value: "10-01", label: "October 1" },
+  { value: "01-01", label: "January 1 (Standard calendar year)" },
+  { value: "04-01", label: "April 1 (Q2 fiscal start)" },
+  { value: "07-01", label: "July 1 (Q3 fiscal start)" },
+  { value: "10-01", label: "October 1 (Federal fiscal start)" },
 ]
 
 type Profile = {
   id: string
   name: string
   slug: string
+  logo: string | null
   businessType: string | null
   dotNumber: string | null
   mcNumber: string | null
   ein: string | null
   phone: string | null
+  supportEmail: string | null
+  website: string | null
   addressLine1: string | null
   addressLine2: string | null
   city: string | null
@@ -86,6 +135,13 @@ type Profile = {
   defaultCurrency: string
   timeZone: string
   fiscalYearStart: string
+  fleetSize: string | null
+  teamSize: string | null
+  geographicScope: string | null
+  currentTool: string | null
+  freightTypes: string[]
+  primaryGoals: string[]
+  onboardingCompletedAt?: string | null
 }
 
 export function WorkspaceSettingsClient() {
@@ -94,9 +150,10 @@ export function WorkspaceSettingsClient() {
   const activeOrg = useAuthStore((s) => s.activeOrganization)
   const setActiveOrganization = useAuthStore((s) => s.setActiveOrganization)
 
-  // ─── Auth + permission check (client-side only) ───────────────────
+  // ─── Auth + permission check ─────────────────────────────────────
   const [ready, setReady] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -106,25 +163,11 @@ export function WorkspaceSettingsClient() {
         router.replace("/login")
         return
       }
-      // Read effective role for the active org from the BA session.
-      // The `role` field on user is the platform role id (user|admin).
-      // The per-workspace role lives on `member.role`; we don't need it
-      // for the canEdit gate — BA's hasPermission is the real check.
-      const platformRole = (data?.user as { role?: string } | null)?.role ?? "user"
-      // Fall back to checking via BA's hasPermission (server-authoritative).
-      // We don't trust the role string on its own; the server action is the
-      // real gate. But we can hide inputs in the UI for a smoother UX.
       const { data: perm } = await authClient.organization.hasPermission({
         permissions: { workspace: ["update"] },
       })
       if (cancelled) return
       setCanEdit(!!perm?.success)
-      console.log(
-        "[WORKSPACE] ready; role=",
-        platformRole,
-        " canEdit=",
-        !!perm?.success,
-      )
       setReady(true)
     })()
     return () => {
@@ -132,7 +175,7 @@ export function WorkspaceSettingsClient() {
     }
   }, [router])
 
-  // ─── Profile fetch ────────────────────────────────────────────────
+  // ─── Profile fetch ───────────────────────────────────────────────
   const profileQuery = useQuery({
     queryKey: ["workspace-profile", activeOrg?.id],
     queryFn: async () => {
@@ -141,7 +184,6 @@ export function WorkspaceSettingsClient() {
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const j = (await r.json()) as { profile: Profile }
-      console.log("[WORKSPACE] profile loaded:", j.profile)
       return j.profile
     },
     enabled: !!activeOrg?.id,
@@ -150,36 +192,46 @@ export function WorkspaceSettingsClient() {
 
   // ─── Local form state ────────────────────────────────────────────
   const [form, setForm] = useState<Partial<Profile>>({})
-  /* eslint-disable react-hooks/set-state-in-effect */
+
   useEffect(() => {
     if (profileQuery.data) {
+      const d = profileQuery.data
       setForm({
-        name: profileQuery.data.name,
-        slug: profileQuery.data.slug,
-        businessType: profileQuery.data.businessType,
-        dotNumber: profileQuery.data.dotNumber,
-        mcNumber: profileQuery.data.mcNumber,
-        ein: profileQuery.data.ein,
-        phone: profileQuery.data.phone,
-        addressLine1: profileQuery.data.addressLine1,
-        addressLine2: profileQuery.data.addressLine2,
-        city: profileQuery.data.city,
-        state: profileQuery.data.state,
-        postalCode: profileQuery.data.postalCode,
-        country: profileQuery.data.country ?? "US",
-        defaultCurrency: profileQuery.data.defaultCurrency,
-        timeZone: profileQuery.data.timeZone,
-        fiscalYearStart: profileQuery.data.fiscalYearStart,
+        name: d.name,
+        slug: d.slug,
+        logo: d.logo ?? null,
+        businessType: d.businessType,
+        dotNumber: d.dotNumber,
+        mcNumber: d.mcNumber,
+        ein: d.ein,
+        phone: d.phone,
+        supportEmail: d.supportEmail,
+        website: d.website,
+        addressLine1: d.addressLine1,
+        addressLine2: d.addressLine2,
+        city: d.city,
+        state: d.state,
+        postalCode: d.postalCode,
+        country: d.country ?? "US",
+        defaultCurrency: d.defaultCurrency || "USD",
+        timeZone: d.timeZone || "America/Chicago",
+        fiscalYearStart: d.fiscalYearStart || "01-01",
+        fleetSize: d.fleetSize,
+        teamSize: d.teamSize,
+        geographicScope: d.geographicScope,
+        currentTool: d.currentTool,
+        freightTypes: d.freightTypes || [],
+        primaryGoals: d.primaryGoals || [],
       })
     }
   }, [profileQuery.data])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
-  // ─── Slug availability check (only when user types a new slug) ───
+  // ─── Slug availability check ─────────────────────────────────────
   const slugClean = (form.slug ?? "").trim().toLowerCase()
   const slugFormatValid = /^[a-z0-9-]{2,50}$/.test(slugClean)
   const slugChanged =
     !!profileQuery.data && slugClean !== (profileQuery.data.slug ?? "")
+
   const slugQuery = useQuery({
     queryKey: ["check-slug", slugClean, activeOrg?.id],
     queryFn: async () => {
@@ -193,6 +245,7 @@ export function WorkspaceSettingsClient() {
     staleTime: 10_000,
     retry: false,
   })
+
   const slugAvailable = slugChanged
     ? slugQuery.data
       ? (slugQuery.data as { status: boolean }).status === true
@@ -204,15 +257,24 @@ export function WorkspaceSettingsClient() {
   // ─── Save mutation ───────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async () => {
-      console.log("[WORKSPACE] save →", form)
       return await updateWorkspaceProfileAction({
+        logo: form.logo ?? null,
         name: form.name,
         slug: slugClean,
-        businessType: (form.businessType as "broker" | "carrier" | "shipper" | "3pl" | "other" | null) ?? null,
+        businessType:
+          (form.businessType as
+            | "broker"
+            | "carrier"
+            | "shipper"
+            | "3pl"
+            | "other"
+            | null) ?? null,
         dotNumber: form.dotNumber ?? null,
         mcNumber: form.mcNumber ?? null,
         ein: form.ein ?? null,
         phone: form.phone ?? null,
+        supportEmail: form.supportEmail ?? null,
+        website: form.website ?? null,
         addressLine1: form.addressLine1 ?? null,
         addressLine2: form.addressLine2 ?? null,
         city: form.city ?? null,
@@ -222,10 +284,15 @@ export function WorkspaceSettingsClient() {
         defaultCurrency: form.defaultCurrency ?? "USD",
         timeZone: form.timeZone ?? "America/Chicago",
         fiscalYearStart: form.fiscalYearStart ?? "01-01",
+        fleetSize: form.fleetSize ?? null,
+        teamSize: form.teamSize ?? null,
+        geographicScope: form.geographicScope ?? null,
+        currentTool: form.currentTool ?? null,
+        freightTypes: form.freightTypes ?? [],
+        primaryGoals: form.primaryGoals ?? [],
       } satisfies UpdateWorkspaceProfileInput)
     },
     onSuccess: (result) => {
-      console.log("[WORKSPACE] save result:", result)
       if (!result.ok) {
         if (result.error === "FORBIDDEN") {
           toast.error("You don't have permission to edit the workspace profile.")
@@ -237,7 +304,6 @@ export function WorkspaceSettingsClient() {
         return
       }
       toast.success("Workspace profile updated")
-      // Sync auth store with new name/slug
       if (activeOrg && result.organization) {
         setActiveOrganization({
           ...activeOrg,
@@ -254,9 +320,47 @@ export function WorkspaceSettingsClient() {
     },
   })
 
+  // ─── Logo upload (S3 presigned PUT) ──────────────────────────────
+  const [logoUploading, setLogoUploading] = useState(false)
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const presignRes = await fetch("/api/upload/logo", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentType: file.type,
+          contentLength: file.size,
+        }),
+      })
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}))
+        throw new Error(err.message || `Upload failed (${presignRes.status})`)
+      }
+      const { uploadUrl, publicUrl } = await presignRes.json()
+
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      })
+      if (!putRes.ok) throw new Error(`S3 upload failed (${putRes.status})`)
+
+      return publicUrl as string
+    },
+    onSuccess: (url) => {
+      update("logo", url)
+      toast.success("Logo uploaded. Remember to save changes.")
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
+    },
+  })
+
   if (!ready || profileQuery.isLoading) {
     return (
-      <div className="p-4 lg:p-8 space-y-4 max-w-3xl mx-auto">
+      <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -270,7 +374,7 @@ export function WorkspaceSettingsClient() {
         <Card className="border-brand-rule bg-brand-card p-6 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-brand-accent mt-0.5" />
           <div>
-            <p className="font-medium">Failed to load workspace profile</p>
+            <p className="font-medium text-brand-ink">Failed to load workspace profile</p>
             <p className="text-sm text-brand-muted-soft mt-1">
               {(profileQuery.error as Error)?.message}
             </p>
@@ -281,8 +385,22 @@ export function WorkspaceSettingsClient() {
   }
 
   const profile = profileQuery.data!
-  const update = (k: keyof Profile, v: string | null) =>
+  const update = (k: keyof Profile, v: any) =>
     setForm((s) => ({ ...s, [k]: v }))
+
+  const toggleFreight = (id: string) => {
+    const curr = form.freightTypes || []
+    const next = curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]
+    update("freightTypes", next)
+  }
+
+  const toggleGoal = (goal: string) => {
+    const curr = form.primaryGoals || []
+    const next = curr.includes(goal)
+      ? curr.filter((x) => x !== goal)
+      : [...curr, goal]
+    update("primaryGoals", next)
+  }
 
   const dirty =
     JSON.stringify({
@@ -292,11 +410,14 @@ export function WorkspaceSettingsClient() {
     JSON.stringify({
       name: profile.name,
       slug: profile.slug,
+      logo: profile.logo,
       businessType: profile.businessType,
       dotNumber: profile.dotNumber,
       mcNumber: profile.mcNumber,
       ein: profile.ein,
       phone: profile.phone,
+      supportEmail: profile.supportEmail,
+      website: profile.website,
       addressLine1: profile.addressLine1,
       addressLine2: profile.addressLine2,
       city: profile.city,
@@ -306,14 +427,53 @@ export function WorkspaceSettingsClient() {
       defaultCurrency: profile.defaultCurrency,
       timeZone: profile.timeZone,
       fiscalYearStart: profile.fiscalYearStart,
+      fleetSize: profile.fleetSize,
+      teamSize: profile.teamSize,
+      geographicScope: profile.geographicScope,
+      currentTool: profile.currentTool,
+      freightTypes: profile.freightTypes || [],
+      primaryGoals: profile.primaryGoals || [],
     })
 
   const slugOk = !slugChanged || (slugFormatValid && slugAvailable === true)
   const canSave = dirty && canEdit && slugOk && !saveMutation.isPending
 
+  const handleReset = () => {
+    if (profileQuery.data) {
+      const d = profileQuery.data
+      setForm({
+        name: d.name,
+        slug: d.slug,
+        logo: d.logo ?? null,
+        businessType: d.businessType,
+        dotNumber: d.dotNumber,
+        mcNumber: d.mcNumber,
+        ein: d.ein,
+        phone: d.phone,
+        supportEmail: d.supportEmail,
+        website: d.website,
+        addressLine1: d.addressLine1,
+        addressLine2: d.addressLine2,
+        city: d.city,
+        state: d.state,
+        postalCode: d.postalCode,
+        country: d.country ?? "US",
+        defaultCurrency: d.defaultCurrency || "USD",
+        timeZone: d.timeZone || "America/Chicago",
+        fiscalYearStart: d.fiscalYearStart || "01-01",
+        fleetSize: d.fleetSize,
+        teamSize: d.teamSize,
+        geographicScope: d.geographicScope,
+        currentTool: d.currentTool,
+        freightTypes: d.freightTypes || [],
+        primaryGoals: d.primaryGoals || [],
+      })
+    }
+  }
+
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
-      {/* Header */}
+    <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto pb-16">
+      {/* ── Header ── */}
       <div>
         <div className="flex items-center gap-3 mb-2">
           <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
@@ -324,7 +484,7 @@ export function WorkspaceSettingsClient() {
           </h1>
         </div>
         <p className="text-sm text-brand-ink/80">
-          Company details, regulatory identifiers, and operational defaults.
+          Company details, regulatory identifiers, fleet capacity, and operational defaults.
           {canEdit ? (
             " Changes are visible to your team immediately and recorded in the audit log."
           ) : (
@@ -336,12 +496,12 @@ export function WorkspaceSettingsClient() {
         </p>
       </div>
 
-      {/* ─── Identity ─────────────────────────────────────────── */}
+      {/* ── 1. Identity ── */}
       <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
         <div>
           <h2 className="font-serif text-xl text-brand-ink">Identity</h2>
           <p className="text-xs text-brand-muted-soft mt-1">
-            How your workspace appears to the team and on invoices.
+            How your workspace appears to your team, drivers, and on invoices.
           </p>
         </div>
 
@@ -352,7 +512,7 @@ export function WorkspaceSettingsClient() {
               id="org-name"
               value={form.name ?? ""}
               onChange={(e) => update("name", e.target.value)}
-              placeholder="Acme Logistics"
+              placeholder="Acme Logistics LLC"
               disabled={!canEdit}
               className="h-10"
             />
@@ -360,7 +520,7 @@ export function WorkspaceSettingsClient() {
           <div className="space-y-1.5">
             <Label htmlFor="org-slug">Workspace URL</Label>
             <div className="flex items-center rounded-lg border border-brand-rule bg-white overflow-hidden focus-within:ring-2 focus-within:ring-brand-accent/20 focus-within:border-brand-accent">
-              <span className="px-3 text-xs text-brand-muted-soft font-mono tracking-tight bg-brand-cream border-r border-brand-rule h-10 flex items-center">
+              <span className="px-3 text-xs text-brand-muted-soft font-mono tracking-tight bg-brand-cream border-r border-brand-rule h-10 flex items-center shrink-0">
                 muvx.com/
               </span>
               <input
@@ -369,7 +529,7 @@ export function WorkspaceSettingsClient() {
                 onChange={(e) => {
                   update(
                     "slug",
-                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
+                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
                   )
                 }}
                 placeholder="acme-logistics"
@@ -400,16 +560,101 @@ export function WorkspaceSettingsClient() {
 
         <Separator className="bg-brand-rule" />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Logo */}
+        <div className="space-y-3">
+          <Label>Workspace logo</Label>
+          <div className="flex items-start gap-6">
+            {form.logo ? (
+              <Avatar className="size-20 border border-brand-rule">
+                <AvatarImage
+                  src={form.logo}
+                  alt={form.name ?? "Workspace logo"}
+                  className="object-cover"
+                />
+                <AvatarFallback className="bg-brand-cream text-brand-muted-soft">
+                  <Building2 className="h-7 w-7" />
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="size-20 rounded-xl border-2 border-dashed border-brand-rule bg-brand-cream flex items-center justify-center">
+                <Building2 className="h-7 w-7 text-brand-muted-soft" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById("logo-upload")?.click()}
+                    disabled={logoUploading}
+                    className="h-8 border-brand-rule"
+                  >
+                    {logoUploading ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" /> Uploading…
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3 w-3 mr-1" />
+                        {form.logo ? "Change" : "Upload"}
+                      </>
+                    )}
+                  </Button>
+                )}
+                {form.logo && canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      update("logo", null)
+                      toast.info("Logo will be removed on save.")
+                    }}
+                    className="h-8 text-brand-muted-soft hover:text-destructive"
+                  >
+                    <X className="h-3 w-3 mr-1" /> Remove
+                  </Button>
+                )}
+              </div>
+              <input
+                id="logo-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  if (!canEdit) {
+                    toast.error("You don't have permission to upload a logo.")
+                    return
+                  }
+                  await uploadLogoMutation.mutateAsync(file)
+                  e.target.value = ""
+                }}
+                className="hidden"
+              />
+              <p className="text-xs text-brand-muted-soft">
+                PNG, JPG, or WebP. Max 4 MB. Displayed on invoices and navigation.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <Separator className="bg-brand-rule" />
+
+        {/* Business Structure & Contact */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="businessType">Business type</Label>
+            <Label htmlFor="businessType">Business model</Label>
             <Select
-              value={form.businessType ?? ""}
+              value={form.businessType ?? "carrier"}
               onValueChange={(v) => update("businessType", v || null)}
               disabled={!canEdit}
             >
               <SelectTrigger id="businessType" className="h-10">
-                <SelectValue placeholder="Select…" />
+                <SelectValue placeholder="Select business model…" />
               </SelectTrigger>
               <SelectContent>
                 {BUSINESS_TYPES.map((t) => (
@@ -420,65 +665,274 @@ export function WorkspaceSettingsClient() {
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="phone">Dispatch phone</Label>
             <Input
               id="phone"
               value={form.phone ?? ""}
               onChange={(e) => update("phone", e.target.value || null)}
               placeholder="+1 555 123 4567"
               disabled={!canEdit}
-              className="h-10"
+              className="h-10 font-mono text-sm"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="supportEmail">Rate con & billing email</Label>
+            <Input
+              id="supportEmail"
+              type="email"
+              value={form.supportEmail ?? ""}
+              onChange={(e) => update("supportEmail", e.target.value || null)}
+              placeholder="dispatch@company.com"
+              disabled={!canEdit}
+              className="h-10 font-mono text-sm"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="dotNumber">DOT #</Label>
-            <Input
-              id="dotNumber"
-              value={form.dotNumber ?? ""}
-              onChange={(e) => update("dotNumber", e.target.value || null)}
-              placeholder="1234567"
-              maxLength={20}
-              disabled={!canEdit}
-              className="h-10 font-mono"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="mcNumber">MC #</Label>
-            <Input
-              id="mcNumber"
-              value={form.mcNumber ?? ""}
-              onChange={(e) => update("mcNumber", e.target.value || null)}
-              placeholder="MC-123456"
-              maxLength={20}
-              disabled={!canEdit}
-              className="h-10 font-mono"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ein">EIN</Label>
-            <Input
-              id="ein"
-              value={form.ein ?? ""}
-              onChange={(e) => update("ein", e.target.value || null)}
-              placeholder="12-3456789"
-              maxLength={20}
-              disabled={!canEdit}
-              className="h-10 font-mono"
-            />
+        <div className="space-y-1.5">
+          <Label htmlFor="website">Website</Label>
+          <Input
+            id="website"
+            value={form.website ?? ""}
+            onChange={(e) => update("website", e.target.value || null)}
+            placeholder="https://www.company.com"
+            disabled={!canEdit}
+            className="h-10 font-mono text-sm"
+          />
+        </div>
+
+        <Separator className="bg-brand-rule" />
+
+        {/* Regulatory Identifiers */}
+        <div>
+          <h3 className="text-sm font-semibold text-brand-ink mb-1">
+            Regulatory credentials
+          </h3>
+          <p className="text-xs text-brand-muted-soft mb-3">
+            Federal Motor Carrier Safety Administration (FMCSA) and IRS tax IDs.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="dotNumber">USDOT #</Label>
+              <Input
+                id="dotNumber"
+                value={form.dotNumber ?? ""}
+                onChange={(e) => update("dotNumber", e.target.value || null)}
+                placeholder="1234567"
+                maxLength={20}
+                disabled={!canEdit}
+                className="h-10 font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mcNumber">MC / FF #</Label>
+              <Input
+                id="mcNumber"
+                value={form.mcNumber ?? ""}
+                onChange={(e) => update("mcNumber", e.target.value || null)}
+                placeholder="MC-123456"
+                maxLength={20}
+                disabled={!canEdit}
+                className="h-10 font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ein">Federal Tax ID (EIN)</Label>
+              <Input
+                id="ein"
+                value={form.ein ?? ""}
+                onChange={(e) => update("ein", e.target.value || null)}
+                placeholder="12-3456789"
+                maxLength={20}
+                disabled={!canEdit}
+                className="h-10 font-mono text-sm"
+              />
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* ─── Address ──────────────────────────────────────────── */}
+      {/* ── 2. Fleet & Operations (Onboarding Profile) ── */}
+      <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
+        <div>
+          <h2 className="font-serif text-xl text-brand-ink">Fleet & operations</h2>
+          <p className="text-xs text-brand-muted-soft mt-1">
+            Operational profile calibrated during onboarding. Powers load matching and dispatch automation.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="fleetSize">Fleet scale (Power units)</Label>
+            <Select
+              value={form.fleetSize ?? "6-20"}
+              onValueChange={(v) => update("fleetSize", v)}
+              disabled={!canEdit}
+            >
+              <SelectTrigger id="fleetSize" className="h-10">
+                <SelectValue placeholder="Select fleet scale…" />
+              </SelectTrigger>
+              <SelectContent>
+                {FLEET_SIZES.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="geographicScope">Operating corridor scope</Label>
+            <Select
+              value={form.geographicScope ?? "national"}
+              onValueChange={(v) => update("geographicScope", v)}
+              disabled={!canEdit}
+            >
+              <SelectTrigger id="geographicScope" className="h-10">
+                <SelectValue placeholder="Select corridor scope…" />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="teamSize">Team headcount</Label>
+            <Select
+              value={form.teamSize ?? "2-5"}
+              onValueChange={(v) => update("teamSize", v)}
+              disabled={!canEdit}
+            >
+              <SelectTrigger id="teamSize" className="h-10">
+                <SelectValue placeholder="Select team size…" />
+              </SelectTrigger>
+              <SelectContent>
+                {TEAM_SIZES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="currentTool">Migration origin tool</Label>
+            <Select
+              value={form.currentTool ?? "spreadsheet"}
+              onValueChange={(v) => update("currentTool", v)}
+              disabled={!canEdit}
+            >
+              <SelectTrigger id="currentTool" className="h-10">
+                <SelectValue placeholder="Select prior tool…" />
+              </SelectTrigger>
+              <SelectContent>
+                {TOOLS.map((tool) => (
+                  <SelectItem key={tool.value} value={tool.value}>
+                    {tool.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <Separator className="bg-brand-rule" />
+
+        {/* Equipment & Trailer Capabilities */}
+        <div className="space-y-2.5">
+          <div>
+            <Label className="text-sm font-semibold text-brand-ink">
+              Trailer & equipment capabilities
+            </Label>
+            <p className="text-xs text-brand-muted-soft mt-0.5">
+              Select all equipment types your fleet operates. Informs automated load matching.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+            {FREIGHT_TYPES.map((ft) => {
+              const isSelected = (form.freightTypes || []).includes(ft.id)
+              return (
+                <button
+                  key={ft.id}
+                  type="button"
+                  onClick={() => canEdit && toggleFreight(ft.id)}
+                  disabled={!canEdit}
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-colors flex flex-col justify-between",
+                    isSelected
+                      ? "bg-brand-accent-tint border-brand-accent/40 text-brand-ink"
+                      : "bg-white border-brand-rule hover:bg-brand-cream/50 text-brand-ink/80"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-semibold">{ft.label}</span>
+                    {isSelected && <Check className="h-3.5 w-3.5 text-brand-accent" />}
+                  </div>
+                  <span className="text-[11px] text-brand-muted-soft mt-1">
+                    {ft.desc}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <Separator className="bg-brand-rule" />
+
+        {/* Strategic Priorities */}
+        <div className="space-y-2.5">
+          <div>
+            <Label className="text-sm font-semibold text-brand-ink">
+              Strategic priorities
+            </Label>
+            <p className="text-xs text-brand-muted-soft mt-0.5">
+              Focus areas configured during setup for automation triggers and alerts.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            {STRATEGIC_GOALS.map((goal) => {
+              const isSelected = (form.primaryGoals || []).includes(goal)
+              return (
+                <button
+                  key={goal}
+                  type="button"
+                  onClick={() => canEdit && toggleGoal(goal)}
+                  disabled={!canEdit}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5",
+                    isSelected
+                      ? "bg-brand-ink text-brand-cream border-brand-ink"
+                      : "bg-white border-brand-rule text-brand-ink/80 hover:bg-brand-cream/60"
+                  )}
+                >
+                  {isSelected && <Check className="h-3 w-3" />}
+                  {goal}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
+
+      {/* ── 3. Address ── */}
       <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
         <div>
           <h2 className="font-serif text-xl text-brand-ink">Address</h2>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Mailing address for invoices and regulatory correspondence.
+            Official terminal or headquarters address for invoices and regulatory correspondence.
           </p>
         </div>
 
@@ -494,6 +948,7 @@ export function WorkspaceSettingsClient() {
             className="h-10"
           />
         </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="addressLine2">Address line 2</Label>
           <Input
@@ -506,6 +961,7 @@ export function WorkspaceSettingsClient() {
             className="h-10"
           />
         </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="space-y-1.5 col-span-2 md:col-span-2">
             <Label htmlFor="city">City</Label>
@@ -513,7 +969,7 @@ export function WorkspaceSettingsClient() {
               id="city"
               value={form.city ?? ""}
               onChange={(e) => update("city", e.target.value || null)}
-              placeholder="Springfield"
+              placeholder="Chicago"
               maxLength={100}
               disabled={!canEdit}
               className="h-10"
@@ -537,35 +993,41 @@ export function WorkspaceSettingsClient() {
               id="postalCode"
               value={form.postalCode ?? ""}
               onChange={(e) => update("postalCode", e.target.value || null)}
-              placeholder="62704"
+              placeholder="60601"
               maxLength={20}
               disabled={!canEdit}
-              className="h-10 font-mono"
+              className="h-10 font-mono text-sm"
             />
           </div>
         </div>
-        <div className="space-y-1.5 max-w-[10rem]">
+
+        <div className="space-y-1.5 max-w-xs">
           <Label htmlFor="country">Country</Label>
-          <Input
-            id="country"
+          <Select
             value={form.country ?? "US"}
-            onChange={(e) =>
-              update("country", e.target.value.toUpperCase().slice(0, 2) || "US")
-            }
-            maxLength={2}
+            onValueChange={(v) => update("country", v)}
             disabled={!canEdit}
-            className="h-10 font-mono uppercase"
-          />
+          >
+            <SelectTrigger id="country" className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {DYNAMIC_COUNTRIES.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.code} — {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </Card>
 
-      {/* ─── Operations ─────────────────────────────────────── */}
+      {/* ── 4. Operations / Regional Defaults ── */}
       <Card className="border-brand-rule bg-brand-card p-6 space-y-5">
         <div>
-          <h2 className="font-serif text-xl text-brand-ink">Operations</h2>
+          <h2 className="font-serif text-xl text-brand-ink">Regional defaults</h2>
           <p className="text-xs text-brand-muted-soft mt-1">
-            Defaults used by the rest of the workspace (invoices, payroll,
-            scheduling).
+            Standards used across invoices, settlements, and dispatch scheduling.
           </p>
         </div>
 
@@ -580,15 +1042,16 @@ export function WorkspaceSettingsClient() {
               <SelectTrigger id="defaultCurrency" className="h-10">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
+              <SelectContent className="max-h-72">
+                {DYNAMIC_CURRENCIES.map((c) => (
+                  <SelectItem key={c.code} value={c.code}>
                     {c.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="timeZone">Time zone</Label>
             <Select
@@ -599,15 +1062,16 @@ export function WorkspaceSettingsClient() {
               <SelectTrigger id="timeZone" className="h-10">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
+              <SelectContent className="max-h-72">
+                {DYNAMIC_TIMEZONES.map((tz) => (
+                  <SelectItem key={tz.id} value={tz.id}>
+                    {tz.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="fiscalYearStart">Fiscal year start</Label>
             <Select
@@ -630,7 +1094,7 @@ export function WorkspaceSettingsClient() {
         </div>
       </Card>
 
-      {/* ─── Save ─────────────────────────────────────────── */}
+      {/* ── 5. Save Row ── */}
       <div className="flex items-center justify-between pt-2">
         <div className="text-xs text-brand-muted-soft">
           {canEdit ? (
@@ -647,20 +1111,36 @@ export function WorkspaceSettingsClient() {
             <>Read-only — only owners and admins can edit the profile.</>
           )}
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          disabled={!canSave}
-          className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving…
-            </>
-          ) : (
-            "Save changes"
+
+        <div className="flex items-center gap-3">
+          {dirty && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleReset}
+              disabled={saveMutation.isPending}
+              className="h-10 text-xs border-brand-rule text-brand-muted-soft hover:text-brand-ink"
+            >
+              Reset
+            </Button>
           )}
-        </Button>
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={!canSave}
+            className="bg-brand-ink hover:bg-brand-ink-soft text-brand-cream h-10 px-5 text-sm"
+          >
+            {saveMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   )

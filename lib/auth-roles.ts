@@ -9,8 +9,29 @@ import { defaultStatements } from "better-auth/plugins/organization/access"
 // imports like ./db and ./email.
 // ──────────────────────────────────────────────────────────────────
 
+/**
+ * Single source of truth for all role IDs. Use `as const` so TypeScript
+ * preserves the literal union type: `"owner" | "admin" | "member" | ...`.
+ * Every other role list in the codebase derives from this — no hardcoded
+ * arrays elsewhere (fixes GAP-2 / GAP-6 role-list divergence).
+ */
+export const ROLE_IDS = [
+  "owner",
+  "admin",
+  "member",
+  "operations_manager",
+  "dispatcher",
+  "accounting",
+  "driver",
+  "safety",
+] as const
+export type RoleId = (typeof ROLE_IDS)[number]
+
 const statement = {
   ...defaultStatements,
+  // Member resource: BA defaults (create, update, delete) + read + TMS-specific
+  // suspend / lift-suspension actions for workspace-scoped member actions.
+  member: ["create", "read", "update", "delete", "suspend", "lift-suspension"],
   // TMS-specific resources. Declared now so the role model is
   // type-safe; per-module permission checks get wired up as the
   // Fleet/Drivers/Invoice modules land.
@@ -26,6 +47,59 @@ const statement = {
   workspace: ["read", "update"],
 } as const
 
+// ─── Field-level permissions for workspace profile (Phase C3) ────────────────
+// Better Auth's ac.hasPermission() is resource-grained: workspace: ["update"]
+// means the *entire* workspace resource, not individual fields.
+// This map layers per-field edit gates on top of the resource-level check.
+// Order matters: first matching role wins (for hierarchy inheritance).
+//
+// Fields not listed here default to owner+admin only.
+// All roles can READ any field — only the edit list is restricted.
+
+export const WORKSPACE_FIELD_PERMISSIONS = {
+  // ── Identity ──────────────────────────────────────────────────────────────
+  name:         ["owner", "admin"],
+  slug:         ["owner", "admin"],
+  logo:         ["owner", "admin"],
+  businessType: ["owner", "admin"],
+  phone:        ["owner", "admin"],
+  // ── Regulatory / compliance (ops-relevant) ──────────────────────────────
+  dotNumber: ["owner", "admin", "operations_manager"],
+  mcNumber:  ["owner", "admin", "operations_manager"],
+  ein:       ["owner", "admin"],
+  // ── Address ─────────────────────────────────────────────────────────────
+  addressLine1: ["owner", "admin"],
+  addressLine2: ["owner", "admin"],
+  city:         ["owner", "admin"],
+  state:        ["owner", "admin"],
+  postalCode:   ["owner", "admin"],
+  country:      ["owner", "admin"],
+  // ── Operations defaults ─────────────────────────────────────────────────
+  defaultCurrency: ["owner", "admin", "accounting"],
+  timeZone:        ["owner", "admin", "accounting"],
+  fiscalYearStart: ["owner", "admin", "accounting"],
+} as const
+
+export type WorkspaceField = keyof typeof WORKSPACE_FIELD_PERMISSIONS
+
+/** Returns true when the given role can edit the named workspace field. */
+export function canEditField(field: WorkspaceField, roleId: RoleId): boolean {
+  const allowed = WORKSPACE_FIELD_PERMISSIONS[field] as readonly RoleId[]
+  return allowed.includes(roleId)
+}
+
+/** Returns the list of fields the given role can edit. */
+export function getPermittedFields(roleId: RoleId): WorkspaceField[] {
+  return Object.keys(WORKSPACE_FIELD_PERMISSIONS).filter((field) =>
+    canEditField(field as WorkspaceField, roleId)
+  ) as WorkspaceField[]
+}
+
+/** Returns a set of editable field names for O(1) lookup. */
+export function getEditableFieldSet(roleId: RoleId): Set<WorkspaceField> {
+  return new Set(getPermittedFields(roleId))
+}
+
 export const ac = createAccessControl(statement)
 
 const FULL_TMS = {
@@ -35,6 +109,7 @@ const FULL_TMS = {
   truck: ["create", "read", "update", "delete"],
   invoice: ["create", "read", "update", "delete"],
   payroll: ["create", "read", "update", "delete"],
+  member: ["create", "read", "update", "delete", "suspend", "lift-suspension"],
   workspace: ["read", "update"],
 } as const
 
@@ -49,25 +124,15 @@ export const owner = ac.newRole({
 export const administrator = ac.newRole({
   organization: ["update"],
   invitation: ["create", "cancel"],
-  member: ["create", "update", "delete"],
   ...FULL_TMS,
 })
 
 /**
- * Bare "member" — no special TMS role. Can see TMS records (loads/trips/
- * drivers/trucks/invoices) but cannot mutate them. BA's `defaultStatements`
- * (`update`/`delete` on member/invitation/organization) doesn't include read;
- * per Better Auth's strict-typed access-control, attempting to grant
- * `["read"]` on those resources is a type error. We grant read on TMS
- * resources only; access to the BA member/invitation/organization
- * resources is intentionally empty (the default-deny policy applies).
- *
- * Note: earlier revisions used `ac: ["read"]` which was a typo (`ac`
- * is not a resource) — that role received zero effective permissions and
- * every `checkRolePermission` returned false. Documented here so the
- * mistake doesn't come back.
+ * Bare "member" — no special TMS role. Can see TMS records and workspace members
+ * but cannot mutate them.
  */
 export const member = ac.newRole({
+  member: ["read"],
   load: ["read"],
   trip: ["read"],
   driver: ["read"],
@@ -78,6 +143,7 @@ export const member = ac.newRole({
 
 /** Full ops access — loads, trips, fleet, drivers. */
 export const opsManager = ac.newRole({
+  member: ["read"],
   load: ["create", "read", "update", "delete"],
   trip: ["create", "read", "update", "delete"],
   driver: ["create", "read", "update", "delete"],
@@ -87,6 +153,7 @@ export const opsManager = ac.newRole({
 
 /** Assigns loads and trips, cannot create equipment. */
 export const dispatcher = ac.newRole({
+  member: ["read"],
   load: ["create", "read", "update"],
   trip: ["create", "read", "update"],
   driver: ["read", "update"],
@@ -96,6 +163,7 @@ export const dispatcher = ac.newRole({
 
 /** Money — invoices, payroll, reports. No dispatch access. */
 export const accounting = ac.newRole({
+  member: ["read"],
   invoice: ["create", "read", "update", "delete"],
   payroll: ["create", "read", "update", "delete"],
   load: ["read"],
@@ -104,6 +172,7 @@ export const accounting = ac.newRole({
 
 /** Driver — sees only what is assigned to them. */
 export const driverRole = ac.newRole({
+  member: ["read"],
   load: ["read"],
   trip: ["read"],
   workspace: ["read"],
@@ -111,6 +180,7 @@ export const driverRole = ac.newRole({
 
 /** Safety/compliance — driver records, read-only elsewhere. */
 export const safety = ac.newRole({
+  member: ["read"],
   driver: ["read", "update"],
   load: ["read"],
   truck: ["read"],
@@ -125,7 +195,7 @@ export const safety = ac.newRole({
 
 export type RoleCatalogEntry = {
   /** The role id used in `member.role`. */
-  id: string
+  id: RoleId
   /** The BA-issued role object (for its `.statements`). */
   role: ReturnType<typeof ac.newRole>
   /** Human-readable label for the UI. */
@@ -205,6 +275,31 @@ export const ROLE_CATALOG: RoleCatalogEntry[] = [
 
 /** All resources declared in the access-control statement. */
 export const CATALOG_RESOURCES = Object.keys(statement) as (keyof typeof statement)[]
+
+/**
+ * Roles assignable via invite or role-change dialogs.
+ * `owner` is excluded — it is set only via transfer-ownership.
+ * This is the SINGLE SOURCE OF TRUTH for the assignable role set,
+ * replacing the hardcoded lists that previously diverged across
+ * team-client.tsx, onboarding/page.tsx, and invitation.ts (GAP-2, GAP-6).
+ */
+export const ASSIGNABLE_ROLES = ROLE_CATALOG.filter((r) => r.id !== "owner")
+export type AssignableRoleId = (typeof ASSIGNABLE_ROLES)[number]["id"]
+
+/**
+ * Literal tuple of assignable role IDs (excluding "owner"),
+ * for use with zod's z.enum — preserves the literal union type
+ * at compile time (fixes type regression from dynamic array).
+ */
+export const ASSIGNABLE_ROLE_IDS = [
+  "admin",
+  "member",
+  "operations_manager",
+  "dispatcher",
+  "accounting",
+  "driver",
+  "safety",
+] as const
 
 /** All actions declared for a given resource. */
 export const actionsForResource = (resource: string): readonly string[] => {

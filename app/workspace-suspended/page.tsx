@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { member, organization } from "@/lib/schema"
 import { getSession, getIsAdmin } from "@/lib/dal"
+import { formatWorkspaceDate, DEFAULT_TIMEZONE } from "@/lib/timezone"
 import { ShieldOff, ArrowLeftRight, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -47,6 +48,7 @@ export default async function WorkspaceSuspendedPage() {
       suspendedReason: member.suspendedReason,
       orgName: organization.name,
       orgSlug: organization.slug,
+      orgTimeZone: organization.timeZone,
       organizationSuspended: organization.suspended,
       organizationSuspendedReason: organization.suspendedReason,
     })
@@ -72,11 +74,12 @@ export default async function WorkspaceSuspendedPage() {
   }
 
   const liftedAt = row?.suspendedUntil
-    ? (row.suspendedUntil as Date).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
+    ? formatWorkspaceDate(
+        row.suspendedUntil as Date,
+        row?.orgTimeZone ?? DEFAULT_TIMEZONE,
+        undefined,
+        { mode: "date" },
+      )
     : null
 
   return (

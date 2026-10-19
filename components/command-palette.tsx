@@ -16,6 +16,7 @@ import {
   UserCog,
   Bell,
   Plus,
+  Building2,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -43,6 +44,7 @@ const ENTRIES: NavEntry[] = [
   { label: "Trips", href: "/trips", icon: Map, group: "Pages" },
   { label: "Fleet", href: "/fleet", icon: Truck, group: "Pages" },
   { label: "Drivers", href: "/drivers", icon: Users, group: "Pages" },
+  { label: "Customers & Facilities", href: "/customers", icon: Building2, group: "Pages" },
   { label: "Invoices", href: "/invoices", icon: Receipt, group: "Pages" },
   { label: "Accounts Payable", href: "/accounts-payable", icon: Receipt, group: "Pages" },
   { label: "Carrier Pay", href: "/carrier-pay", icon: Banknote, group: "Pages" },

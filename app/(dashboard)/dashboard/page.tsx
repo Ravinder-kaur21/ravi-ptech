@@ -20,8 +20,12 @@ import {
   getActiveDriversCount,
   getLoadsForOrg,
 } from "@/lib/dal"
+import { getNotificationsForUser } from "@/lib/notifications"
 import { StatusBadge } from "@/components/status-badge"
 import { FleetInsights } from "@/components/fleet-insights"
+import { getEffectivePermissions } from "@/lib/can"
+import { ShieldCheck, FileText } from "lucide-react"
+import { DashboardAlertsStack } from "@/components/dashboard/dashboard-alerts-stack"
 
 // Server actions / dynamic data — opt out of instant-navigation validation
 export const instant = false
@@ -32,14 +36,28 @@ export default async function DashboardHomePage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
-  // [DASHBOARD] Fetch all KPIs in parallel
-  const [activeLoads, monthlyRevenue, activeDrivers, recentLoads] =
+  // [DASHBOARD] Fetch all KPIs, user permissions, and alerts in parallel
+  const [activeLoads, monthlyRevenue, activeDrivers, recentLoads, permissions, alertsData] =
     await Promise.all([
       getActiveLoadsCount(tenantId),
       getMonthlyRevenue(tenantId),
       getActiveDriversCount(tenantId),
       getLoadsForOrg(tenantId),
+      getEffectivePermissions(session.user.id, tenantId),
+      getNotificationsForUser({
+        organizationId: tenantId,
+        userId: session.user.id,
+        limit: 5,
+      }),
     ])
+
+  const canViewRevenue = permissions.has("invoices.module") || permissions.has("reports.module")
+  const canCreateLoad = permissions.has("loads.create")
+  const canViewTrips = permissions.has("trips.module") || permissions.has("trips.view_all")
+  const canCreateInvoice = permissions.has("invoices.create")
+  const canManageFleet = permissions.has("fleet.create") || permissions.has("fleet.module")
+  const canInviteDrivers = permissions.has("drivers.create") || permissions.has("users.invite")
+  const isDriverOnly = permissions.has("loads.view_own") && !permissions.has("loads.view_all")
 
   const greeting =
     new Date().getHours() < 12 ? "Good morning" :
@@ -65,7 +83,11 @@ export default async function DashboardHomePage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard label="Active loads" value={String(activeLoads)} icon={Truck} />
         <KpiCard label="Drivers on road" value={String(activeDrivers)} icon={MapPin} />
-        <KpiCard label="Revenue MTD" value={formatCurrency(monthlyRevenue)} icon={DollarSign} />
+        {canViewRevenue ? (
+          <KpiCard label="Revenue MTD" value={formatCurrency(monthlyRevenue)} icon={DollarSign} />
+        ) : (
+          <KpiCard label="System Status" value="Active" icon={ShieldCheck} hint="Assigned operations ready" />
+        )}
         <KpiCard label="On-time %" value="—" icon={CheckCircle2} hint="Available after first delivery" />
       </div>
 
@@ -153,52 +175,75 @@ export default async function DashboardHomePage() {
               Quick actions
             </h3>
             <div className="space-y-2">
-              <QuickAction
-                href="/loads/new"
-                icon={Plus}
-                label="Create new load"
-                hint="Dispatch a load in under 60 seconds"
-              />
-              <QuickAction
-                href="/trips"
-                icon={MapPin}
-                label="View trips"
-                hint="See all active and completed trips"
-              />
-              <QuickAction
-                href="/invoices/new"
-                icon={DollarSign}
-                label="Send invoice"
-                hint="Bill a delivered load instantly"
-              />
+              {canCreateLoad && (
+                <QuickAction
+                  href="/loads/new"
+                  icon={Plus}
+                  label="Create new load"
+                  hint="Dispatch a load in under 60 seconds"
+                />
+              )}
+              {canViewTrips && (
+                <QuickAction
+                  href="/trips"
+                  icon={MapPin}
+                  label="View trips"
+                  hint="See all active and completed trips"
+                />
+              )}
+              {canCreateInvoice && (
+                <QuickAction
+                  href="/invoices"
+                  icon={DollarSign}
+                  label="Send invoice"
+                  hint="Bill a delivered load instantly"
+                />
+              )}
+              {isDriverOnly && (
+                <>
+                  <QuickAction
+                    href="/loads"
+                    icon={Truck}
+                    label="My active load"
+                    hint="Update shipment transit status"
+                  />
+                  <QuickAction
+                    href="/settings/profile"
+                    icon={FileText}
+                    label="My documents"
+                    hint="View CDL and medical certifications"
+                  />
+                </>
+              )}
             </div>
           </Card>
 
-          <Card className="border-brand-rule bg-brand-card p-5">
-            <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] mb-3 text-brand-muted-soft">
-              Get started
-            </h3>
-            <div className="space-y-2.5">
-              <AttentionItem
-                icon={Truck}
-                title="Add your trucks"
-                description="Add trucks to your fleet to start dispatching"
-                href="/fleet"
-              />
-              <AttentionItem
-                icon={Clock}
-                title="Invite your drivers"
-                description="Invite drivers and assign them to your trucks"
-                href="/drivers"
-              />
-              <AttentionItem
-                icon={AlertCircle}
-                title="Configure billing"
-                description="Set up your rates and customer info"
-                href="/settings/billing"
-              />
-            </div>
-          </Card>
+          {/* Live Fleet Alerts Stack (Kokonut UI) */}
+          <DashboardAlertsStack notifications={alertsData.notifications as any} />
+
+          {canManageFleet && (
+            <Card className="border-brand-rule bg-brand-card p-5">
+              <h3 className="font-mono text-[10px] font-medium uppercase tracking-[0.04em] mb-3 text-brand-muted-soft">
+                Workspace setup
+              </h3>
+              <div className="space-y-2.5">
+                <AttentionItem
+                  icon={Truck}
+                  title="Manage equipment"
+                  description="Maintain your tractors and trailers"
+                  href="/fleet"
+                />
+                {canInviteDrivers && (
+                  <AttentionItem
+                    icon={Clock}
+                    title="Team & drivers"
+                    description="Assign drivers to active trucks"
+                    href="/drivers"
+                  />
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

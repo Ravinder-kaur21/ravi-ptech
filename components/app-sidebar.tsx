@@ -14,16 +14,17 @@ import {
   Banknote,
   ClipboardList,
   TrendingUp,
-  Bell,
   UserCog,
   Settings,
-  CreditCard,
   Plus,
   ChevronsUpDown,
   Building2,
-  MoreHorizontal,
+  CreditCard,
+  MoreVertical,
+  Bot,
+  ShieldCheck,
+  Scale,
   type LucideIcon,
-  Sparkle,
 } from "lucide-react"
 import {
   Sidebar,
@@ -50,37 +51,124 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { PinnedRecent } from "@/components/pinned-recent"
 
 import { NavUser } from "@/components/nav-user"
+import { SidebarCopilotBot } from "@/components/ai/muvx-bot"
 import { cn } from "@/lib/utils"
 
 // ─── Nav config ──────────────────────────────────────────────────
+
+import { usePermissions } from "@/lib/permissions-context"
 
 type NavItem = {
   label: string
   href: string
   icon: LucideIcon
+  permissions?: string[]
 }
 
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Loads", href: "/loads", icon: Truck},
-  { label: "ai", href: "/ai", icon: Sparkle },
-  { label: "Trips", href: "/trips", icon: Map },
-  { label: "Fleet", href: "/fleet", icon: Truck },
-  { label: "Drivers", href: "/drivers", icon: Users },
-  { label: "Invoices", href: "/invoices", icon: Receipt },
-  { label: "Accounts Payable", href: "/accounts-payable", icon: Receipt },
-  { label: "Carrier Pay", href: "/carrier-pay", icon: Banknote },
-  { label: "Payroll", href: "/payroll", icon: ClipboardList },
-  { label: "Reports", href: "/reports", icon: TrendingUp },
+  { label: "Copilot", href: "/copilot", icon: Bot },
+  {
+    label: "Loads",
+    href: "/loads",
+    icon: Truck,
+    permissions: ["loads.module", "loads.view_all", "loads.view_own"],
+  },
+  {
+    label: "Trips",
+    href: "/trips",
+    icon: Map,
+    permissions: ["trips.module", "trips.view_all", "trips.view_assigned"],
+  },
+  {
+    label: "Fleet",
+    href: "/fleet",
+    icon: Truck,
+    permissions: ["fleet.module", "fleet.view_all"],
+  },
+  {
+    label: "Drivers",
+    href: "/drivers",
+    icon: Users,
+    permissions: ["drivers.module", "drivers.view_all", "drivers.view_own"],
+  },
+  {
+    label: "Safety & Compliance",
+    href: "/safety",
+    icon: ShieldCheck,
+    permissions: ["drivers.module", "fleet.module"],
+  },
+  {
+    label: "Customers",
+    href: "/customers",
+    icon: Building2,
+    permissions: ["customers.module", "customers.view_all"],
+  },
+  {
+    label: "Invoices",
+    href: "/invoices",
+    icon: Receipt,
+    permissions: ["invoices.module", "invoices.view_all", "invoices.view_own"],
+  },
+  {
+    label: "Accounts Payable",
+    href: "/accounts-payable",
+    icon: Receipt,
+    permissions: ["accounting.module", "accounting.invoices.view_all"],
+  },
+  {
+    label: "Carrier Pay",
+    href: "/carrier-pay",
+    icon: Banknote,
+    permissions: ["accounting.module", "settlements.module", "settlements.view_all", "accounting.carrier_pay.view"],
+  },
+  {
+    label: "Payroll",
+    href: "/payroll",
+    icon: ClipboardList,
+    permissions: ["accounting.module", "accounting.payroll.view"],
+  },
+  {
+    label: "Settlements",
+    href: "/settlements",
+    icon: Scale,
+    permissions: ["accounting.module", "settlements.module", "settlements.view_all"],
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: TrendingUp,
+    permissions: ["reports.module", "reports.view"],
+  },
 ]
 
 const ACCOUNT_NAV: NavItem[] = [
-  { label: "Members", href: "/settings/team", icon: UserCog },
-  { label: "Billing", href: "/settings/billing", icon: CreditCard },
-  { label: "Settings", href: "/settings", icon: Settings },
+  {
+    label: "Members",
+    href: "/settings/team",
+    icon: UserCog,
+    permissions: ["users.module", "users.invite", "users.view"],
+  },
+  {
+    label: "Workspace",
+    href: "/settings/workspace",
+    icon: Building2,
+    permissions: ["workspace.module", "workspace.profile.view"],
+  },
+  {
+    label: "Billing",
+    href: "/settings/billing",
+    icon: CreditCard,
+    permissions: ["workspace.module", "workspace.profile.view"],
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: Settings,
+    permissions: ["workspace.module", "workspace.profile.view", "users.module"],
+  },
 ]
 
 // ─── Component ───────────────────────────────────────────────────
@@ -111,6 +199,21 @@ export function AppSidebar({
   isImpersonating?: boolean
 }) {
   const pathname = usePathname()
+  const perms = usePermissions()
+
+  const visibleMainNav = React.useMemo(() => {
+    return MAIN_NAV.filter((item) => {
+      if (!item.permissions || item.permissions.length === 0) return true
+      return item.permissions.some((p) => perms.has(p))
+    })
+  }, [perms])
+
+  const visibleAccountNav = React.useMemo(() => {
+    return ACCOUNT_NAV.filter((item) => {
+      if (!item.permissions || item.permissions.length === 0) return true
+      return item.permissions.some((p) => perms.has(p))
+    })
+  }, [perms])
 
   // [SIDEBAR] List of all orgs the user is a member of (for the switcher)
   const { data: orgsData } = useQuery({
@@ -176,7 +279,7 @@ export function AppSidebar({
                 <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
                   <span className="truncate font-semibold text-brand-ink">
                     {org.name}
-                </span>
+                  </span>
                   <span className="truncate font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
                     /{org.slug}
                   </span>
@@ -237,7 +340,7 @@ export function AppSidebar({
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {MAIN_NAV.map((item) => {
+              {visibleMainNav.map((item) => {
                 const isActive =
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/")
@@ -248,14 +351,70 @@ export function AppSidebar({
                       isActive={isActive}
                       tooltip={item.label}
                       className={cn(
+                        "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                         isActive
                           ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-[18px]" />
-                      <span className="text-[15px] font-medium">{item.label}</span>
+                      {item.href === "/copilot" ? (
+                        <SidebarCopilotBot isActive={isActive} />
+                      ) : (
+                        <item.icon className="size-5 shrink-0" />
+                      )}
+                      <span className="text-[15px] font-medium leading-none">{item.label}</span>
                     </SidebarMenuButton>
+
+                    {item.href === "/copilot" && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <SidebarMenuAction
+                              showOnHover={false}
+                              className={cn(
+                                "text-brand-muted-soft hover:text-brand-ink right-1.5",
+                                isActive && "text-brand-cream/80 hover:text-brand-cream"
+                              )}
+                            />
+                          }
+                        >
+                          <MoreVertical className="size-4" />
+                          <span className="sr-only">Copilot Options</span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          className="w-52 rounded-xl border-brand-rule bg-brand-card p-1 shadow-lg"
+                          side="right"
+                          align="start"
+                          sideOffset={6}
+                        >
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+                              AI Copilot
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              render={<Link href="/settings/copilot" />}
+                              className="rounded-lg cursor-pointer text-xs"
+                            >
+                              <Settings className="mr-2 size-3.5 text-brand-muted-soft" />
+                              <span>Copilot Settings</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                fetch("/api/copilot/chats", { method: "DELETE" })
+                                  .then(() => {
+                                    window.location.href = "/copilot"
+                                  })
+                                  .catch(() => {})
+                              }}
+                              className="rounded-lg cursor-pointer text-xs"
+                            >
+                              <Plus className="mr-2 size-3.5 text-brand-muted-soft" />
+                              <span>New Conversation</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </SidebarMenuItem>
                 )
               })}
@@ -265,22 +424,21 @@ export function AppSidebar({
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        {/* ─── PINNED + RECENT ─── */}
-        <PinnedRecent orgId={org.id} />
-
-        <SidebarSeparator className="bg-sidebar-border" />
-
-        {/* ─── ACCOUNT ─── */}
+        {/* ─── SETTINGS ─── */}
         <SidebarGroup>
           <SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft">
-            Account
+            Settings
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {ACCOUNT_NAV.map((item) => {
+              {visibleAccountNav.map((item) => {
                 const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(item.href + "/")
+                  item.href === "/settings"
+                    ? pathname === "/settings" ||
+                      (pathname.startsWith("/settings/") &&
+                        pathname !== "/settings/workspace" &&
+                        pathname !== "/settings/billing")
+                    : pathname === item.href
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -288,13 +446,14 @@ export function AppSidebar({
                       isActive={isActive}
                       tooltip={item.label}
                       className={cn(
+                        "h-9 px-2.5 gap-2.5 [&>svg]:size-5!",
                         isActive
                           ? "bg-brand-ink text-brand-cream hover:bg-brand-ink hover:text-brand-cream"
                           : "text-brand-ink/80 hover:bg-brand-accent-tint hover:text-brand-ink"
                       )}
                     >
-                      <item.icon className="size-[18px]" />
-                      <span className="text-[15px] font-medium">{item.label}</span>
+                      <item.icon className="size-5 shrink-0" />
+                      <span className="text-[15px] font-medium leading-none">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )

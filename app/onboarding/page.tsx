@@ -18,6 +18,7 @@ import {
   type TeamInvite,
   type Goal,
 } from "@/lib/stores/onboarding-store"
+import { ROLE_CATALOG } from "@/lib/auth-roles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,6 +48,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { OnboardingSkeleton } from "@/components/onboarding/onboarding-skeleton"
 // Brand class strings are defined in app/globals.css under @layer components:
 // .btn-primary · .btn-secondary · .input-base · .field-label · .field-error
 // · .error-banner · .display-heading · .italic-accent · .eyebrow
@@ -104,14 +106,17 @@ const FREIGHT_OPTIONS: { value: FreightType; label: string }[] = [
   { value: "intermodal", label: "Intermodal" },
 ]
 
-const TEAM_ROLES: { value: TeamRole; label: string; description: string }[] = [
-  { value: "admin", label: "Admin", description: "Full access except billing" },
-  { value: "operations_manager", label: "Ops Manager", description: "Loads, trips, fleet, drivers" },
-  { value: "dispatcher", label: "Dispatcher", description: "Create/assign loads & trips" },
-  { value: "accounting", label: "Accounting", description: "Invoices, payroll, reports" },
-  { value: "driver", label: "Driver", description: "View assigned loads, upload POD" },
-  { value: "safety", label: "Safety", description: "Driver records, compliance" },
-]
+// ─── Role list for invites — SINGLE SOURCE OF TRUTH ──────────────────
+// Derived from ROLE_CATALOG in lib/auth-roles.ts. `owner` is excluded —
+// the first invitee becomes owner implicitly via org creation; additional
+// owners are set only through transfer-ownership. `member` is now
+// included (was missing from the old hardcoded list; GAP-2).
+const TEAM_ROLES: { value: TeamRole; label: string; description: string }[] =
+  ROLE_CATALOG.filter((r) => r.id !== "owner").map((r) => ({
+    value: r.id as TeamRole,
+    label: r.label,
+    description: r.description,
+  }))
 
 const STEPS = [
   { stop: "STOP 01", subtitle: "WHAT YOU RUN", title: ["Tell us about", "your company."] },
@@ -417,14 +422,7 @@ function OnboardingContent() {
 
   // ─── Loading state ───
   if (checkingExistingOrg) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "#f7f3ec" }}>
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" style={{ color: "#8a8b8f" }} />
-          <p className="mt-4 text-sm" style={{ color: "#8a8b8f" }}>Loading your workspace...</p>
-        </div>
-      </div>
-    )
+    return <OnboardingSkeleton />
   }
 
   if (done) {
@@ -657,24 +655,7 @@ function OnboardingContent() {
 // in OnboardingContent can stream in after prerender instead of blocking it.
 export default function OnboardingPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          className="flex min-h-screen items-center justify-center"
-          style={{ background: "#f7f3ec" }}
-        >
-          <div className="text-center">
-            <Loader2
-              className="h-8 w-8 animate-spin mx-auto"
-              style={{ color: "#8a8b8f" }}
-            />
-            <p className="mt-4 text-sm" style={{ color: "#8a8b8f" }}>
-              Loading…
-            </p>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<OnboardingSkeleton />}>
       <OnboardingContent />
     </Suspense>
   );

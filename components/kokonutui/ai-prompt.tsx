@@ -2,19 +2,26 @@
 
 /**
  * @author: @kokonutui
- * @description: AI Prompt Input
- * @version: 1.0.0
+ * @description: AI Prompt Input (with integrated Muvx model selector)
+ * @version: 1.1.0
  * @date: 2025-06-26
  * @license: MIT
  * @website: https://kokonutui.com
  * @github: https://github.com/kokonut-labs/kokonutui
  */
 
-import { ArrowRight, Bot, Check, ChevronDown, Paperclip } from "lucide-react";
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  ChevronDown,
+  Paperclip,
+  FileText,
+  X,
+  Sparkles,
+} from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type ReactNode, useId, useState } from "react";
-import Anthropic from "@/components/kokonutui/anthropic";
-import AnthropicDark from "@/components/kokonutui/anthropic-dark";
+import React, { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
+import { ModelPicker, type AIModelItem } from "@/components/ai/model-picker";
 import { cn } from "@/lib/utils";
 
 // Decorative: each icon sits next to the model name, which carries the label.
@@ -41,8 +49,6 @@ const OPENAI_ICON = (
   </svg>
 );
 
-// Rendered once in the trigger and once in the menu, so every instance needs
-// its own gradient id.
 function GeminiIcon() {
   const gradientId = useId();
 
@@ -76,26 +82,6 @@ function GeminiIcon() {
   );
 }
 
-interface AIPromptProps {
-  models?: string[];
-  defaultModel?: string;
-  placeholder?: string;
-  headerText?: string;
-  headerAction?: string;
-  onSubmit?: (value: string, model: string) => void;
-  /** Called with the files picked from the attach button. */
-  onAttach?: (files: FileList) => void;
-  className?: string;
-}
-
-const DEFAULT_MODELS = [
-  "Gemini 3 Pro",
-  "GPT-5.6 Mini",
-  "Claude Fable 5",
-  "GPT-5.6 Codex",
-  "GPT-5.6",
-];
-
 const ANTHROPIC_ICON = (
   <svg
     aria-hidden="true"
@@ -124,35 +110,110 @@ const getModelIcon = (model: string) =>
     <Bot aria-hidden="true" className="h-4 w-4 opacity-50" />
   );
 
+export interface AIPromptProps {
+  /** Available models (either list of strings or rich AIModelItem objects). */
+  models?: (string | AIModelItem)[];
+  /** Controlled currently selected model ID. */
+  selectedModel?: string;
+  defaultModel?: string;
+  /** Callback when user changes the model in the selector. */
+  onModelChange?: (model: string) => void;
+  placeholder?: string;
+  headerText?: string;
+  headerAction?: string;
+  onSubmit?: (
+    value: string,
+    options?: { webSearch?: boolean; model?: string; files?: File[] }
+  ) => void;
+  /** Called with the files picked from the attach button. */
+  onAttach?: (files: FileList) => void;
+  onFilesSelected?: (files: File[]) => void;
+  className?: string;
+}
+
+const DEFAULT_MODELS = [
+  "Gemini 3 Pro",
+  "GPT-5.6 Mini",
+  "Claude Fable 5",
+  "GPT-5.6 Codex",
+  "GPT-5.6",
+];
+
 export default function AI_Prompt({
   models = DEFAULT_MODELS,
-  defaultModel = "Claude Fable 5",
-  placeholder = "What can I do for you?",
-  headerText = "is free this weekend!",
-  headerAction = "Ship Now!",
+  selectedModel: controlledSelectedModel,
+  defaultModel = "gemini-2.5-flash",
+  onModelChange,
+  placeholder = "Message Muvx Copilot...",
+  headerText = "Muvx AI Intelligence",
+  headerAction = "Enterprise Dispatch Ready",
   onSubmit,
   onAttach,
+  onFilesSelected,
   className,
 }: AIPromptProps) {
   const [value, setValue] = useState("");
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
-    minHeight: 72,
-    maxHeight: 300,
+    minHeight: 68,
+    maxHeight: 280,
   });
-  // A default that is not in `models` would show a model the menu can't pick.
-  const [selectedModel, setSelectedModel] = useState(() =>
-    models.includes(defaultModel) ? defaultModel : (models[0] ?? defaultModel)
-  );
+
+  // Extract model strings if models is array of AIModelItem
+  const richModels = React.useMemo<AIModelItem[]>(() => {
+    return models.map((m) => {
+      if (typeof m === "string") {
+        return {
+          id: m,
+          name: (m.split("/").pop() || m)
+            .replace(/[-_]/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+        };
+      }
+      return m;
+    });
+  }, [models]);
+
+  const [uncontrolledModel, setUncontrolledModel] = useState(() => {
+    if (richModels.some((m) => m.id === defaultModel)) return defaultModel;
+    return richModels[0]?.id ?? defaultModel;
+  });
+
+  const activeModel = controlledSelectedModel ?? uncontrolledModel;
+
+  const handleModelSelect = (mId: string) => {
+    if (controlledSelectedModel === undefined) {
+      setUncontrolledModel(mId);
+    }
+    onModelChange?.(mId);
+  };
+
   const textareaId = useId();
   const shouldReduceMotion = useReducedMotion();
   const labelOffset = shouldReduceMotion ? 0 : 5;
 
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    onAttach?.(files);
+    const newFiles = Array.from(files);
+    setStagedFiles((prev) => [...prev, ...newFiles]);
+    onFilesSelected?.(newFiles);
+  };
+
+  const removeStagedFile = (idx: number) => {
+    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const submit = () => {
-    if (!(value.trim() && onSubmit)) {
+    if (!(value.trim() || stagedFiles.length > 0)) {
       return;
     }
-    onSubmit(value, selectedModel);
+    onSubmit?.(value, {
+      model: activeModel,
+      files: stagedFiles.length > 0 ? stagedFiles : undefined,
+    });
     setValue("");
+    setStagedFiles([]);
     adjustHeight(true);
   };
 
@@ -164,29 +225,38 @@ export default function AI_Prompt({
     }
   };
 
+  // Determine if we should use the rich ModelPicker (if onModelChange is provided or rich items exist)
+  const useRichModelPicker = Boolean(onModelChange || richModels.length > 0);
+
   return (
-    <div className={cn("w-4/6 py-4", className)}>
-      <div className="rounded-2xl bg-black/5 p-1.5 pt-4 dark:bg-white/5">
-        <div className="mx-2 mb-2.5 flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2">
-            <Anthropic className="h-3.5 w-3.5 text-black dark:hidden" />
-            <AnthropicDark className="hidden h-3.5 w-3.5 dark:block" />
-            <p className="text-black text-xs tracking-tighter dark:text-white/90">
+    <div className={cn("w-full py-2", className)}>
+      <div className="rounded-2xl border border-brand-rule/80 bg-brand-card/90 shadow-sm backdrop-blur-xs p-1.5 pt-3 transition-colors hover:border-brand-rule">
+        {/* Header row: KokonutUI prompt banner */}
+        <div className="mx-2 mb-2 flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            <span className="flex size-4 items-center justify-center rounded-full bg-brand-accent/15 text-brand-accent">
+              <Sparkles className="size-2.5" />
+            </span>
+            <p className="font-mono text-[11px] font-medium tracking-[0.02em] text-brand-ink/80">
               {headerText}
             </p>
           </div>
-          <p className="text-black text-xs tracking-tighter dark:text-white/90">
-            {headerAction}
-          </p>
+          {headerAction && (
+            <p className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">
+              {headerAction}
+            </p>
+          )}
         </div>
-        <div className="flex flex-col rounded-xl has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-blue-500">
+
+        {/* Textarea container */}
+        <div className="flex flex-col rounded-xl has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-brand-accent/60">
           <label className="sr-only" htmlFor={textareaId}>
             Message
           </label>
           <Textarea
             className={cn(
-              "w-full resize-none rounded-xl rounded-b-none border-none bg-black/5 px-4 py-3 placeholder:text-black/70 focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70",
-              "min-h-[72px]"
+              "w-full resize-none rounded-xl rounded-b-none border-none bg-brand-cream/35 px-4 py-3 placeholder:text-brand-muted-soft focus-visible:ring-0 focus-visible:ring-offset-0 text-brand-ink text-sm",
+              "min-h-[68px]"
             )}
             id={textareaId}
             onChange={(e) => {
@@ -199,93 +269,124 @@ export default function AI_Prompt({
             value={value}
           />
 
-          <div className="flex h-14 items-center justify-between rounded-b-xl bg-black/5 px-3 dark:bg-white/5">
+          {/* Staged file attachments preview */}
+          {stagedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 py-1.5 bg-brand-cream/35 border-t border-brand-rule/40">
+              {stagedFiles.map((file, i) => (
+                <div
+                  key={`${file.name}-${i}`}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-brand-card border border-brand-rule text-xs text-brand-ink/80 shadow-2xs"
+                >
+                  <FileText className="size-3 text-brand-accent" />
+                  <span className="max-w-[140px] truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeStagedFile(i)}
+                    className="p-0.5 hover:text-red-500 rounded"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Footer toolbar: model picker, attach button, submit button */}
+          <div className="flex h-13 items-center justify-between rounded-b-xl bg-brand-cream/35 px-3 border-t border-brand-rule/40">
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger render={<Button className="relative flex h-8 items-center gap-1 rounded-md pr-2 pl-1 text-xs hover:bg-black/10 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0 dark:text-white dark:hover:bg-white/10" variant="ghost" />}><AnimatePresence initial={false} mode="popLayout">
-                                                    <motion.div
-                                                      animate={{
-                                                        opacity: 1,
-                                                        y: 0,
-                                                      }}
-                                                      className="flex items-center gap-1"
-                                                      exit={{
-                                                        opacity: 0,
-                                                        y: labelOffset,
-                                                      }}
-                                                      initial={{
-                                                        opacity: 0,
-                                                        y: -labelOffset,
-                                                      }}
-                                                      key={selectedModel}
-                                                      transition={{
-                                                        duration: 0.15,
-                                                        ease: [0.23, 1, 0.32, 1],
-                                                      }}
-                                                    >
-                                                      {getModelIcon(selectedModel)}
-                                                      {selectedModel}
-                                                      <ChevronDown className="h-3 w-3 opacity-50" />
-                                                    </motion.div>
-                                                  </AnimatePresence></DropdownMenuTrigger>
-                <DropdownMenuContent className="min-w-[10rem] border-black/10 dark:border-white/10">
-                  {models.map((model) => (
-                    <DropdownMenuItem
-                      className="flex items-center justify-between gap-2"
-                      key={model}
-                      onSelect={() => setSelectedModel(model)}
-                    >
-                      <div className="flex items-center gap-2">
-                        {getModelIcon(model)}
-                        <span>{model}</span>
-                      </div>
-                      {selectedModel === model && (
-                        <Check className="h-4 w-4 text-blue-500" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <div className="mx-0.5 h-4 w-px bg-black/10 dark:bg-white/10" />
+              {useRichModelPicker ? (
+                <ModelPicker
+                  models={richModels}
+                  selectedModel={activeModel}
+                  onModelChange={handleModelSelect}
+                  className="h-7 text-xs bg-brand-card/90 border-brand-rule hover:bg-brand-card text-brand-ink"
+                />
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        className="relative flex h-7 items-center gap-1 rounded-md pr-2 pl-1 text-xs hover:bg-brand-card focus-visible:ring-1 focus-visible:ring-brand-accent focus-visible:ring-offset-0 text-brand-ink"
+                        variant="ghost"
+                      />
+                    }
+                  >
+                    <AnimatePresence initial={false} mode="popLayout">
+                      <motion.div
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-1"
+                        exit={{ opacity: 0, y: labelOffset }}
+                        initial={{ opacity: 0, y: -labelOffset }}
+                        key={activeModel}
+                        transition={{
+                          duration: 0.15,
+                          ease: [0.23, 1, 0.32, 1],
+                        }}
+                      >
+                        {getModelIcon(activeModel)}
+                        <span className="font-medium">{activeModel}</span>
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </motion.div>
+                    </AnimatePresence>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="min-w-[10rem] border-brand-rule bg-brand-card p-1 shadow-md">
+                    {richModels.map((m) => (
+                      <DropdownMenuItem
+                        className="flex items-center justify-between gap-2 text-xs cursor-pointer rounded-md"
+                        key={m.id}
+                        onSelect={() => handleModelSelect(m.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          {getModelIcon(m.name)}
+                          <span>{m.name}</span>
+                        </div>
+                        {activeModel === m.id && (
+                          <Check className="h-3.5 w-3.5 text-brand-accent" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
+              <div className="mx-0.5 h-4 w-px bg-brand-rule/60" />
+
+              {/* Attach files */}
               <label
                 aria-label="Attach file"
                 className={cn(
-                  "cursor-pointer rounded-lg bg-black/5 p-2 dark:bg-white/5",
-                  "hover:bg-black/10 has-focus-visible:ring-1 has-focus-visible:ring-blue-500 has-focus-visible:ring-offset-0 dark:hover:bg-white/10",
-                  "text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white",
-                  "transition-[background-color,color,scale] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] motion-reduce:active:scale-100"
+                  "cursor-pointer rounded-lg bg-brand-card/70 p-1.5",
+                  "hover:bg-brand-card border border-brand-rule/50 hover:border-brand-rule text-brand-muted-soft hover:text-brand-ink",
+                  "transition-all duration-150 active:scale-95",
+                  "flex items-center justify-center"
                 )}
+                title="Attach load document, rate con, or screenshot"
               >
                 <input
                   aria-label="Attach file"
                   className="sr-only"
-                  onChange={(e) => {
-                    if (e.target.files?.length) {
-                      onAttach?.(e.target.files);
-                    }
-                  }}
+                  onChange={(e) => handleFiles(e.target.files)}
                   type="file"
+                  multiple
                 />
-                <Paperclip className="h-4 w-4 transition-colors" />
+                <Paperclip className="h-3.5 w-3.5" />
               </label>
             </div>
+
+            {/* Send button */}
             <button
               aria-label="Send message"
               className={cn(
-                "rounded-lg bg-black/5 p-2 dark:bg-white/5",
-                "hover:bg-black/10 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0 dark:hover:bg-white/10",
-                "transition-[background-color,scale] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] disabled:pointer-events-none motion-reduce:active:scale-100"
+                "rounded-lg p-2 transition-all duration-150 ease-out active:scale-95 disabled:pointer-events-none",
+                value.trim() || stagedFiles.length > 0
+                  ? "bg-brand-ink text-brand-cream hover:bg-brand-ink/90 shadow-2xs"
+                  : "bg-brand-ink/10 text-brand-muted-soft opacity-40"
               )}
-              disabled={!value.trim()}
+              disabled={!value.trim() && stagedFiles.length === 0}
               onClick={submit}
               type="button"
             >
-              <ArrowRight
-                className={cn(
-                  "h-4 w-4 transition-opacity duration-200 dark:text-white",
-                  value.trim() ? "opacity-100" : "opacity-30"
-                )}
-              />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

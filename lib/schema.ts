@@ -246,6 +246,33 @@ export const invitation = pgTable(
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DYNAMIC ACCESS CONTROL — organizationRole table (WS-31/32/33)
+// Better Auth uses camelCase JS property names; the DB columns are
+// snake_case. This table maps to the organization_role table created
+// by drizzle migration 0011.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const organizationRole = pgTable(
+  "organization_role",
+  {
+    id: text("id").primaryKey(), // BA requires this even though CRUD endpoints don't use it directly
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    permission: text("permission").notNull(), // JSON stringified: { resource: ["action1", ...] }
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("organization_role_organization_id_idx").on(table.organizationId),
+    index("organization_role_role_idx").on(table.role),
+    // Composite PK: (organizationId, role) is unique per workspace
+    index("organization_role_pk_idx").on(table.organizationId, table.role),
+  ],
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AUTH RELATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -273,6 +300,8 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const organizationRelations = relations(organization, ({ many }) => ({
   members: many(member),
   invitations: many(invitation),
+  // Dynamic Access Control — custom per-workspace roles (WS-31/32/33)
+  organizationRoles: many(organizationRole),
   // TMS tables
   loads: many(load),
   drivers: many(driver),
@@ -283,6 +312,9 @@ export const organizationRelations = relations(organization, ({ many }) => ({
   carrierPayments: many(carrierPayment),
   apExpenses: many(apExpense),
   payStubs: many(payStub),
+  customers: many(customer),
+  facilities: many(facility),
+  carriers: many(carrier),
 }))
 
 export const memberRelations = relations(member, ({ one }) => ({
@@ -304,6 +336,13 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
   inviter: one(user, {
     fields: [invitation.inviterId],
     references: [user.id],
+  }),
+}))
+
+export const organizationRoleRelations = relations(organizationRole, ({ one }) => ({
+  organization: one(organization, {
+    fields: [organizationRole.organizationId],
+    references: [organization.id],
   }),
 }))
 
@@ -420,6 +459,72 @@ export const emailLog = pgTable(
   (table) => [
     index("email_log_to_idx").on(table.to),
     index("email_log_sentAt_idx").on(table.sentAt),
+  ]
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENTERPRISE NOTIFICATIONS & EVENT SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `notification` — in-app and browser push notifications for TMS events.
+//   Supports tiny events (member invited, load status, expense approved)
+//   and high-priority compliance/financial alerts (CDL expiry, overdue AR).
+//
+// `notification_preference` — user-level category & channel overrides.
+//   Allows dispatchers and admins to toggle off specific categories or channels.
+//
+
+export const notification = pgTable(
+  "notification",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Target user id; if null, broadcasts to all authorized members in the workspace. */
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    /** Category: "load" | "trip" | "invoice" | "expense" | "settlement" | "compliance" | "team" | "system" */
+    category: text("category").notNull(),
+    /** Exact event identifier, e.g. "member.invited", "load.dispatched", "invoice.overdue" */
+    event: text("event").notNull(),
+    /** "info" | "success" | "warn" | "error" */
+    severity: text("severity").notNull().default("info"),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    /** Optional deep-link into the app, e.g. "/loads/id", "/invoices/id", "/settings/team" */
+    link: text("link"),
+    read: boolean("read").notNull().default(false),
+    readAt: timestamp("read_at"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("notification_org_created_idx").on(table.organizationId, table.createdAt),
+    index("notification_user_read_idx").on(table.userId, table.read),
+    index("notification_category_idx").on(table.organizationId, table.category),
+  ]
+)
+
+export const notificationPreference = pgTable(
+  "notification_preference",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Category to configure: "load" | "trip" | "invoice" | "expense" | "settlement" | "compliance" | "team" | "system" */
+    category: text("category").notNull(),
+    inApp: boolean("in_app").notNull().default(true),
+    browserPush: boolean("browser_push").notNull().default(true),
+    email: boolean("email").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("notif_pref_user_org_idx").on(table.userId, table.organizationId, table.category),
   ]
 )
 
@@ -743,6 +848,20 @@ export const load = pgTable("load", {
   targetProfit: varchar("target_profit", { length: 50 }),
   actualProfit: varchar("actual_profit", { length: 50 }),
 
+  // Currency & Tax Engine
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  salesTaxType: varchar("sales_tax_type", { length: 20 }).default("none"),
+  salesTaxRate: varchar("sales_tax_rate", { length: 20 }),
+  salesTaxAmount: varchar("sales_tax_amount", { length: 20 }),
+  finalRate: varchar("final_rate", { length: 50 }),
+
+  // Multi-stop route, references & reefer specs
+  tenderNumber: varchar("tender_number", { length: 100 }),
+  stops: text("stops"), // JSON-serialized LoadStop[]
+  temperature: varchar("temperature", { length: 50 }),
+  isRefrigerated: boolean("is_refrigerated").default(false),
+  specialInstructions: text("special_instructions"),
+
   // BOL tracking
   bolNumber: varchar("bol_number", { length: 50 }),
   bolReceived: boolean("bol_received").default(false),
@@ -762,6 +881,33 @@ export const load = pgTable("load", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
 
+// Carriers table (outside contracted carriers, owner-operators & power-only fleets)
+export const carrier = pgTable("carrier", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  mcNumber: varchar("mc_number", { length: 50 }),
+  dotNumber: varchar("dot_number", { length: 50 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 50 }),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  taxId: varchar("tax_id", { length: 50 }),
+  paymentTerms: varchar("payment_terms", { length: 50 }).default("Net 30"),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  insuranceExpiry: timestamp("insurance_expiry"),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
 // Trips table (load runs)
 export const trip = pgTable("trip", {
   id: text("id").primaryKey(),
@@ -770,6 +916,8 @@ export const trip = pgTable("trip", {
     .references(() => organization.id, { onDelete: "cascade" }),
   tripNumber: varchar("trip_number", { length: 50 }).notNull(),
   loadId: text("load_id").references(() => load.id),
+  carrierId: text("carrier_id").references(() => carrier.id),
+  carrierRate: varchar("carrier_rate", { length: 50 }),
   driverId: text("driver_id").references(() => driver.id),
   truckId: text("truck_id").references(() => truck.id),
   trailerId: text("trailer_id").references(() => trailer.id),
@@ -866,6 +1014,53 @@ export const trailer = pgTable("trailer", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
 
+// Customers table (master customer directory & credit terms)
+export const customer = pgTable("customer", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 50 }),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  paymentTerms: varchar("payment_terms", { length: 50 }).default("Net 30"),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  creditLimit: varchar("credit_limit", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+// Facilities table (shippers, receivers, distribution centers, cross-docks, yards)
+export const facility = pgTable("facility", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  facilityType: varchar("facility_type", { length: 50 }).default("shipper_receiver"),
+  address: text("address").notNull(),
+  city: varchar("city", { length: 100 }).notNull(),
+  state: varchar("state", { length: 50 }).notNull(),
+  country: varchar("country", { length: 10 }).default("US"),
+  zip: varchar("zip", { length: 20 }),
+  contactName: varchar("contact_name", { length: 100 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  operatingHours: varchar("operating_hours", { length: 100 }),
+  appointmentRequired: boolean("appointment_required").default(true),
+  checkInInstructions: text("check_in_instructions"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
 // Invoices table
 export const invoice = pgTable("invoice", {
   id: text("id").primaryKey(),
@@ -892,12 +1087,19 @@ export const carrierPayment = pgTable("carrier_payment", {
   tenantId: text("tenant_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  carrierId: text("carrier_id").references(() => carrier.id),
   tripId: text("trip_id").references(() => trip.id),
   driverId: text("driver_id").references(() => driver.id),
   amount: varchar("amount", { length: 50 }).notNull(),
+  additions: varchar("additions", { length: 50 }).default("0"),
+  deductions: varchar("deductions", { length: 50 }).default("0"),
+  netAmount: varchar("net_amount", { length: 50 }),
+  currency: varchar("currency", { length: 10 }).default("USD"),
   status: varchar("status", { length: 50 }).notNull().default("pending"),
+  invoiceNumber: varchar("invoice_number", { length: 100 }),
   paymentDate: timestamp("payment_date"),
   paymentMethod: varchar("payment_method", { length: 50 }),
+  referenceNumber: varchar("reference_number", { length: 100 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -988,6 +1190,10 @@ export const tripRelations = relations(trip, ({ one, many }) => ({
     fields: [trip.loadId],
     references: [load.id],
   }),
+  carrier: one(carrier, {
+    fields: [trip.carrierId],
+    references: [carrier.id],
+  }),
   driver: one(driver, {
     fields: [trip.driverId],
     references: [driver.id],
@@ -1074,10 +1280,37 @@ export const payItemRelations = relations(payItem, ({ one }) => ({
   }),
 }))
 
+export const carrierRelations = relations(carrier, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [carrier.tenantId],
+    references: [organization.id],
+  }),
+  trips: many(trip),
+  carrierPayments: many(carrierPayment),
+}))
+
+export const customerRelations = relations(customer, ({ one }) => ({
+  organization: one(organization, {
+    fields: [customer.tenantId],
+    references: [organization.id],
+  }),
+}))
+
+export const facilityRelations = relations(facility, ({ one }) => ({
+  organization: one(organization, {
+    fields: [facility.tenantId],
+    references: [organization.id],
+  }),
+}))
+
 export const carrierPaymentRelations = relations(carrierPayment, ({ one }) => ({
   organization: one(organization, {
     fields: [carrierPayment.tenantId],
     references: [organization.id],
+  }),
+  carrier: one(carrier, {
+    fields: [carrierPayment.carrierId],
+    references: [carrier.id],
   }),
   trip: one(trip, {
     fields: [carrierPayment.tripId],
@@ -1103,3 +1336,201 @@ export const apExpenseRelations = relations(apExpense, ({ one }) => ({
     references: [driver.id],
   }),
 }))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENTERPRISE COPILOT & COWORKER TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const copilotChat = pgTable(
+  "copilot_chat",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New Conversation"),
+    specialist: varchar("specialist", { length: 50 }).notNull().default("main"),
+    model: varchar("model", { length: 150 }),
+    provider: varchar("provider", { length: 50 }),
+    pinned: boolean("pinned").notNull().default(false),
+    archived: boolean("archived").notNull().default(false),
+    messages: jsonb("messages").$type<any[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_chat_tenant_user_idx").on(table.tenantId, table.userId, table.updatedAt),
+  ]
+)
+
+export const copilotMessage = pgTable(
+  "copilot_message",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chat_id")
+      .notNull()
+      .references(() => copilotChat.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 30 }).notNull(),
+    parts: jsonb("parts").$type<any[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_message_chat_idx").on(table.chatId, table.createdAt),
+  ]
+)
+
+export const copilotSetting = pgTable(
+  "copilot_setting",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    coat: varchar("coat", { length: 50 }).notNull().default("ink"),
+    customPalette: jsonb("custom_palette").$type<{
+      body: string
+      eye: string
+      pupil: string
+      blush: string
+      shadow: string
+    } | null>(),
+    autoCycleCoat: boolean("auto_cycle_coat").notNull().default(false),
+    defaultSpecialist: varchar("default_specialist", { length: 50 }).notNull().default("main"),
+    allowAll: boolean("allow_all").notNull().default(false),
+    approvalThreshold: varchar("approval_threshold", { length: 50 }).default("0"),
+    memoryEnabled: boolean("memory_enabled").notNull().default(true),
+    customInstructions: text("custom_instructions"),
+    proactiveHeartbeat: boolean("proactive_heartbeat").notNull().default(true),
+    soundEnabled: boolean("sound_enabled").notNull().default(true),
+    showChainOfThought: boolean("show_chain_of_thought").notNull().default(true),
+    maxSteps: varchar("max_steps", { length: 10 }).notNull().default("12"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_setting_tenant_user_idx").on(table.tenantId, table.userId),
+  ]
+)
+
+export const copilotMemory = pgTable(
+  "copilot_memory",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 255 }).notNull(),
+    content: text("content").notNull(),
+    category: varchar("category", { length: 50 }).notNull().default("fact"),
+    source: varchar("source", { length: 50 }).notNull().default("user"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_memory_tenant_user_idx").on(table.tenantId, table.userId),
+  ]
+)
+
+export const copilotLog = pgTable(
+  "copilot_log",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    chatId: text("chat_id"),
+    level: varchar("level", { length: 30 }).notNull().default("info"),
+    action: varchar("action", { length: 150 }).notNull(),
+    toolName: varchar("tool_name", { length: 100 }),
+    specialist: varchar("specialist", { length: 50 }).default("main"),
+    status: varchar("status", { length: 50 }).notNull().default("completed"),
+    durationMs: varchar("duration_ms", { length: 30 }),
+    input: jsonb("input").$type<Record<string, unknown>>(),
+    output: jsonb("output").$type<Record<string, unknown>>(),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_log_tenant_created_idx").on(table.tenantId, table.createdAt),
+    index("copilot_log_chat_idx").on(table.chatId),
+  ]
+)
+
+export const copilotScheduledTask = pgTable(
+  "copilot_scheduled_task",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chatId: text("chat_id"),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    taskType: varchar("task_type", { length: 50 }).notNull().default("driver_task"),
+    specialist: varchar("specialist", { length: 50 }).notNull().default("dispatcher"),
+    targetDriverId: text("target_driver_id"),
+    targetDriverName: varchar("target_driver_name", { length: 255 }),
+    targetDriverPhone: varchar("target_driver_phone", { length: 50 }),
+    targetLoadId: text("target_load_id"),
+    targetLoadNumber: varchar("target_load_number", { length: 100 }),
+    scheduleType: varchar("schedule_type", { length: 30 }).notNull().default("once"),
+    intervalMinutes: varchar("interval_minutes", { length: 20 }),
+    runAt: timestamp("run_at"),
+    nextRunAt: timestamp("next_run_at"),
+    lastRunAt: timestamp("last_run_at"),
+    status: varchar("status", { length: 50 }).notNull().default("scheduled"),
+    priority: varchar("priority", { length: 30 }).notNull().default("normal"),
+    driverPrompt: text("driver_prompt"),
+    driverResponse: text("driver_response"),
+    conversationLog: jsonb("conversation_log")
+      .$type<Array<{ sender: string; text: string; timestamp: string }>>()
+      .default([]),
+    lastResult: jsonb("last_result").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_task_tenant_status_idx").on(table.tenantId, table.status, table.nextRunAt),
+  ]
+)
+
+export const copilotChatRelations = relations(copilotChat, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [copilotChat.tenantId],
+    references: [organization.id],
+  }),
+  user: one(user, {
+    fields: [copilotChat.userId],
+    references: [user.id],
+  }),
+  messageRows: many(copilotMessage),
+}))
+
+export const copilotMessageRelations = relations(copilotMessage, ({ one }) => ({
+  chat: one(copilotChat, {
+    fields: [copilotMessage.chatId],
+    references: [copilotChat.id],
+  }),
+}))
+

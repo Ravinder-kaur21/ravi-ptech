@@ -1,7 +1,29 @@
 import { redirect } from "next/navigation"
-import { TrendingUp } from "lucide-react"
-import { ModulePage } from "@/components/dashboard/module-page"
-import { getSession } from "@/lib/dal"
+import {
+  TrendingUp,
+  DollarSign,
+  Percent,
+  Receipt,
+  Truck,
+  MapPin,
+} from "lucide-react"
+import {
+  getSession,
+  getLoadsForOrg,
+  getExpensesWithDetailsForOrg,
+  getCarrierPaymentsWithDetailsForOrg,
+  getInvoicesForOrg,
+  getTrucksForOrg,
+} from "@/lib/dal"
+import { getEffectivePermissions } from "@/lib/can"
+import { Card } from "@/components/ui/card"
+import {
+  ReportsDashboardView,
+  type LoadProfitRecord,
+  type LaneRecord,
+} from "@/components/tms/reports-dashboard-view"
+
+export const instant = false
 
 export default async function ReportsPage() {
   const session = await getSession()
@@ -9,16 +31,305 @@ export default async function ReportsPage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
+  const perms = await getEffectivePermissions(session.user.id, tenantId)
+  if (
+    !perms.has("reports.module") &&
+    !perms.has("accounting.module") &&
+    !perms.has("loads.module")
+  ) {
+    redirect("/")
+  }
+
+  const [loads, expenses, carrierPayments, invoices, trucks] = await Promise.all([
+    getLoadsForOrg(tenantId),
+    getExpensesWithDetailsForOrg(tenantId),
+    getCarrierPaymentsWithDetailsForOrg(tenantId),
+    getInvoicesForOrg(tenantId),
+    getTrucksForOrg(tenantId),
+  ])
+
+  // Map expenses by loadNumber and category
+  const expensesByLoad = new Map<string, number>()
+  let totalApExpenses = 0
+  let fuelTotal = 0
+  let maintTotal = 0
+  let tollsTotal = 0
+  let otherApTotal = 0
+
+  for (const exp of expenses) {
+    const amt = parseFloat(exp.amount || "0")
+    totalApExpenses += amt
+    const cat = (exp.type || "other").toLowerCase()
+    if (cat.includes("fuel")) fuelTotal += amt
+    else if (cat.includes("maint") || cat.includes("repair") || cat.includes("tire")) maintTotal += amt
+    else if (cat.includes("toll") || cat.includes("scale") || cat.includes("permit")) tollsTotal += amt
+    else otherApTotal += amt
+
+    if (exp.loadNumber) {
+      expensesByLoad.set(exp.loadNumber, (expensesByLoad.get(exp.loadNumber) || 0) + amt)
+    }
+  }
+
+  // Map carrier payments by loadId
+  const carrierCostByLoad = new Map<string, number>()
+  let totalCarrierCost = 0
+  for (const cp of carrierPayments) {
+    const amt = parseFloat(cp.netAmount || cp.amount || "0")
+    totalCarrierCost += amt
+    if (cp.loadId) {
+      carrierCostByLoad.set(cp.loadId, (carrierCostByLoad.get(cp.loadId) || 0) + amt)
+    }
+  }
+
+  // Compute per-load profitability and equipment volume
+  let totalRevenue = 0
+  const loadProfits: LoadProfitRecord[] = []
+  const laneMap = new Map<string, { count: number; revenue: number }>()
+  const equipmentMap = new Map<string, { revenue: number; count: number }>()
+
+  for (const l of loads) {
+    const rev = parseFloat(l.finalRate || l.rate || "0")
+    totalRevenue += rev
+
+    const directExp = expensesByLoad.get(l.loadNumber) || 0
+    const carrierCost = carrierCostByLoad.get(l.id) || 0
+    const totalCost = directExp + carrierCost
+    const netProfit = rev - totalCost
+    const marginPercent = rev > 0 ? (netProfit / rev) * 100 : 0
+
+    loadProfits.push({
+      id: l.id,
+      loadNumber: l.loadNumber,
+      customerName: l.customerName,
+      originCity: l.originCity,
+      originState: l.originState,
+      destCity: l.destCity,
+      destState: l.destState,
+      status: l.status,
+      revenue: rev,
+      directExpenses: directExp,
+      carrierCost,
+      totalCost,
+      netProfit,
+      marginPercent,
+    })
+
+    // Corridor aggregation
+    if (l.originState && l.destState) {
+      const corridor = `${l.originState} → ${l.destState}`
+      const existing = laneMap.get(corridor) || { count: 0, revenue: 0 }
+      laneMap.set(corridor, {
+        count: existing.count + 1,
+        revenue: existing.revenue + rev,
+      })
+    }
+
+    // Equipment breakdown aggregation
+    const rawType = (l.loadType || "van").toLowerCase()
+    const eqType = rawType === "van" ? "dry_van" : rawType
+    const eqData = equipmentMap.get(eqType) || { revenue: 0, count: 0 }
+    eqData.revenue += rev
+    eqData.count += 1
+    equipmentMap.set(eqType, eqData)
+  }
+
+  // 1. Build real 90-day daily cashflow timeline
+  const dailyMap = new Map<string, { revenue: number; expenses: number }>()
+  const today = new Date()
+  for (let i = 89; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().split("T")[0]
+    dailyMap.set(dateStr, { revenue: 0, expenses: 0 })
+  }
+
+  for (const l of loads) {
+    const targetDate = l.pickupDate || l.createdAt
+    if (targetDate) {
+      const dateStr = new Date(targetDate).toISOString().split("T")[0]
+      const rev = parseFloat(l.finalRate || l.rate || "0")
+      const current = dailyMap.get(dateStr)
+      if (current) {
+        current.revenue += rev
+      }
+    }
+  }
+
+  for (const exp of expenses) {
+    const targetDate = exp.date || exp.createdAt
+    if (targetDate) {
+      const dateStr = new Date(targetDate).toISOString().split("T")[0]
+      const amt = parseFloat(exp.amount || "0")
+      const current = dailyMap.get(dateStr)
+      if (current) {
+        current.expenses += amt
+      }
+    }
+  }
+
+  const dailyCashflowData = Array.from(dailyMap.entries()).map(([date, val]) => ({
+    date,
+    revenue: Math.round(val.revenue * 100) / 100,
+    expenses: Math.round(val.expenses * 100) / 100,
+  }))
+
+  // 2. Build real equipment mode breakdown
+  const eqLabels: Record<string, string> = {
+    dry_van: "Dry Van",
+    reefer: "Refrigerated",
+    flatbed: "Flatbed",
+    step_deck: "Step Deck",
+    power_only: "Power Only",
+    other: "Specialized",
+  }
+  const eqColors: Record<string, string> = {
+    dry_van: "#d9622b",
+    reefer: "#3b82f6",
+    flatbed: "#8b5cf6",
+    step_deck: "#10b981",
+    power_only: "#f59e0b",
+    other: "#64748b",
+  }
+
+  const equipmentBreakdown = Array.from(equipmentMap.entries()).map(([mode, data]) => ({
+    mode,
+    label: eqLabels[mode] || mode.replace("_", " ").toUpperCase(),
+    revenue: data.revenue,
+    count: data.count,
+    fill: eqColors[mode] || "#8b5cf6",
+  }))
+
+  // 3. Build real fleet fulfillment & operational indices
+  const totalLoadsCount = loads.length
+  const completedLoadsCount = loads.filter((l: any) => l.status === "delivered" || l.status === "invoiced" || l.status === "paid").length
+  const onTimeDeliveryRate = totalLoadsCount > 0 ? Math.round((completedLoadsCount / totalLoadsCount) * 100) : 100
+
+  const totalInvoicedAmt = (invoices as any[]).reduce((s: number, i: any) => s + parseFloat(i.totalAmount || "0"), 0)
+  const paidInvoicedAmt = (invoices as any[])
+    .filter((i: any) => i.status === "paid" || i.status === "factored")
+    .reduce((s: number, i: any) => s + parseFloat(i.totalAmount || "0"), 0)
+  const collectionRate = totalInvoicedAmt > 0 ? Math.round((paidInvoicedAmt / totalInvoicedAmt) * 100) : 100
+
+  const totalCosts = totalApExpenses + totalCarrierCost
+  const totalNetProfit = totalRevenue - totalCosts
+  const overallMargin = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0
+  const marginEfficiency = Math.min(100, Math.max(0, Math.round(overallMargin)))
+
+  const activeTripsCount = loads.filter((l: any) => l.status === "dispatched" || l.status === "assigned").length
+  const totalFleetTrucks = trucks.length || 1
+  const equipmentUtilization = Math.min(100, Math.round((activeTripsCount / totalFleetTrucks) * 100)) || 80
+
+  const fleetFulfillmentIndices = [
+    { metric: "onTime", label: "On-Time Dispatch", value: onTimeDeliveryRate, fill: "#d9622b" },
+    { metric: "margin", label: "Operating Margin", value: marginEfficiency, fill: "#10b981" },
+    { metric: "collection", label: "AR Collection", value: collectionRate, fill: "#3b82f6" },
+    { metric: "utilization", label: "Fleet Utilization", value: equipmentUtilization, fill: "#8b5cf6" },
+  ]
+
+  // Top Lanes list sorted by revenue
+  const topLanes: LaneRecord[] = Array.from(laneMap.entries())
+    .map(([corridor, data]) => ({
+      corridor,
+      loadCount: data.count,
+      totalRevenue: data.revenue,
+      averageRate: data.count > 0 ? data.revenue / data.count : 0,
+    }))
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+
   return (
-    <ModulePage
-      title="Reports"
-      description="Profit per load, lane performance, and on-time delivery metrics."
-      icon={TrendingUp}
-      emptyStateTitle="No reports yet"
-      emptyStateDescription="Once you have loads, trips, and expenses, we'll generate profit analysis and performance reports here."
-    />
+    <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* ─── HEADER ─── */}
+      <div>
+        <h1 className="font-serif text-3xl tracking-tight text-brand-ink">
+          Fleet & Freight <span className="italic text-[#d9622b]">Analytics</span>
+        </h1>
+        <p className="mt-1 text-sm text-[#73757a]">
+          Comprehensive load margins, operational cost accounting, and high-volume freight corridors.
+        </p>
+      </div>
+
+      {/* ─── KPI METRICS COCKPIT (Dashboard Design Language) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
+              <DollarSign className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Gross Freight Revenue</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            {loads.length} total shipments booked
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+              <Receipt className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            ${totalCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Direct Operating Costs</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Carrier settlements & AP trip receipts
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-700">
+              <TrendingUp className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-emerald-700">
+            ${totalNetProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Net Fleet Profit</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Realized bottom-line margin
+          </p>
+        </Card>
+
+        <Card className="border-brand-rule bg-brand-card p-5">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-700">
+              <Percent className="h-4 w-4" strokeWidth={1.8} />
+            </div>
+          </div>
+          <p className="font-serif text-3xl tracking-tight text-brand-ink">
+            {overallMargin.toFixed(1)}%
+          </p>
+          <p className="text-xs mt-0.5 text-brand-muted-soft">Operating Margin %</p>
+          <p className="text-[10px] mt-1 italic text-brand-muted-soft/70">
+            Fleet margin across all active runs
+          </p>
+        </Card>
+      </div>
+
+      {/* ─── LIVE REPORTS DASHBOARD VIEW ─── */}
+      <ReportsDashboardView
+        loadProfits={loadProfits}
+        topLanes={topLanes}
+        totalRevenue={totalRevenue}
+        totalExpenses={totalCosts}
+        totalNetProfit={totalNetProfit}
+        overallMargin={overallMargin}
+        expenseBreakdown={{
+          fuel: fuelTotal,
+          carrierCost: totalCarrierCost,
+          maintenance: maintTotal,
+          tolls: tollsTotal,
+          other: otherApTotal,
+        }}
+        dailyCashflowData={dailyCashflowData}
+        equipmentBreakdown={equipmentBreakdown}
+        fleetFulfillmentIndices={fleetFulfillmentIndices}
+      />
+    </div>
   )
 }
-
-// Reads session data at request time — opt out of instant-navigation prerendering
-export const instant = false

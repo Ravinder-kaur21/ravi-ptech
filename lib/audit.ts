@@ -46,6 +46,8 @@ export type AuditAction =
   | "org.suspend"
   | "org.unsuspend"
   | "org.transfer-ownership"
+  | "session.create"
+  | "session.signin"
   | "session.revoke"
   | "session.revoke-all"
   | "system.maintenance"
@@ -79,6 +81,30 @@ export type AuditAction =
   | "truck.update"
   | "truck.delete"
   | "workspace.update"
+  | "member.role_change"
+  | "member.permissions.reset"
+  | "member.permission.grant"
+  | "member.permission.revoke"
+  | "member.remove"
+  | "role.create"
+  | "role.update"
+  | "role.delete"
+  | "customer.create"
+  | "customer.update"
+  | "customer.delete"
+  | "facility.create"
+  | "facility.update"
+  | "facility.delete"
+  | "expense.create"
+  | "expense.update_status"
+  | "expense.delete"
+  | "carrier.create"
+  | "carrier.update"
+  | "carrier.delete"
+  | "carrier_payment.create"
+  | "carrier_payment.update_status"
+  | "carrier_payment.record_payment"
+  | "carrier_payment.delete"
 
 export type AuditTargetType =
   | "user"
@@ -99,12 +125,20 @@ export type AuditTargetType =
   | "driver"
   | "truck"
   | "workspace"
+  | "role"
+  | "customer"
+  | "facility"
+  | "expense"
+  | "carrier"
+  | "carrier_payment"
 
 export type RecordAuditEvent = {
   actor: { id: string; email: string }
   action: AuditAction
   target: { type: AuditTargetType; id?: string | null; label?: string | null }
   metadata?: Record<string, unknown>
+  /** Optional one-line summary that gets folded into the metadata JSON. */
+  summary?: string
   /** Skip the IP/UA capture (for background jobs with no request context). */
   skipRequestContext?: boolean
   /**
@@ -161,10 +195,13 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
     if (!e.skipRequestContext) {
       try {
         const h = await headers()
-        ipAddress =
+        const rawIp =
           h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
           h.get("x-real-ip") ??
+          h.get("cf-connecting-ip") ??
+          h.get("true-client-ip") ??
           null
+        ipAddress = rawIp === "::1" ? "127.0.0.1" : rawIp
         userAgent = h.get("user-agent") ?? null
       } catch {
         // Not in a request context (background job). That's fine.
@@ -173,6 +210,10 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
 
     const executor = e.tx ?? db
     const prevHash = await getLastHash(executor)
+    const metadata = {
+      ...(e.metadata ?? {}),
+      ...(e.summary ? { summary: e.summary } : {}),
+    }
     const payload = {
       actorId: e.actor.id,
       actorEmail: e.actor.email,
@@ -180,7 +221,7 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
       targetType: e.target.type,
       targetId: e.target.id ?? null,
       targetLabel: e.target.label ?? null,
-      metadata: e.metadata ?? {},
+      metadata,
       ipAddress,
       userAgent,
       prevHash,
@@ -194,7 +235,7 @@ export async function recordAuditEvent(e: RecordAuditEvent): Promise<void> {
       targetType: e.target.type,
       targetId: e.target.id ?? null,
       targetLabel: e.target.label ?? null,
-      metadata: (e.metadata ?? {}) as any,
+      metadata: metadata as any,
       ipAddress,
       userAgent,
       prevHash,

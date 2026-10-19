@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth"
 import { eq, and, desc, sql, ne, gte, isNull, inArray } from "drizzle-orm"
 import { headers } from "next/headers"
 import {
+  customer,
+  facility,
   load,
   trip,
   driver,
@@ -12,6 +14,7 @@ import {
   invoice,
   payStub,
   apExpense,
+  carrier,
   carrierPayment,
   organization,
   member,
@@ -26,6 +29,7 @@ import {
 } from "@/lib/schema"
 import { listAuditEvents } from "@/lib/audit"
 import { cache } from "react"
+import { ROLE_CATALOG } from "@/lib/auth-roles"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROLE RESOLUTION (platform + workspace, kept distinct)
@@ -266,19 +270,62 @@ export async function requirePermission(opts: {
       body: { permissions: { [opts.resource]: [opts.action] } },
     })
     if (!result?.success) {
-      console.log(
-        `[DAL] requirePermission deny: ${opts.resource}.${opts.action}`,
+      console.warn(
+        `[DAL] requirePermission DENY: resource=${opts.resource} action=${opts.action} result=false`,
       )
       throw new TenantError("FORBIDDEN")
     }
+    console.log(
+      `[DAL] requirePermission ALLOW: resource=${opts.resource} action=${opts.action}`,
+    )
   } catch (err) {
     if (err instanceof TenantError) throw err
     console.error(
-      `[DAL] requirePermission error for ${opts.resource}.${opts.action}:`,
+      `[DAL] requirePermission ERROR: resource=${opts.resource} action=${opts.action}:`,
       err,
     )
     throw new TenantError("FORBIDDEN")
   }
+}
+
+/**
+ * getEffectivePermissions — returns the flat set of "resource:action"
+ * permission strings for a given member in a workspace.
+ *
+ * Used by:
+ *   - /settings/roles member-level permission inspector (GAP-3)
+ *   - Impact preview when changing a member's role (WS-39)
+ *   - "Who has this permission?" reverse lookup
+ *
+ * Resolves the member's role → looks up ROLE_CATALOG → flattens all
+ * (resource, action) pairs into "resource:action" strings.
+ */
+export async function getEffectivePermissions(
+  userId: string,
+  tenantId: string,
+): Promise<string[]> {
+  const [row] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(eq(member.userId, userId), eq(member.organizationId, tenantId)),
+    )
+    .limit(1)
+
+  if (!row) return []
+
+  const catalogEntry = ROLE_CATALOG.find((r) => r.id === row.role)
+  if (!catalogEntry) return []
+
+  const perms: string[] = []
+  for (const [resource, actions] of Object.entries(
+    catalogEntry.role.statements,
+  )) {
+    for (const action of actions as readonly string[]) {
+      perms.push(`${resource}:${action}`)
+    }
+  }
+  return perms
 }
 
 const TENANT_ERROR_STATUS: Record<TenantError["code"], number> = {
@@ -334,6 +381,45 @@ export const getLoadById = async (loadId: string, tenantId: string) => {
   return result ?? null
 }
 
+export const getLoadWithTripDetails = async (loadId: string, tenantId: string) => {
+  const [loadRecord] = await db
+    .select()
+    .from(load)
+    .where(and(eq(load.id, loadId), eq(load.tenantId, tenantId)))
+    .limit(1)
+
+  if (!loadRecord) return null
+
+  const [tripRecord] = await db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      driverLicenseNumber: driver.cdlNumber,
+      truckUnitNumber: truck.unitNumber,
+      truckVin: truck.vin,
+      truckLicensePlate: truck.licensePlate,
+      trailerUnitNumber: trailer.unitNumber,
+      trailerLicensePlate: trailer.licensePlate,
+    })
+    .from(trip)
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .where(and(eq(trip.loadId, loadId), eq(trip.tenantId, tenantId)))
+    .orderBy(desc(trip.createdAt))
+    .limit(1)
+
+  return {
+    ...loadRecord,
+    trip: tripRecord ?? null,
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TRIPS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -346,6 +432,176 @@ export const getTripsForOrg = async (tenantId: string) => {
     .orderBy(desc(trip.createdAt))
 }
 
+export const getTripsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      totalMiles: trip.totalMiles,
+      totalRevenue: trip.totalRevenue,
+      createdAt: trip.createdAt,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      driverId: trip.driverId,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      truckId: trip.truckId,
+      truckUnitNumber: truck.unitNumber,
+      trailerId: trip.trailerId,
+      trailerUnitNumber: trailer.unitNumber,
+    })
+    .from(trip)
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .where(eq(trip.tenantId, tenantId))
+    .orderBy(desc(trip.createdAt))
+}
+
+export const getTripByIdWithDetails = async (tripId: string, tenantId: string) => {
+  const [result] = await db
+    .select({
+      id: trip.id,
+      tripNumber: trip.tripNumber,
+      status: trip.status,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      totalMiles: trip.totalMiles,
+      totalRevenue: trip.totalRevenue,
+      totalExpense: trip.totalExpense,
+      carrierRate: trip.carrierRate,
+      createdAt: trip.createdAt,
+      updatedAt: trip.updatedAt,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      loadStatus: load.status,
+      originCity: load.originCity,
+      originState: load.originState,
+      originZip: load.originZip,
+      destCity: load.destCity,
+      destState: load.destState,
+      destZip: load.destZip,
+      commodity: load.commodity,
+      weight: load.weight,
+      pickupDate: load.pickupDate,
+      deliveryDate: load.deliveryDate,
+      driverId: trip.driverId,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverPhone: driver.phone,
+      driverEmail: driver.email,
+      truckId: trip.truckId,
+      truckUnitNumber: truck.unitNumber,
+      truckMake: truck.make,
+      truckModel: truck.model,
+      trailerId: trip.trailerId,
+      trailerUnitNumber: trailer.unitNumber,
+      trailerType: trailer.type,
+      carrierId: trip.carrierId,
+      carrierName: carrier.name,
+      carrierDotNumber: carrier.dotNumber,
+      carrierPhone: carrier.phone,
+    })
+    .from(trip)
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(trip.driverId, driver.id))
+    .leftJoin(truck, eq(trip.truckId, truck.id))
+    .leftJoin(trailer, eq(trip.trailerId, trailer.id))
+    .leftJoin(carrier, eq(trip.carrierId, carrier.id))
+    .where(and(eq(trip.id, tripId), eq(trip.tenantId, tenantId)))
+    .limit(1)
+
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMERS & FACILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getCustomersForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(customer)
+    .where(eq(customer.tenantId, tenantId))
+    .orderBy(desc(customer.createdAt))
+}
+
+export const getCustomerById = async (customerId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(customer)
+    .where(and(eq(customer.id, customerId), eq(customer.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+export const getFacilitiesForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(facility)
+    .where(eq(facility.tenantId, tenantId))
+    .orderBy(desc(facility.createdAt))
+}
+
+export const getFacilityById = async (facilityId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(facility)
+    .where(and(eq(facility.id, facilityId), eq(facility.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNTS PAYABLE / EXPENSES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getExpensesWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: apExpense.id,
+      tripId: apExpense.tripId,
+      driverId: apExpense.driverId,
+      type: apExpense.type,
+      vendor: apExpense.vendor,
+      amount: apExpense.amount,
+      date: apExpense.date,
+      status: apExpense.status,
+      notes: apExpense.notes,
+      receipt: apExpense.receipt,
+      createdAt: apExpense.createdAt,
+      tripNumber: trip.tripNumber,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+    })
+    .from(apExpense)
+    .leftJoin(trip, eq(apExpense.tripId, trip.id))
+    .leftJoin(driver, eq(apExpense.driverId, driver.id))
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .where(eq(apExpense.tenantId, tenantId))
+    .orderBy(desc(apExpense.date))
+}
+
+export const getExpenseById = async (expenseId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(apExpense)
+    .where(and(eq(apExpense.id, expenseId), eq(apExpense.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DRIVERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -356,6 +612,54 @@ export const getDriversForOrg = async (tenantId: string) => {
     .from(driver)
     .where(eq(driver.tenantId, tenantId))
     .orderBy(desc(driver.createdAt))
+}
+
+export const getDriversWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: driver.id,
+      tenantId: driver.tenantId,
+      userId: driver.userId,
+      firstName: driver.firstName,
+      lastName: driver.lastName,
+      email: driver.email,
+      phone: driver.phone,
+      cdlNumber: driver.cdlNumber,
+      cdlState: driver.cdlState,
+      cdlExpiration: driver.cdlExpiration,
+      dateOfBirth: driver.dateOfBirth,
+      address: driver.address,
+      city: driver.city,
+      state: driver.state,
+      zip: driver.zip,
+      status: driver.status,
+      hireDate: driver.hireDate,
+      payRate: driver.payRate,
+      payType: driver.payType,
+      emergencyContact: driver.emergencyContact,
+      emergencyPhone: driver.emergencyPhone,
+      notes: driver.notes,
+      createdAt: driver.createdAt,
+      userImage: user.image,
+      userEmailVerified: user.emailVerified,
+    })
+    .from(driver)
+    .leftJoin(user, eq(driver.userId, user.id))
+    .where(eq(driver.tenantId, tenantId))
+    .orderBy(desc(driver.createdAt))
+}
+
+export const getWorkspaceMembersForDriverAssignment = async (orgId: string) => {
+  return db
+    .select({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      role: member.role,
+    })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -394,6 +698,72 @@ export const getInvoicesForOrg = async (tenantId: string) => {
     .orderBy(desc(invoice.createdAt))
 }
 
+export const getInvoicesWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidDate: invoice.paidDate,
+      customerName: invoice.customerName,
+      customerEmail: invoice.customerEmail,
+      notes: invoice.notes,
+      createdAt: invoice.createdAt,
+      loadId: invoice.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      loadRate: load.rate,
+    })
+    .from(invoice)
+    .leftJoin(load, eq(invoice.loadId, load.id))
+    .where(eq(invoice.tenantId, tenantId))
+    .orderBy(desc(invoice.createdAt))
+}
+
+export const getDeliveredLoadsForBilling = async (tenantId: string) => {
+  return db
+    .select()
+    .from(load)
+    .where(and(eq(load.tenantId, tenantId), eq(load.status, "delivered")))
+    .orderBy(desc(load.createdAt))
+}
+
+export const getInvoiceById = async (invoiceId: string, tenantId: string) => {
+  const [result] = await db
+    .select({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.amount,
+      status: invoice.status,
+      dueDate: invoice.dueDate,
+      paidDate: invoice.paidDate,
+      customerName: invoice.customerName,
+      customerEmail: invoice.customerEmail,
+      notes: invoice.notes,
+      createdAt: invoice.createdAt,
+      loadId: invoice.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      pickupDate: load.pickupDate,
+      deliveryDate: load.deliveryDate,
+      commodity: load.commodity,
+      loadRate: load.rate,
+    })
+    .from(invoice)
+    .leftJoin(load, eq(invoice.loadId, load.id))
+    .where(and(eq(invoice.id, invoiceId), eq(invoice.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAYROLL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -402,6 +772,37 @@ export const getPayStubsForOrg = async (tenantId: string) => {
   return db
     .select()
     .from(payStub)
+    .where(eq(payStub.tenantId, tenantId))
+    .orderBy(desc(payStub.createdAt))
+}
+
+export const getPayStubsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: payStub.id,
+      tenantId: payStub.tenantId,
+      driverId: payStub.driverId,
+      payPeriodStart: payStub.payPeriodStart,
+      payPeriodEnd: payStub.payPeriodEnd,
+      totalMiles: payStub.totalMiles,
+      payRate: payStub.payRate,
+      grossPay: payStub.grossPay,
+      deductions: payStub.deductions,
+      netPay: payStub.netPay,
+      status: payStub.status,
+      paidDate: payStub.paidDate,
+      notes: payStub.notes,
+      createdAt: payStub.createdAt,
+      updatedAt: payStub.updatedAt,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+      driverEmail: driver.email,
+      driverPhone: driver.phone,
+      driverPayType: driver.payType,
+      driverPayRate: driver.payRate,
+    })
+    .from(payStub)
+    .leftJoin(driver, eq(payStub.driverId, driver.id))
     .where(eq(payStub.tenantId, tenantId))
     .orderBy(desc(payStub.createdAt))
 }
@@ -428,6 +829,81 @@ export const getCarrierPaymentsForOrg = async (tenantId: string) => {
     .from(carrierPayment)
     .where(eq(carrierPayment.tenantId, tenantId))
     .orderBy(desc(carrierPayment.createdAt))
+}
+
+export const getCarrierPaymentsWithDetailsForOrg = async (tenantId: string) => {
+  return db
+    .select({
+      id: carrierPayment.id,
+      carrierId: carrierPayment.carrierId,
+      tripId: carrierPayment.tripId,
+      driverId: carrierPayment.driverId,
+      amount: carrierPayment.amount,
+      additions: carrierPayment.additions,
+      deductions: carrierPayment.deductions,
+      netAmount: carrierPayment.netAmount,
+      currency: carrierPayment.currency,
+      status: carrierPayment.status,
+      invoiceNumber: carrierPayment.invoiceNumber,
+      paymentDate: carrierPayment.paymentDate,
+      paymentMethod: carrierPayment.paymentMethod,
+      referenceNumber: carrierPayment.referenceNumber,
+      notes: carrierPayment.notes,
+      createdAt: carrierPayment.createdAt,
+      carrierName: carrier.name,
+      carrierMcNumber: carrier.mcNumber,
+      carrierDotNumber: carrier.dotNumber,
+      carrierPhone: carrier.phone,
+      carrierEmail: carrier.email,
+      carrierPaymentTerms: carrier.paymentTerms,
+      tripNumber: trip.tripNumber,
+      tripMiles: trip.totalMiles,
+      loadId: trip.loadId,
+      loadNumber: load.loadNumber,
+      originCity: load.originCity,
+      originState: load.originState,
+      destCity: load.destCity,
+      destState: load.destState,
+      driverFirstName: driver.firstName,
+      driverLastName: driver.lastName,
+    })
+    .from(carrierPayment)
+    .leftJoin(carrier, eq(carrierPayment.carrierId, carrier.id))
+    .leftJoin(trip, eq(carrierPayment.tripId, trip.id))
+    .leftJoin(load, eq(trip.loadId, load.id))
+    .leftJoin(driver, eq(carrierPayment.driverId, driver.id))
+    .where(eq(carrierPayment.tenantId, tenantId))
+    .orderBy(desc(carrierPayment.createdAt))
+}
+
+export const getCarrierPaymentById = async (id: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(carrierPayment)
+    .where(and(eq(carrierPayment.id, id), eq(carrierPayment.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARRIERS DIRECTORY
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getCarriersForOrg = async (tenantId: string) => {
+  return db
+    .select()
+    .from(carrier)
+    .where(eq(carrier.tenantId, tenantId))
+    .orderBy(desc(carrier.createdAt))
+}
+
+export const getCarrierById = async (carrierId: string, tenantId: string) => {
+  const [result] = await db
+    .select()
+    .from(carrier)
+    .where(and(eq(carrier.id, carrierId), eq(carrier.tenantId, tenantId)))
+    .limit(1)
+  return result ?? null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -467,12 +943,51 @@ export const getWorkspaceProfile = async (orgId: string) => {
         defaultCurrency: organization.defaultCurrency,
         timeZone: organization.timeZone,
         fiscalYearStart: organization.fiscalYearStart,
+        metadata: organization.metadata,
       })
       .from(organization)
       .where(eq(organization.id, orgId))
       .limit(1)
-    console.log("[DAL] getWorkspaceProfile result:", row ? "found" : "null")
-    return row ?? null
+
+    if (!row) return null
+
+    let parsedMeta: Record<string, any> = {}
+    if (row.metadata) {
+      try {
+        parsedMeta =
+          typeof row.metadata === "string"
+            ? JSON.parse(row.metadata)
+            : row.metadata
+      } catch (err) {
+        console.warn("[DAL] failed to parse org metadata:", err)
+      }
+    }
+
+    const merged = {
+      ...row,
+      // Fallback to onboarding metadata if direct columns were empty
+      businessType: row.businessType || parsedMeta.businessType || null,
+      dotNumber: row.dotNumber || parsedMeta.dotNumber || null,
+      mcNumber: row.mcNumber || parsedMeta.mcNumber || null,
+      // Operational properties collected during onboarding
+      fleetSize: parsedMeta.fleetSize || null,
+      teamSize: parsedMeta.teamSize || null,
+      geographicScope: parsedMeta.geographicScope || null,
+      currentTool: parsedMeta.currentTool || null,
+      freightTypes: Array.isArray(parsedMeta.freightTypes)
+        ? parsedMeta.freightTypes
+        : [],
+      primaryGoals: Array.isArray(parsedMeta.primaryGoals)
+        ? parsedMeta.primaryGoals
+        : [],
+      supportEmail: parsedMeta.supportEmail || null,
+      website: parsedMeta.website || null,
+      onboardingCompletedAt: parsedMeta.onboardingCompletedAt || null,
+      metadata: parsedMeta,
+    }
+
+    console.log("[DAL] getWorkspaceProfile result: found with onboarding fields")
+    return merged
   } catch (e) {
     console.error("[DAL] getWorkspaceProfile FAILED:", e)
     throw e

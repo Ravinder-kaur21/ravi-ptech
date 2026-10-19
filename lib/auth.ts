@@ -71,6 +71,13 @@ export const auth = betterAuth({
       console[level](redactAuthLogText(message), ...safeArgs)
     },
   },
+  trustedOrigins: [
+    "https://app.muvxtms.com",
+    "http://app.muvxtms.com",
+    "http://52.62.31.143",
+    "http://localhost:3000",
+    ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+  ],
 
   plugins: [
     username(),
@@ -92,6 +99,16 @@ export const auth = betterAuth({
       // while still encouraging single-org usage for TMS
       organizationLimit: 3,
       teams: { enabled: false },
+      // ─── Dynamic Access Control (Phase 3 — WS-31/32/33) ────────────
+      // Enables per-workspace custom roles in addition to the global
+      // ROLE_CATALOG. Creates the `organizationRole` table on migration.
+      // Roles created at the org level are checked via hasPermission()
+      // (not checkRolePermission, which is static-only on the client).
+      dynamicAccessControl: {
+        enabled: true,
+        // Cap custom roles per org to prevent permission sprawl
+        maximumRolesPerOrganization: 20,
+      },
 
       // ─── Invitation email (Phase 1 — WS-16, WS-18) ────────────────
       // Required: without this callback, `authClient.organization.inviteMember()`
@@ -298,7 +315,71 @@ export const auth = betterAuth({
   // cascade library is the only place that does workspace-scoped
   // cleanup, and it runs from a server action with proper audit.
   // This hook just logs the intent for debugging.
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: [
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "true-client-ip",
+        "x-client-ip",
+      ],
+      ipv6Subnet: 128,
+      disableIpTracking: false,
+    },
+  },
+
   databaseHooks: {
+    session: {
+      create: {
+        before: async (sess, ctx) => {
+          let resolvedIp = sess.ipAddress
+          if (
+            !resolvedIp ||
+            resolvedIp === "0000:0000:0000:0000:0000:0000:0000:0000" ||
+            resolvedIp === "::1"
+          ) {
+            const headerIp =
+              ctx?.request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+              ctx?.request?.headers?.get("x-real-ip") ||
+              ctx?.request?.headers?.get("cf-connecting-ip") ||
+              "127.0.0.1"
+            resolvedIp = headerIp === "::1" ? "127.0.0.1" : headerIp
+          }
+          return {
+            data: {
+              ...sess,
+              ipAddress: resolvedIp,
+            },
+          }
+        },
+        after: async (sess) => {
+          try {
+            await recordAuditEvent({
+              actor: {
+                id: sess.userId,
+                email: "(authenticated user)",
+              },
+              action: "session.create",
+              target: {
+                type: "session",
+                id: sess.id,
+                label: `Session on ${sess.ipAddress || "local"}`,
+              },
+              metadata: {
+                sessionId: sess.id,
+                ipAddress: sess.ipAddress,
+                userAgent: sess.userAgent,
+                createdAt: sess.createdAt,
+              },
+              skipRequestContext: true,
+            })
+          } catch (e) {
+            console.error("[AUTH] Failed to write session.create audit log:", e)
+          }
+        },
+      },
+    },
     user: {
       delete: {
         before: async (user) => {

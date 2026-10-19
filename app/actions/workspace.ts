@@ -6,6 +6,11 @@ import { db } from "@/lib/db"
 import { organization, user as userTable } from "@/lib/schema"
 import { requireTenant, requirePermission, TenantError } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
+// Field-level permission map removed per Q&A (Oct 15, 2026):
+// Owner + Admin can edit any field. The resource-level
+// `workspace: ["update"]` gate (line ~118) is the only permission
+// check. Sensitive fields (DOT, MC, EIN, legal name) get a
+// confirmation modal in the UI, NOT a server-side block.
 
 // ─── Phase 3 — WS-10: update workspace profile ──────────────────────────────
 // Server action gated by `workspace: ["update"]` (owner + admin only).
@@ -78,6 +83,27 @@ const profileSchema = z.object({
     .string()
     .regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/, "Must be MM-DD")
     .default("01-01"),
+  logo: z
+    .string()
+    .url("Logo must be a valid URL")
+    .max(2048, "Logo URL is too long")
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
+  // Onboarding & operational profile extensions
+  fleetSize: z.string().nullable().optional(),
+  teamSize: z.string().nullable().optional(),
+  geographicScope: z.string().nullable().optional(),
+  currentTool: z.string().nullable().optional(),
+  freightTypes: z.array(z.string()).optional(),
+  primaryGoals: z.array(z.string()).optional(),
+  website: z.string().max(255).nullable().optional(),
+  supportEmail: z
+    .string()
+    .email()
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
 })
 
 export type UpdateWorkspaceProfileInput = z.input<typeof profileSchema>
@@ -96,7 +122,7 @@ export async function updateWorkspaceProfileAction(
 async function withUpdateWorkspaceProfile(
   raw: UpdateWorkspaceProfileInput,
 ): Promise<UpdateWorkspaceProfileResult> {
-  // 1. Auth + permission gate
+  // 1. Auth + resource-level permission gate
   let ctx
   try {
     ctx = await requireTenant()
@@ -131,6 +157,49 @@ async function withUpdateWorkspaceProfile(
   }
 
   // 4. Apply update (only the fields present in input)
+  // Parse existing metadata and merge new operational onboarding fields
+  let existingMeta: Record<string, any> = {}
+  if (before.metadata) {
+    try {
+      existingMeta =
+        typeof before.metadata === "string"
+          ? JSON.parse(before.metadata)
+          : before.metadata
+    } catch (e) {
+      console.warn("[WORKSPACE/ACTION] failed to parse existing metadata:", e)
+    }
+  }
+
+  const updatedMeta = {
+    ...existingMeta,
+    businessType: data.businessType ?? existingMeta.businessType ?? null,
+    dotNumber: data.dotNumber ?? existingMeta.dotNumber ?? null,
+    mcNumber: data.mcNumber ?? existingMeta.mcNumber ?? null,
+    fleetSize: data.fleetSize !== undefined ? data.fleetSize : (existingMeta.fleetSize ?? null),
+    teamSize: data.teamSize !== undefined ? data.teamSize : (existingMeta.teamSize ?? null),
+    geographicScope:
+      data.geographicScope !== undefined
+        ? data.geographicScope
+        : (existingMeta.geographicScope ?? null),
+    currentTool:
+      data.currentTool !== undefined
+        ? data.currentTool
+        : (existingMeta.currentTool ?? null),
+    freightTypes:
+      data.freightTypes !== undefined
+        ? data.freightTypes
+        : (existingMeta.freightTypes ?? []),
+    primaryGoals:
+      data.primaryGoals !== undefined
+        ? data.primaryGoals
+        : (existingMeta.primaryGoals ?? []),
+    website: data.website !== undefined ? data.website : (existingMeta.website ?? null),
+    supportEmail:
+      data.supportEmail !== undefined
+        ? data.supportEmail
+        : (existingMeta.supportEmail ?? null),
+  }
+
   const patch: Partial<typeof organization.$inferInsert> = {
     name: data.name ?? before.name,
     slug: data.slug ?? before.slug,
@@ -148,6 +217,8 @@ async function withUpdateWorkspaceProfile(
     defaultCurrency: data.defaultCurrency,
     timeZone: data.timeZone,
     fiscalYearStart: data.fiscalYearStart,
+    logo: data.logo ?? null,
+    metadata: JSON.stringify(updatedMeta),
   }
   await db
     .update(organization)
@@ -168,6 +239,7 @@ async function withUpdateWorkspaceProfile(
   const PROFILE_KEYS = [
     "name",
     "slug",
+    "logo",
     "businessType",
     "dotNumber",
     "mcNumber",
@@ -212,6 +284,22 @@ async function withUpdateWorkspaceProfile(
   console.log(
     `[WORKSPACE/ACTION] ✅ updated ${Object.keys(changes).length} field(s) for org ${after.id}`,
   )
+
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "system",
+      event: "system.workspace_updated",
+      severity: "info",
+      title: "Workspace Profile Updated",
+      message: `Company profile details for "${after.name}" were updated.`,
+      link: "/settings/workspace",
+      metadata: { changedFields: Object.keys(changes) },
+    })
+  } catch (e) {
+    console.error("[NOTIFICATIONS] Error dispatching system.workspace_updated:", e)
+  }
 
   return {
     ok: true,

@@ -21,10 +21,11 @@ import { isValidPhoneNumber } from "libphonenumber-js/max"
 import { eq, and, gt, lte } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { db } from "@/lib/db"
-import { member, invitation, user, organization, session as sessionTable } from "@/lib/schema"
-import { getSession, requireTenant } from "@/lib/dal"
+import { member, invitation, user, organization, session as sessionTable, organizationRole } from "@/lib/schema"
+import { requireTenant, requirePermission, getSession } from "@/lib/dal"
 import { recordAuditEvent } from "@/lib/audit"
 import { sendInvitationEmail } from "@/lib/email"
+import { ASSIGNABLE_ROLE_IDS, ROLE_CATALOG } from "@/lib/auth-roles"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WS-20 — Resend invitation
@@ -41,15 +42,7 @@ const whatsappInvitationSchema = z.object({
     .string()
     .regex(/^\+[1-9]\d{7,14}$/, "Invalid international phone number")
     .refine(isValidPhoneNumber, "Invalid international phone number"),
-  role: z.enum([
-    "admin",
-    "member",
-    "operations_manager",
-    "dispatcher",
-    "accounting",
-    "driver",
-    "safety",
-  ]),
+  role: z.string().min(2).max(50),
 })
 
 const whatsappInvitationIdSchema = z.string().min(1).max(128)
@@ -72,6 +65,7 @@ function getDatabaseErrorMetadata(error: unknown) {
 
 async function requireInvitationManager() {
   const ctx = await requireTenant()
+  await requirePermission({ resource: "member", action: "create" })
   const [actorMember] = await db
     .select({ role: member.role })
     .from(member)
@@ -103,6 +97,23 @@ export async function createWhatsAppInvitationAction(input: {
   }
 
   const ctx = await requireInvitationManager()
+  const roleIsStarter = (ASSIGNABLE_ROLE_IDS as readonly string[]).includes(
+    parsed.data.role,
+  )
+  if (!roleIsStarter) {
+    const [customRole] = await db
+      .select({ id: organizationRole.id })
+      .from(organizationRole)
+      .where(
+        and(
+          eq(organizationRole.organizationId, ctx.tenantId),
+          eq(organizationRole.role, parsed.data.role),
+        ),
+      )
+      .limit(1)
+    if (!customRole) throw new Error("Selected invitation role is not available")
+  }
+
   const now = new Date()
   const expiresAt = new Date(now.getTime() + WHATSAPP_INVITATION_EXPIRY_MS)
   const id = randomBytes(32).toString("base64url")
@@ -381,16 +392,6 @@ export async function resendWhatsAppInvitationAction(input: {
   }
 }
 
-const assignableRoleSchema = z.enum([
-  "admin",
-  "member",
-  "operations_manager",
-  "dispatcher",
-  "accounting",
-  "driver",
-  "safety",
-])
-
 /**
  * Re-sends the invitation email. We don't drive Better Auth's
  * `inviteMember({ resend: true })` here because that path requires
@@ -474,6 +475,22 @@ export async function resendInvitationAction(input: {
     metadata: { organizationId: ctx.tenantId, organizationName: org.name },
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.invitation_resent",
+      severity: "info",
+      title: "Workspace Invitation Resent",
+      message: `Invitation email was resent to ${inv.email}.`,
+      link: "/settings/team",
+      metadata: { invitationId: inv.id, email: inv.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation resent event:", err)
+  }
+
   revalidatePath("/settings/team")
   return { ok: true, invitationId: inv.id }
 }
@@ -482,6 +499,10 @@ export async function resendInvitationAction(input: {
 // WS-24 / WS-29 — Server-authorized member role changes
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Single source of truth for assignable roles: static starter roles + custom org roles.
+// Excludes "owner" (set only via transfer-ownership).
+const assignableRoleSchema = z.string().min(2).max(50)
+
 const updateRoleSchema = z.object({
   memberId: z.string().min(1),
   role: assignableRoleSchema,
@@ -489,21 +510,39 @@ const updateRoleSchema = z.object({
 
 export async function updateMemberRoleAction(input: {
   memberId: string
-  role: z.infer<typeof assignableRoleSchema>
+  role: string
 }): Promise<{ ok: true }> {
   const parsed = updateRoleSchema.safeParse(input)
   if (!parsed.success) throw new Error("Invalid member role update")
   const ctx = await requireTenant()
 
-  const [actorMember] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!actorMember || !["owner", "admin"].includes(actorMember.role)) {
-    throw new Error("Only workspace owners and administrators can change roles")
+  if (parsed.data.role === "owner") {
+    throw new Error("Cannot assign Owner role directly. Use transfer ownership.")
+  }
+
+  // GAP-5: Replaced hardcoded ["owner","admin"] check with
+  // permission-driven authorization. Better Auth checks the actor's
+  // role statement (owner/admin grant member:update; operations_manager
+  // does not — so only owners and admins can reach this code path now).
+  await requirePermission({ resource: "member", action: "update" })
+
+  // Validate that the role exists: either a starter role or a custom workspace role
+  const isStarter = (ASSIGNABLE_ROLE_IDS as readonly string[]).includes(parsed.data.role)
+  if (!isStarter) {
+    const [customRoleRow] = await db
+      .select({ id: organizationRole.id })
+      .from(organizationRole)
+      .where(
+        and(
+          eq(organizationRole.organizationId, ctx.tenantId),
+          eq(organizationRole.role, parsed.data.role),
+        ),
+      )
+      .limit(1)
+
+    if (!customRoleRow) {
+      throw new Error(`Role "${parsed.data.role}" is not recognized in this workspace`)
+    }
   }
 
   const [target] = await db
@@ -536,6 +575,18 @@ export async function updateMemberRoleAction(input: {
     .set({ role: parsed.data.role })
     .where(eq(member.id, target.id))
 
+  // GAP-8: Compute the effective-permission diff between the old and
+  // new role, so the audit log captures WHAT changed, not just the
+  // role string delta.
+  const oldRoleEntry = ROLE_CATALOG.find((r) => r.id === target.role)
+  const newRoleEntry = ROLE_CATALOG.find((r) => r.id === parsed.data.role)
+  const oldPerms = JSON.stringify(
+    oldRoleEntry ? oldRoleEntry.role.statements : null,
+  )
+  const newPerms = JSON.stringify(
+    newRoleEntry ? newRoleEntry.role.statements : null,
+  )
+
   await recordAuditEvent({
     actor,
     action: "user.set-member-role",
@@ -544,8 +595,26 @@ export async function updateMemberRoleAction(input: {
       organizationId: ctx.tenantId,
       previousRole: target.role,
       newRole: parsed.data.role,
+      permissionDiff: {
+        previousPermissions: oldPerms,
+        newPermissions: newPerms,
+        changed: oldPerms !== newPerms,
+      },
     },
   })
+
+  const { dispatchNotificationEvent } = await import("@/lib/notifications")
+  await dispatchNotificationEvent({
+    organizationId: ctx.tenantId,
+    category: "team",
+    event: "member.role_updated",
+    severity: "info",
+    title: "Member Role Updated",
+    message: `Team member role updated from ${target.role} to ${parsed.data.role}.`,
+    link: "/settings/team",
+    metadata: { memberId: target.id, previousRole: target.role, newRole: parsed.data.role },
+  })
+
   revalidatePath("/settings/team")
   return { ok: true }
 }
@@ -585,16 +654,9 @@ export async function suspendMemberAction(input: {
   if (!parsed.success) throw new Error("Invalid input")
   const ctx = await requireTenant()
 
-  const [me] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!me || (me.role !== "owner" && me.role !== "admin")) {
-    throw new Error("Only owners and admins can suspend members")
-  }
+  // GAP-5: Permission-driven — only roles granting member:suspend
+  // (owner, admin) pass this check.
+  await requirePermission({ resource: "member", action: "suspend" })
 
   const [target] = await db
     .select({
@@ -658,6 +720,22 @@ export async function suspendMemberAction(input: {
     },
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.member_suspended",
+      severity: "warn",
+      title: "Member Suspended",
+      message: `Team member ${target.userId} was suspended${input.reason ? `: ${input.reason}` : "."}`,
+      link: "/settings/team",
+      metadata: { memberId: target.id, userId: target.userId, reason: input.reason },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching member suspended event:", err)
+  }
+
   revalidatePath("/settings/team")
   return {
     ok: true,
@@ -681,16 +759,9 @@ export async function liftWorkspaceSuspensionAction(input: {
   if (!parsed.success) throw new Error("Invalid input")
   const ctx = await requireTenant()
 
-  const [me] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(
-      and(eq(member.userId, ctx.userId), eq(member.organizationId, ctx.tenantId)),
-    )
-    .limit(1)
-  if (!me || (me.role !== "owner" && me.role !== "admin")) {
-    throw new Error("Only owners and admins can lift suspensions")
-  }
+  // GAP-5: Permission-driven — only roles granting member:lift-suspension
+  // (owner, admin) pass this check.
+  await requirePermission({ resource: "member", action: "lift-suspension" })
 
   const [target] = await db
     .select({ id: member.id, userId: member.userId })
@@ -724,6 +795,22 @@ export async function liftWorkspaceSuspensionAction(input: {
     target: { type: "user", id: target.userId, label: null },
     metadata: { organizationId: ctx.tenantId, memberId: target.id },
   })
+
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.member_reinstated",
+      severity: "info",
+      title: "Member Suspension Lifted",
+      message: `Suspension was lifted for team member ${target.userId}. Access restored.`,
+      link: "/settings/team",
+      metadata: { memberId: target.id, userId: target.userId },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching member reinstated event:", err)
+  }
 
   revalidatePath("/settings/team")
   return { ok: true }
@@ -837,10 +924,81 @@ export async function transferOwnershipAction(input: {
     })
   })
 
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: ctx.tenantId,
+      category: "team",
+      event: "team.ownership_transferred",
+      severity: "warn",
+      title: "Workspace Ownership Transferred",
+      message: `Ownership transferred to ${target.email || target.userId}.`,
+      link: "/settings/team",
+      metadata: { newOwnerId: target.userId, newOwnerEmail: target.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching transfer ownership event:", err)
+  }
+
   // Caller's role just dropped to admin. Their cached UI may still
   // show owner-only controls; force a layout-wide revalidation so the
   // dashboard layout's role-gating re-runs and the team page picks up
   // the new viewer role.
   revalidatePath("/", "layout")
   return { ok: true, newOwnerUserId: target.userId }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Member Acceptance & Decline Notification Triggers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function recordMemberAcceptedInvitationAction(input: {
+  organizationId: string
+  email: string
+  role?: string | null
+}) {
+  console.log(
+    `[NOTIFICATIONS] member.invitation_accepted email=${input.email} org=${input.organizationId} role=${input.role}`,
+  )
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: input.organizationId,
+      category: "team",
+      event: "team.invitation_accepted",
+      severity: "info",
+      title: "New Team Member Joined",
+      message: `${input.email} accepted the invitation and joined as ${input.role || "member"}.`,
+      link: "/settings/team",
+      metadata: { email: input.email, role: input.role },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation accepted event:", err)
+  }
+  return { ok: true }
+}
+
+export async function recordMemberDeclinedInvitationAction(input: {
+  organizationId: string
+  email: string
+}) {
+  console.log(
+    `[NOTIFICATIONS] member.invitation_declined email=${input.email} org=${input.organizationId}`,
+  )
+  try {
+    const { dispatchNotificationEvent } = await import("@/lib/notifications")
+    await dispatchNotificationEvent({
+      organizationId: input.organizationId,
+      category: "team",
+      event: "team.invitation_declined",
+      severity: "info",
+      title: "Workspace Invitation Declined",
+      message: `${input.email} declined the invitation to join.`,
+      link: "/settings/team",
+      metadata: { email: input.email },
+    })
+  } catch (err) {
+    console.error("[NOTIFICATIONS] Error dispatching invitation declined event:", err)
+  }
+  return { ok: true }
 }

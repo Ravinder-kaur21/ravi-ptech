@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { sounds } from "@/lib/sound-effects"
 
 export function StarButton({
   loadId,
@@ -59,7 +60,10 @@ export function StarButton({
         render={
           <Button
             type="button"
-            onClick={() => toggle.mutate()}
+            onClick={() => {
+              sounds.playPop()
+              toggle.mutate()
+            }}
             disabled={toggle.isPending}
             variant="outline"
             size="icon"

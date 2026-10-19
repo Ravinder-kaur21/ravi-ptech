@@ -72,6 +72,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 // Note: the user detail UI now lives at /admin/users/[id] (a dedicated
 // full page) rather than a Sheet drawer. The "View details" item in
 // the row dropdown navigates to that page.
@@ -111,6 +112,7 @@ const ROLES = [
 type AdminRole = "user" | "admin"
 
 export function UsersTable() {
+  const { formatDate } = useWorkspaceDate()
   const queryClient = useQueryClient()
   const [search, setSearch] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
@@ -327,7 +329,7 @@ export function UsersTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-brand-muted-soft">
-                      {new Date(u.createdAt).toLocaleDateString()}
+                      {formatDate(new Date(u.createdAt))}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>

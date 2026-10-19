@@ -2,6 +2,7 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { type RoleId } from "@/lib/auth-roles"
 
 // ─── Step 1: Company Identity ───
 export type CompanyData = {
@@ -30,13 +31,8 @@ export type FreightType =
   | "intermodal"
 
 // ─── Step 5: Invite Team ───
-export type TeamRole =
-  | "admin"
-  | "operations_manager"
-  | "dispatcher"
-  | "driver"
-  | "accounting"
-  | "safety"
+// Derives from RoleId (lib/auth-roles.ts) — all roles except "owner".
+export type TeamRole = Exclude<RoleId, "owner">
 
 export type TeamInvite = {
   email: string
@@ -156,7 +152,7 @@ export const useOnboardingStore = create<OnboardingState>()(
         set((state) => ({
           draft: {
             ...state.draft,
-            teamInvites: [...state.draft.teamInvites, { email: "", role: "dispatcher" }],
+            teamInvites: [...state.draft.teamInvites, { email: "", role: "member" }],
           },
         })),
 

@@ -1,0 +1,49 @@
+name: Auto Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
+          script: |
+            export PATH=$HOME/.bun/bin:$PATH
+            echo "🚀 Starting Muvx TMS deployment..."
+            cd /home/ubuntu/muvx
+            
+            echo "📥 Pulling latest changes from GitHub..."
+            git pull origin main
+            
+            echo "📦 Installing dependencies..."
+            bun install
+            
+            echo "🗄️ Running database migrations on AWS RDS..."
+            bun run migrate
+            
+            echo "🏗️ Building Next.js production bundle..."
+            bun run build
+            
+            echo "🔄 Restarting application with PM2..."
+            pm2 restart muvx || pm2 start "bun next start -p 3000" --name muvx
+            pm2 save
+            
+            echo "✅ Deployment complete! Muvx is live."

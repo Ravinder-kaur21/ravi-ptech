@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { getSession } from "@/lib/dal"
-import { Card } from "@/components/ui/card"
+import { getEffectivePermissions } from "@/lib/can"
 import { NewLoadForm } from "@/components/new-load-form"
 
 export const instant = false
@@ -13,28 +13,28 @@ export default async function NewLoadPage() {
   const tenantId = session.session.activeOrganizationId
   if (!tenantId) redirect("/onboarding")
 
+  const perms = await getEffectivePermissions(session.user.id, tenantId)
+  if (!perms.has("loads.create")) {
+    redirect("/loads")
+  }
+
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-3xl mx-auto">
-      <Link
-        href="/loads"
-        className="inline-flex items-center gap-1 text-[13px] text-brand-muted-soft hover:text-brand-ink transition-colors"
-      >
-        <ChevronLeft className="size-3.5" />
-        Back to loads
-      </Link>
+    <div className="min-h-full py-6 md:py-10 px-4 md:px-8">
+      <div className="mx-auto max-w-[800px] space-y-6">
+        {/* Subtle Top Breadcrumb */}
+        <div>
+          <Link
+            href="/loads"
+            className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-brand-muted-soft hover:text-brand-ink transition-colors"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to loads
+          </Link>
+        </div>
 
-      <div>
-        <h1 className="font-serif text-3xl tracking-tight text-brand-ink">
-          New <span className="italic text-brand-accent">load</span>
-        </h1>
-        <p className="mt-1 text-sm text-brand-ink/80">
-          Create a draft load. You can dispatch it once the details are confirmed.
-        </p>
-      </div>
-
-      <Card className="border-brand-rule bg-brand-card p-6">
+        {/* Breathing Load Creator Canvas */}
         <NewLoadForm />
-      </Card>
+      </div>
     </div>
   )
 }

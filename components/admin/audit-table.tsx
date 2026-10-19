@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/popover"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { useWorkspaceDate } from "@/lib/timezone"
 
 type AuditEvent = {
   id: string
@@ -146,6 +147,7 @@ function buildHref(filters: Record<string, string | undefined>) {
 }
 
 export function AuditTable() {
+  const { formatDate } = useWorkspaceDate()
   const [actorEmail, setActorEmail] = React.useState("")
   const [action, setAction] = React.useState("")
   const [targetId, setTargetId] = React.useState("")
@@ -380,7 +382,7 @@ export function AuditTable() {
                         })}
                       </div>
                       <div className="font-mono text-[10px] text-brand-muted-soft">
-                        {new Date(e.createdAt).toLocaleString()}
+                        {formatDate(new Date(e.createdAt))}
                       </div>
                     </TableCell>
                     <TableCell className="align-top">
