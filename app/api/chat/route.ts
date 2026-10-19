@@ -17,6 +17,7 @@ import { persistCopilotMessages } from "@/lib/copilot/message-store"
  * Anything longer must move to Vercel Workflows / `WorkflowAgent` (see `lib/copilot/scheduled-runner.ts`).
  */
 export const maxDuration = 1800
+export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
   try {
