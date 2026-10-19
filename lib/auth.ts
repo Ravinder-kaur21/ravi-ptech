@@ -32,6 +32,17 @@ console.log("[AUTH] Better Auth URL:", process.env.BETTER_AUTH_URL)
 console.log("[AUTH] Google Client ID exists:", !!process.env.GOOGLE_CLIENT_ID)
 console.log("[AUTH] Resend API Key exists:", !!process.env.RESEND_API_KEY)
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim()
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
+const socialProviders = googleClientId && googleClientSecret
+  ? {
+      google: {
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+      },
+    }
+  : {}
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,
@@ -243,12 +254,7 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
 
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-    },
-  },
+  socialProviders,
 
   // ─── Cascade hooks ──────────────────────────────────────────────────
   // `databaseHooks.user.delete.before` anonymizes audit_log and

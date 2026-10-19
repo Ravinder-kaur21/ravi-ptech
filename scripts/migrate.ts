@@ -14,14 +14,17 @@
  *
  * Never hand-edit a migration after it's been applied — write a new one.
  */
-import "dotenv/config"
+import { config } from "dotenv"
+config({ path: ".env.local" })
+config({ path: ".env" })
+
 import { drizzle } from "drizzle-orm/postgres-js"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import postgres from "postgres"
 
 const url = process.env.DATABASE_URL
 if (!url) {
-  console.error("[MIGRATE] DATABASE_URL is not set in .env.local")
+  console.error("[MIGRATE] DATABASE_URL is not set in .env or .env.local")
   process.exit(1)
 }
 
