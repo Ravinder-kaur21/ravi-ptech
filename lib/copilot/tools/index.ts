@@ -82,12 +82,6 @@ import {
   recallCopilotMemoryTool,
 } from "./coworker"
 
-// Documents domain — agent produces downloadable artefacts
-import {
-  generateDocumentTool,
-  exportLoadsCsvTool,
-} from "./documents"
-
 // Re-export all tools individually
 export * from "./loads"
 export * from "./trips"
@@ -99,7 +93,6 @@ export * from "./expenses"
 export * from "./members"
 export * from "./system"
 export * from "./coworker"
-export * from "./documents"
 export * from "../types"
 
 /**
@@ -168,9 +161,5 @@ export const ALL_TMS_TOOLS: TmsToolDef<any, any>[] = [
   listScheduledTasksTool,
   saveCopilotMemoryTool,
   recallCopilotMemoryTool,
-
-  // 11. Documents — user-downloadable artefacts
-  generateDocumentTool,
-  exportLoadsCsvTool,
 ]
 

@@ -376,112 +376,23 @@ export function getAdaptiveSuggestions(
  * This mirrors the official `convertFileListToFileUIParts` helper that the
  * AI SDK uses internally when a `FileList` is passed to `sendMessage`.
  */
-/**
- * Upload the chosen files to S3 via a presigned PUT URL.
- *
- * Returns FileUIPart[] ready for `sendMessage({ files })` — the *server* receives
- * a URL, not a multi-megabyte data URL. This is the official `useChat` upload
- * pattern described at elements.ai-sdk.dev/components/attachments: data URLs
- * only work inline for `image/*` and `text/*`; PDFs / Office docs / ZIPs / large
- * images must be presigned and referenced by URL.
- */
 async function filesToFileUIParts(files: File[]): Promise<FileUIPart[]> {
-  const uploads = await Promise.all(
+  return Promise.all(
     files.map(async (file) => {
-      const presignRes = await fetch("/api/copilot/attachments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "application/octet-stream",
-          kind: "attachments",
-        }),
-      })
-      if (!presignRes.ok) {
-        throw new Error(`Failed to presign upload for ${file.name}: ${presignRes.status}`)
-      }
-      const { uploadUrl, publicUrl } = (await presignRes.json()) as {
-        uploadUrl: string
-        publicUrl: string
-      }
-      const putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-      })
-      if (!putRes.ok) {
-        throw new Error(`Failed to upload ${file.name}: ${putRes.status}`)
-      }
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
       return {
         type: "file" as const,
         mediaType: file.type || "application/octet-stream",
         filename: file.name,
-        url: publicUrl,
-      }
-    }),
-  )
-  return uploads
-}
-
-/**
- * Renders the result of `generateDocument` / `exportLoadsCsv` tools.
- * Both tools return `{ publicUrl, downloadUrl, format, filename, ... }`. The
- * downloadUrl is a 5-minute presigned S3 link the user can click to download.
- */
-function DocumentDownloadCard({
-  output,
-  toolName,
-}: {
-  output: any
-  toolName: string
-}) {
-  const downloadUrl: string | undefined = output?.downloadUrl
-  const publicUrl: string | undefined = output?.publicUrl
-  const filename: string | undefined = output?.filename
-  const format: string | undefined = output?.format
-  const sizeBytes: number | undefined = output?.sizeBytes
-  const count: number | undefined = output?.count
-  if (!downloadUrl && !publicUrl) return null
-  return (
-    <div className="my-2 rounded-lg border border-brand-rule/70 bg-brand-card px-4 py-3 shadow-xs">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
-            {toolName === "exportLoadsCsv" ? "CSV export ready" : "Document ready"}
-          </div>
-          <div className="mt-0.5 text-[11px] text-brand-muted-soft font-mono">
-            {filename}
-            {format ? ` · ${format.toUpperCase()}` : ""}
-            {typeof sizeBytes === "number" ? ` · ${(sizeBytes / 1024).toFixed(1)} KB` : ""}
-            {typeof count === "number" ? ` · ${count} rows` : ""}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {downloadUrl && (
-            <a
-              href={downloadUrl}
-              download={filename ?? true}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md bg-brand-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-accent/90"
-            >
-              ⬇ Download
-            </a>
-          )}
-          {publicUrl && (
-            <a
-              href={publicUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-brand-rule bg-brand-cream/60 px-3 py-1.5 text-xs text-brand-ink hover:bg-brand-cream"
-            >
-              Open
-            </a>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+        url,
+      };
+    })
+  );
 }
 
 function CopyButton({ message }: { message: UIMessage }) {
@@ -527,19 +438,32 @@ function renderPart(
   }
 
   if (isReasoningUIPart(part)) {
-    // Per the AI Elements docs (elements.ai-sdk.dev/components/reasoning),
-    // a `reasoning` UI part is a single continuous thinking block. It auto-opens
-    // while streaming and auto-closes when finished.
     return (
-      <Reasoning
+      <ChainOfThought
         key={`${message.id}-reasoning-${index}`}
-        isStreaming={part.state === "streaming"}
         defaultOpen
-        className="my-2"
+        className="my-2 p-0 border-0"
       >
-        <ReasoningTrigger />
-        <ReasoningContent>{part.text}</ReasoningContent>
-      </Reasoning>
+        <ChainOfThoughtStep
+          label={
+            <span className="font-medium text-xs text-brand-ink">
+              Step-by-Step Reasoning
+            </span>
+          }
+          description={
+            <span className="text-[11px] text-brand-muted-soft font-mono">
+              {part.state === "streaming"
+                ? "Evaluating freight rules & dispatch constraints..."
+                : "Operational reasoning deduction"}
+            </span>
+          }
+          status={part.state === "streaming" ? "active" : "complete"}
+        >
+          <div className="rounded-lg border border-brand-rule/70 bg-brand-cream/30 p-2.5 text-xs text-brand-ink leading-relaxed font-sans whitespace-pre-wrap">
+            {part.text}
+          </div>
+        </ChainOfThoughtStep>
+      </ChainOfThought>
     );
   }
 
@@ -566,21 +490,6 @@ function renderPart(
     const isRunning =
       toolPart.state === "input-streaming" ||
       toolPart.state === "input-available";
-
-    // 0. Downloadable artefacts from `generateDocument` / `exportLoadsCsv`
-    if (
-      (toolName === "generateDocument" || toolName === "exportLoadsCsv") &&
-      output &&
-      (output.downloadUrl || output.publicUrl)
-    ) {
-      return (
-        <DocumentDownloadCard
-          key={key}
-          output={output}
-          toolName={toolName}
-        />
-      )
-    }
 
     // 1. Dynamic Plan Rendering using official <Plan> AI Element
     if (toolName === "createExecutionPlan") {
@@ -2037,58 +1946,21 @@ export default function ChatInterface() {
   const [allowAll, setAllowAll] = useState(false);
   const [recentFinish, setRecentFinish] = useState(false);
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    stop: stopStream,
-    regenerate,
-    status,
-    error,
-    addToolApprovalResponse,
-  } = useChat({
-    // Per-chat hook state so two tabs / two threads don't stomp each other.
-    id: currentChatId ?? "ai-chat",
-    // Persist errors to console so the route's onError handler keeps breadcrumbs.
-    onError: (err) => console.error("[COPILOT-CHAT] useChat error:", err),
-    // Officially documented `transport` plumbing could go here; we leave the
-    // default DefaultChatTransport which already speaks `toUIMessageStreamResponse`.
+  const { messages, setMessages, sendMessage, status, error, addToolApprovalResponse } = useChat({
+    id: "ai-chat",
   });
 
   const prevStatusRef = useRef(status);
-  // Reset useChat state when the user switches threads so two threads don't
-  // stomp each other's `messages[]` (the previous code used `id: "ai-chat"`
-  // which shared one buffer across every chat).
-  const lastLoadedChatIdRef = useRef<string | null>(null)
 
-  // Load chat and settings from PostgreSQL on mount, and whenever the user
-  // switches chat ids (e.g. from a sidebar thread list).
+  // Load chat and settings from PostgreSQL on mount
   useEffect(() => {
-    if (!currentChatId) return
-    if (lastLoadedChatIdRef.current === currentChatId) return
-    lastLoadedChatIdRef.current = currentChatId
-
-    fetch(`/api/copilot/chats?id=${encodeURIComponent(currentChatId)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data.messages)) {
-          setMessages(data.messages);
-        }
-      })
-      .catch((err) => console.error("Failed to load chat session:", err));
-  }, [currentChatId, setMessages]);
-
-  // Initial load
-  useEffect(() => {
-    let cancelled = false
     fetch("/api/copilot/chats")
       .then((r) => r.json())
       .then((data) => {
-        if (cancelled) return
         if (data.chat?.id) {
           setCurrentChatId(data.chat.id);
         }
-        if (Array.isArray(data.messages)) {
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
           setMessages(data.messages);
         }
       })
@@ -2097,14 +1969,10 @@ export default function ChatInterface() {
     fetch("/api/copilot/settings")
       .then((r) => r.json())
       .then((data) => {
-        if (cancelled) return
         if (data.settings?.coat) setBotCoat(data.settings.coat);
         if (data.settings?.allowAll !== undefined) setAllowAll(data.settings.allowAll);
       })
       .catch((err) => console.error("Failed to load copilot settings:", err));
-    return () => {
-      cancelled = true
-    }
   }, [setMessages]);
 
   // Persist conversation messages to database
@@ -2269,24 +2137,6 @@ export default function ChatInterface() {
           />
         </div>
 
-        {/* Empty-state stop control: visible only while we are streaming so the
-            user can interrupt a long first-turn agent run. */}
-        <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-brand-muted-soft">
-          {status === "streaming" || status === "submitted" ? (
-            <button
-              type="button"
-              onClick={() => stopStream?.()}
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-destructive hover:bg-destructive/20"
-              aria-label="Stop generating"
-            >
-              ◼ Stop
-            </button>
-          ) : null}
-          <span aria-live="polite">
-            {status === "submitted" ? "Thinking…" : status === "streaming" ? "Streaming…" : null}
-          </span>
-        </div>
-
         {/* Dynamic Contextual Suggestion Chips */}
         <div className="mt-4 max-w-2xl px-2">
           <Suggestions className="justify-center flex-wrap gap-1.5">
@@ -2384,41 +2234,6 @@ export default function ChatInterface() {
           placeholder="Message Muvx Copilot..."
           searchLabel="Web Search"
         />
-        {/* Stream controls — Stop while streaming / Regenerate when ready. */}
-        <div className="mt-2 flex items-center justify-between text-[11px] text-brand-muted-soft">
-          <div className="flex items-center gap-2">
-            {status === "streaming" || status === "submitted" ? (
-              <button
-                type="button"
-                onClick={() => stopStream?.()}
-                className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-destructive hover:bg-destructive/20"
-                aria-label="Stop generating"
-              >
-                ◼ Stop
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={messages.length === 0}
-                onClick={() => regenerate?.()}
-                className="rounded-md border border-brand-rule bg-brand-card px-2 py-1 text-brand-ink hover:bg-brand-cream/60 disabled:opacity-50"
-                aria-label="Regenerate last response"
-              >
-                ↻ Regenerate
-              </button>
-            )}
-            <span aria-live="polite">
-              {status === "streaming"
-                ? "Streaming response…"
-                : status === "submitted"
-                  ? "Agent working…"
-                  : status === "ready"
-                    ? "Ready"
-                    : null}
-            </span>
-          </div>
-          <span className="text-[10px] opacity-60">{messages.length} messages</span>
-        </div>
       </div>
     </div>
   );

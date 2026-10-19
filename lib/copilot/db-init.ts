@@ -72,9 +72,6 @@ export async function ensureCopilotTables(): Promise<void> {
           "sound_enabled" boolean DEFAULT true NOT NULL,
           "show_chain_of_thought" boolean DEFAULT true NOT NULL,
           "max_steps" varchar(10) DEFAULT '12' NOT NULL,
-          "default_model" varchar(150) DEFAULT 'gemini-2.5-flash',
-          "default_provider" varchar(50) DEFAULT 'openrouter',
-          "web_search_default" boolean DEFAULT false NOT NULL,
           "created_at" timestamp DEFAULT now() NOT NULL,
           "updated_at" timestamp DEFAULT now() NOT NULL
         );
@@ -192,9 +189,6 @@ export async function getOrCreateCopilotSettings(tenantId: string, userId: strin
       soundEnabled: true,
       showChainOfThought: true,
       maxSteps: "12",
-      defaultModel: "gemini-2.5-flash",
-      defaultProvider: "openrouter",
-      webSearchDefault: false,
     })
     .returning()
 
