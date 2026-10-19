@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card } from "@/components/ui/card"
+import { SignupSkeleton } from "@/components/auth/signup-skeleton"
 import { Loader2, Truck, ArrowRight } from "lucide-react"
 
 function SignupContent() {
@@ -325,11 +326,7 @@ function SignupContent() {
 
 export default function SignupPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center">
-        <span className="font-geist text-sm text-brand-muted-soft">Loading…</span>
-      </div>
-    }>
+    <Suspense fallback={<SignupSkeleton />}>
       <SignupContent />
     </Suspense>
   )

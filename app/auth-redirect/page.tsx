@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Card } from "@/components/ui/card"
 
 export default function AuthRedirectPage() {
   const router = useRouter()
@@ -71,20 +73,35 @@ export default function AuthRedirectPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <p className="text-red-600">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f3ec] px-4">
+        <div className="text-center space-y-2">
+          <p className="font-serif text-lg text-brand-accent">{error}</p>
+          <p className="text-xs font-mono text-brand-muted-soft">Redirecting to login...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-        <p className="mt-4 text-gray-600">Setting up your account...</p>
-      </div>
+    <div className="flex min-h-screen items-center justify-center bg-[#f7f3ec] px-4">
+      <Card className="w-full max-w-sm border-brand-rule bg-white p-7 shadow-[0_10px_30px_rgba(58,46,30,0.06)] space-y-5">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-10 rounded-xl" />
+          <div className="space-y-1.5 flex-1">
+            <Skeleton className="h-4 w-32 rounded-md" />
+            <Skeleton className="h-3 w-20 rounded-sm" />
+          </div>
+        </div>
+
+        <div className="space-y-2.5 pt-2">
+          <Skeleton className="h-3 w-full rounded-sm" />
+          <Skeleton className="h-3 w-4/5 rounded-sm" />
+        </div>
+
+        <div className="pt-2">
+          <Skeleton className="h-2 w-full rounded-full bg-brand-accent/30" />
+        </div>
+      </Card>
     </div>
   )
 }

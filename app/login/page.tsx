@@ -1,6 +1,7 @@
 "use client"
 
 import { LoginForm } from "@/components/login-form"
+import { LoginSkeleton } from "@/components/auth/login-skeleton"
 import Link from "next/link"
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
@@ -48,11 +49,7 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <div className="min-h-screen bg-brand-cream flex flex-col">
-      <Suspense fallback={
-        <div className="flex-1 flex items-center justify-center">
-          <span className="font-geist text-sm text-brand-muted-soft">Loading…</span>
-        </div>
-      }>
+      <Suspense fallback={<LoginSkeleton />}>
         <LoginContent />
       </Suspense>
     </div>

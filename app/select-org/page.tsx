@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Building2, LogOut, Loader2 } from "lucide-react"
 
 type Organization = {
@@ -54,8 +55,32 @@ export default function SelectOrgPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f3ec] px-4">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2">
+            <Skeleton className="h-8 w-56 mx-auto rounded-lg" />
+            <Skeleton className="h-4 w-44 mx-auto rounded-md" />
+          </div>
+
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-[#e5dfd5] shadow-sm"
+              >
+                <Skeleton className="size-12 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32 rounded-md" />
+                  <Skeleton className="h-3 w-20 rounded-sm" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <Skeleton className="h-9 w-24 rounded-md" />
+          </div>
+        </div>
       </div>
     )
   }

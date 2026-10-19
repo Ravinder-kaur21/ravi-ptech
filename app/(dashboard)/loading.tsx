@@ -1,85 +1,57 @@
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 
 export default function DashboardLoading() {
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "260px",
-          "--sidebar-width-icon": "60px",
-          "--header-height": "calc(var(--spacing) * 14)",
-        } as React.CSSProperties
-      }
-    >
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-        <SidebarHeader>
-          <div className="flex items-center gap-2 px-2 py-2">
-            <Skeleton className="size-8 rounded-md" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-3.5 w-20" />
-              <Skeleton className="h-2.5 w-24" />
+    <div className="p-4 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
+      <div>
+        <Skeleton className="h-8 w-64 rounded-lg" />
+        <Skeleton className="mt-2 h-4 w-96 rounded-md" />
+      </div>
+
+      {/* KPI metrics row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="p-5 rounded-xl border border-brand-rule bg-brand-card space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-20 rounded-full" />
+              <Skeleton className="size-4 rounded-full" />
             </div>
+            <Skeleton className="h-7 w-28 rounded-md" />
+            <Skeleton className="h-3 w-36 rounded-sm" />
           </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <div className="space-y-1 px-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-md px-2 py-2">
-                <Skeleton className="size-4" />
-                <Skeleton className="h-3.5 flex-1" />
+        ))}
+      </div>
+
+      {/* Content grid */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-xl border border-brand-rule bg-brand-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-36 rounded-md" />
+            <Skeleton className="h-8 w-24 rounded-full" />
+          </div>
+          <div className="space-y-2.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-brand-rule/60 bg-[#fffefb]">
+                <Skeleton className="size-3 rounded-full" />
+                <Skeleton className="h-4 w-20 rounded-md" />
+                <Skeleton className="h-4 flex-1 rounded-md" />
+                <Skeleton className="h-4 w-16 rounded-md" />
               </div>
             ))}
           </div>
-        </SidebarContent>
-        <SidebarFooter>
-          <div className="space-y-1.5 px-2">
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-3 w-24" />
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-6 space-y-3">
+            <Skeleton className="h-5 w-32 rounded-md" />
+            <Skeleton className="h-24 w-full rounded-lg" />
           </div>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset className="bg-background">
-        {/* Header skeleton */}
-        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-brand-rule bg-brand-card px-4 lg:px-6">
-          <Skeleton className="size-7 rounded-md" />
-          <Skeleton className="h-4 w-24" />
-          <div className="ml-auto flex items-center gap-2">
-            <Skeleton className="h-9 w-44 rounded-md" />
-            <Skeleton className="size-9 rounded-full" />
-            <Skeleton className="size-9 rounded-full" />
+          <div className="rounded-xl border border-brand-rule bg-brand-card p-6 space-y-3">
+            <Skeleton className="h-5 w-28 rounded-md" />
+            <Skeleton className="h-32 w-full rounded-lg" />
           </div>
         </div>
-        {/* Page content skeleton */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-4 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
-            <div>
-              <Skeleton className="h-8 w-72" />
-              <Skeleton className="mt-2 h-4 w-96" />
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-28 rounded-lg" />
-              ))}
-            </div>
-            <div className="grid gap-6 lg:grid-cols-3">
-              <Skeleton className="lg:col-span-2 h-96 rounded-lg" />
-              <div className="space-y-4">
-                <Skeleton className="h-48 rounded-lg" />
-                <Skeleton className="h-48 rounded-lg" />
-              </div>
-            </div>
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   )
 }

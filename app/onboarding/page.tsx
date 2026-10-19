@@ -48,6 +48,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { OnboardingSkeleton } from "@/components/onboarding/onboarding-skeleton"
 // Brand class strings are defined in app/globals.css under @layer components:
 // .btn-primary · .btn-secondary · .input-base · .field-label · .field-error
 // · .error-banner · .display-heading · .italic-accent · .eyebrow
@@ -421,14 +422,7 @@ function OnboardingContent() {
 
   // ─── Loading state ───
   if (checkingExistingOrg) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "#f7f3ec" }}>
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" style={{ color: "#8a8b8f" }} />
-          <p className="mt-4 text-sm" style={{ color: "#8a8b8f" }}>Loading your workspace...</p>
-        </div>
-      </div>
-    )
+    return <OnboardingSkeleton />
   }
 
   if (done) {
@@ -661,24 +655,7 @@ function OnboardingContent() {
 // in OnboardingContent can stream in after prerender instead of blocking it.
 export default function OnboardingPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          className="flex min-h-screen items-center justify-center"
-          style={{ background: "#f7f3ec" }}
-        >
-          <div className="text-center">
-            <Loader2
-              className="h-8 w-8 animate-spin mx-auto"
-              style={{ color: "#8a8b8f" }}
-            />
-            <p className="mt-4 text-sm" style={{ color: "#8a8b8f" }}>
-              Loading…
-            </p>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<OnboardingSkeleton />}>
       <OnboardingContent />
     </Suspense>
   );
