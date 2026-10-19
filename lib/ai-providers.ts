@@ -15,13 +15,25 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 
+const nimApiKey = process.env.NIM_API_KEY;
+
+export const SUPPORTED_NIM_MODELS = [
+  "meta/llama-3.2-11b-vision-instruct",
+] as const;
+
+export const DEFAULT_NIM_MODEL = SUPPORTED_NIM_MODELS[0];
+
+if (!nimApiKey) {
+  console.warn("[AI] NIM_API_KEY is not configured; AI requests will fail until it is set in the server environment.");
+}
+
 // ─── NVIDIA NIM (free inference credits for new users) ──────────────────
 
 const nim = createOpenAICompatible({
   name: "nim",
   baseURL: "https://integrate.api.nvidia.com/v1",
   headers: {
-    Authorization: `Bearer ${process.env.NIM_API_KEY}`,
+    Authorization: `Bearer ${nimApiKey ?? ""}`,
   },
 });
 
@@ -29,13 +41,26 @@ const nim = createOpenAICompatible({
 
 /**
  * Resolve a LanguageModel instance from provider/model strings.
- * Any model name accepted by the provider is supported — the list
- * of available models is fetched dynamically from the provider API.
+ * NVIDIA NIM exposes a few account-scoped models; the app keeps a small
+ * allowlist of known-good ones so unsupported runtime IDs do not trigger 404s.
  */
+export function resolveNimModel(modelName: string | undefined | null): string {
+  const candidate = modelName?.trim();
+  if (!candidate) return DEFAULT_NIM_MODEL;
+
+  return SUPPORTED_NIM_MODELS.includes(candidate as (typeof SUPPORTED_NIM_MODELS)[number])
+    ? candidate
+    : DEFAULT_NIM_MODEL;
+}
+
 export function getModel(provider: string, model: string): LanguageModel {
+  if (!nimApiKey) {
+    throw new Error("Missing NIM_API_KEY. Add NIM_API_KEY to your server environment before using the AI assistant.");
+  }
+
   switch (provider) {
     case "nim":
-      return nim.chatModel(model);
+      return nim.chatModel(resolveNimModel(model));
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }

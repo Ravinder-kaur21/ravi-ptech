@@ -53,6 +53,8 @@ export interface AIInputSearchProps {
   webSearch?: boolean;
   defaultWebSearch?: boolean;
   onWebSearchChange?: (webSearch: boolean) => void;
+  disabled?: boolean;
+  isLoading?: boolean;
   className?: string;
 }
 
@@ -67,6 +69,8 @@ export default function AI_Input_Search({
   webSearch: webSearchProp,
   defaultWebSearch = true,
   onWebSearchChange,
+  disabled = false,
+  isLoading = false,
   className,
 }: AIInputSearchProps) {
   const [value, setValue] = useState("");
@@ -88,7 +92,7 @@ export default function AI_Input_Search({
   };
 
   const handleSubmit = () => {
-    if (!value.trim()) {
+    if (!value.trim() || disabled || isLoading) {
       return;
     }
     onSubmit?.(value, { webSearch, model: selectedModel });
@@ -120,7 +124,8 @@ export default function AI_Input_Search({
         >
           <Textarea
             aria-label={placeholder}
-            className="min-h-[52px] w-full resize-none rounded-xl rounded-b-none border-none bg-black/5 px-4 py-3 leading-[1.2] placeholder:text-black/70 focus-visible:ring-0 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+            className="min-h-[52px] w-full resize-none rounded-xl rounded-b-none border-none bg-black/5 px-4 py-3 leading-[1.2] placeholder:text-black/70 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/5 dark:text-white dark:placeholder:text-white/70"
+            disabled={disabled || isLoading}
             onChange={(e) => {
               setValue(e.target.value);
               adjustHeight();
@@ -146,7 +151,7 @@ export default function AI_Input_Search({
               <Select
                 value={selectedModel}
                 onValueChange={(v) => v && onModelChange(v)}
-                disabled={models.length === 0}
+                disabled={models.length === 0 || disabled || isLoading}
               >
                 <SelectTrigger className="h-8 w-[180px] border-none bg-transparent text-sm font-medium text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white">
                   <SelectValue placeholder="Select model" />
@@ -189,8 +194,10 @@ export default function AI_Input_Search({
                   webSearch
                     ? "border-sky-400 bg-sky-500/15 text-sky-500"
                     : "border-transparent bg-black/5 text-black/40 hover:text-black dark:bg-white/5 dark:text-white/40 dark:hover:text-white",
+                  (disabled || isLoading) && "cursor-not-allowed opacity-60",
                   "motion-safe:active:scale-[0.97]"
                 )}
+                disabled={disabled || isLoading}
                 onClick={toggleWebSearch}
                 type="button"
               >
@@ -237,11 +244,11 @@ export default function AI_Input_Search({
               aria-label="Send"
               className={cn(
                 "rounded-lg p-2 transition-[color,background-color,scale] motion-safe:active:scale-[0.97]",
-                canSubmit
+                canSubmit && !disabled && !isLoading
                   ? "cursor-pointer bg-sky-500/15 text-sky-500"
                   : "bg-black/5 text-black/40 dark:bg-white/5 dark:text-white/40"
               )}
-              disabled={!canSubmit}
+              disabled={!canSubmit || disabled || isLoading}
               onClick={handleSubmit}
               type="button"
             >

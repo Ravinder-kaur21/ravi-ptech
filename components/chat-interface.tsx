@@ -2,6 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import {
+  DefaultChatTransport,
   isTextUIPart,
   isReasoningUIPart,
   isFileUIPart,
@@ -157,8 +158,9 @@ export default function ChatInterface() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     id: "ai-chat",
+    transport: new DefaultChatTransport({ api: "/api/chat" }),
   });
 
   // Fetch available models from the NIM API on mount
@@ -177,10 +179,14 @@ export default function ChatInterface() {
       });
   }, []);
 
+  const isBusy = status === "submitted" || status === "streaming";
+
   const sendWithProvider = (
     text: string,
     options: { webSearch: boolean; model: string | null }
   ) => {
+    if (isBusy) return;
+
     sendMessage(
       { text },
       {
@@ -194,6 +200,8 @@ export default function ChatInterface() {
   };
 
   const handleFiles = (files: File[]) => {
+    if (isBusy) return;
+
     filesToFileUIParts(files).then((fileParts) => {
       sendMessage(
         { files: fileParts },
@@ -212,16 +220,34 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-2xl border border-brand-rule bg-brand-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-brand-rule bg-brand-cream-soft/60 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-[0.08em] text-brand-muted-soft">
+            Muvx AI assistant
+          </p>
+          <h2 className="font-serif text-xl text-brand-ink">Operations chat</h2>
+        </div>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMessages([])}
+            className="rounded-full border border-brand-rule bg-brand-card px-3 py-1.5 text-xs font-medium text-brand-ink transition-colors hover:bg-brand-cream-soft"
+          >
+            Clear chat
+          </button>
+        )}
+      </div>
+
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 text-sm text-destructive">
+        <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
           {error.message}
         </div>
       )}
 
       {/* Message list with auto-scroll */}
-      <Conversation>
+      <Conversation className="min-h-0 flex-1">
         <ConversationContent>
           {messages.length === 0 ? (
             <ConversationEmptyState
@@ -254,22 +280,24 @@ export default function ChatInterface() {
       </Conversation>
 
       {/* Suggestions + input */}
-      <div className="border-t bg-muted/10 p-4">
-        {messages.length > 0 && status !== "streaming" && (
+      <div className="border-t border-brand-rule bg-brand-cream-soft/40 p-4">
+        {messages.length > 0 && !isBusy && (
           <div className="mb-3">
             <Suggestions>
               <Suggestion
-                suggestion="What are the key features of the AI SDK?"
+                suggestion="Summarize my current loads and open issues."
                 onClick={() =>
                   handleSuggestionClick(
-                    "What are the key features of the AI SDK?"
+                    "Summarize my current loads and open issues."
                   )
                 }
               />
               <Suggestion
-                suggestion="Calculate 2 + 2 * 3"
+                suggestion="What invoices are overdue and what is pending?"
                 onClick={() =>
-                  handleSuggestionClick("Calculate 2 + 2 * 3")
+                  handleSuggestionClick(
+                    "What invoices are overdue and what is pending?"
+                  )
                 }
               />
             </Suggestions>
@@ -282,8 +310,10 @@ export default function ChatInterface() {
           onModelChange={setSelectedModel}
           onSubmit={sendWithProvider}
           onFilesSelected={handleFiles}
-          placeholder="Ask me anything..."
+          placeholder="Ask about loads, trips, invoices, or carrier pay..."
           searchLabel="Web Search"
+          disabled={false}
+          isLoading={isBusy}
         />
       </div>
     </div>

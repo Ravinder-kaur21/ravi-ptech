@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { ArrowRight, Settings, Users, Building2, CreditCard, Plug, ShieldCheck } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { getSession } from "@/lib/dal"
-import { cn } from "@/lib/utils"
 
 export default async function SettingsPage() {
   const session = await getSession()
@@ -35,7 +34,6 @@ export default async function SettingsPage() {
       description: "Subscription, invoices, and payment methods.",
       href: "/settings/billing",
       icon: CreditCard,
-      comingSoon: true,
     },
     {
       title: "Integrations",
@@ -74,11 +72,6 @@ export default async function SettingsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-brand-ink">{g.title}</p>
-                    {g.comingSoon && (
-                      <span className="rounded-full bg-brand-cream px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand-muted-soft">
-                        Soon
-                      </span>
-                    )}
                     <ArrowRight className="h-4 w-4 text-brand-muted-soft transition-transform group-hover:translate-x-0.5" />
                   </div>
                   <p className="mt-1 text-xs text-brand-muted-soft">
@@ -90,13 +83,9 @@ export default async function SettingsPage() {
           )
           return (
             <li key={g.href}>
-              {g.comingSoon ? (
-                <div className={cn("cursor-not-allowed opacity-60")}>{inner}</div>
-              ) : (
-                <Link href={g.href} className="block">
-                  {inner}
-                </Link>
-              )}
+              <Link href={g.href} className="block">
+                {inner}
+              </Link>
             </li>
           )
         })}
