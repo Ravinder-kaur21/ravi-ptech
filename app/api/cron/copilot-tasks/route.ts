@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { tickOnce } from "@/lib/copilot/scheduled-runner"
 
 export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
 
 /**
  * GET /api/cron/copilot-tasks

@@ -7,8 +7,6 @@ import { randomUUID } from "crypto"
 import { ensureCopilotTables } from "@/lib/copilot/db-init"
 import { loadChatMessages, persistCopilotMessages, purgeChatMessages, purgeMessagesForChats } from "@/lib/copilot/message-store"
 
-export const dynamic = "force-dynamic"
-
 /**
  * Persistent chat thread management.
  *
