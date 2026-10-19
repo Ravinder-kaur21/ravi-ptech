@@ -20,11 +20,21 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const { messages, model, provider } = body
+    const { messages, model, provider, chatId } = body
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Messages array is required" }, { status: 400 })
     }
+
+    const {
+      getOrCreateCopilotSettings,
+      getActiveCopilotMemories,
+      logCopilotEvent,
+    } = await import("@/lib/copilot/db-init")
+
+    const settings = await getOrCreateCopilotSettings(tenantId, session.user.id)
+    const isAllowAll = Boolean(body.allowAll ?? settings.allowAll)
+    const activeMemories = await getActiveCopilotMemories(tenantId, session.user.id)
 
     const perms = await getEffectivePermissions(session.user.id, tenantId)
 
@@ -37,9 +47,19 @@ export async function POST(req: NextRequest) {
     // Official AI SDK v5: Convert UIMessage[] (from useChat) to ModelMessage[] (for streamText)
     const modelMessages = await convertToModelMessages(messages)
 
-    const systemPrompt = `You are Muvx Copilot, the autonomous transportation intelligence agent integrated into Muvx TMS.
+    const memorySnippet =
+      activeMemories.length > 0
+        ? `\nENTERPRISE MEMORY & SAVED CONTEXT:\n${activeMemories.map((m) => `- [${m.key}] (${m.category}): ${m.content}`).join("\n")}`
+        : ""
+
+    const customInstructionsSnippet = settings.customInstructions
+      ? `\nUSER CUSTOM PREFERENCES:\n${settings.customInstructions}`
+      : ""
+
+    const systemPrompt = `You are Muvx Copilot, the autonomous enterprise transportation intelligence coworker integrated into Muvx TMS.
 User: ${session.user.name || session.user.email} (${session.user.role || "Member"})
 Workspace: ${tenantId}
+Autonomous Mode (Allow All): ${isAllowAll ? "ENABLED (execute approved transactions without halting)" : "DISABLED (prompt user for write confirmation)"}
 User Permissions:
 - Can create/edit loads: ${perms.has("loads.create")}
 - Can dispatch trips: ${perms.has("trips.create")}
@@ -48,7 +68,7 @@ User Permissions:
 - Can approve AP expenses: ${perms.has("expenses.view_all")}
 - Can view compliance: ${perms.has("safety.module")}
 
-FULL OPERATIONAL AGENCY (ALL USER ACTIONS):
+FULL OPERATIONAL & COWORKER AGENCY:
 You have direct read, search, and transactional tools across EVERY TMS domain:
 1. Loads:
    - Book new loads ('bookLoad')
@@ -64,40 +84,39 @@ You have direct read, search, and transactional tools across EVERY TMS domain:
    - Update driver CDL renewal, phone, or duty status ('updateDriver')
    - Register tractor units ('createTruck') and update maintenance/odometer ('updateTruck')
    - Register dry vans, reefers, and flatbed trailers ('createTrailer')
-4. Customers & Shippers:
+4. Coworker Communications & Scheduling:
+   - Assign operational tasks to drivers with SMS/push notification ('assignDriverTask')
+   - Ask drivers operational questions regarding location/ETA ('askDriverQuestion')
+   - Schedule future automated coworker checkups ('scheduleCoworkerTask')
+   - List scheduled tasks ('listScheduledTasks')
+   - Persist enterprise facts and driver preferences ('saveCopilotMemory')
+   - Recall memories ('recallCopilotMemory')
+5. Customers & Shippers:
    - Search customers, credit terms, and contact info ('queryCustomers')
    - Add new shipper/broker customers with Net 30/15 terms ('createCustomer')
-5. Partner Carriers:
+6. Partner Carriers:
    - Search partner carrier directory with MC# and insurance ('queryCarriers')
    - Onboard new motor carriers ('createCarrier')
-6. Invoicing & Accounting:
+7. Invoicing & Accounting:
    - Search customer AR invoices and overdue aging balances ('queryInvoices')
    - Generate official customer invoice from delivered loads ('createInvoice')
    - Email customer invoice with Resend payment link ('sendInvoiceEmail')
    - Record customer payment for invoices ('markInvoicePaid')
    - Query delivered loads missing signed PODs for factoring ('getMissingPods')
-7. Expenses & Settlements:
+8. Expenses & Settlements:
    - Review pending AP trip expenses ('reviewPendingExpenses')
    - Approve driver expense reimbursement ('approveExpense')
    - Log new trip expense: fuel, toll, lumper, maintenance ('logTripExpense')
-8. Team & Workspace Administration:
-   - List team members and pending invites ('listWorkspaceMembers')
-   - Invite new team members with assigned role ('inviteWorkspaceMember')
-   - Resend invitation email ('resendInvitation')
-   - Cancel pending invitation ('cancelInvitation')
-   - Promote or update member role ('updateMemberRole')
-   - Remove member with cascade cleanup ('removeMember')
-9. Audit & Security Trail:
-   - Search recent activity, load, dispatch, and security logs ('queryAuditLogs')
-10. Integrations & Telematics:
-    - Inspect real-time status of Samsara, Motive, Geotab, DAT One, QuickBooks ('checkIntegrations')
-11. Multi-Step Execution & Sub-Agents:
+9. Team Administration:
+   - List workspace members ('listWorkspaceMembers')
+   - Invite, promote, or remove members ('inviteWorkspaceMember', 'updateMemberRole', 'removeMember')
+10. Multi-Step Execution & Sub-Agents:
     - Formulate multi-step plans ('createExecutionPlan')
-    - Delegate subtasks to specialized bot personas ('delegateSubtask')
-    - Consult human dispatcher when decisions are required ('askDispatcher')
+    - Delegate subtasks to specialized coworker personas ('delegateSubtask')
+    - Consult human dispatcher when decisions are required ('askDispatcher')${memorySnippet}${customInstructionsSnippet}
 
-POLICY & APPROVALS PROTOCOL:
-Any action that writes or modifies operational or financial data (booking loads, dispatching trips, updating terms, creating assets, emailing invoices, marking payments, approving expenses) automatically triggers the official AI SDK Human-in-the-Loop confirmation card. Always be concise, freight-fluent, and accurate.`
+PROTOCOL:
+Be concise, freight-fluent, proactive, and accurate. When performing write operations in autonomous mode, state clearly what actions were executed.`
 
     const toolCtx: ToolContext = {
       userId: session.user.id,
@@ -115,26 +134,66 @@ Any action that writes or modifies operational or financial data (booking loads,
         description: t.description,
         inputSchema: t.inputSchema,
         execute: async (params) => {
-          return t.execute(params, toolCtx)
+          const start = Date.now()
+          try {
+            const out = await t.execute(params, toolCtx)
+            const durationMs = `${Date.now() - start}ms`
+            logCopilotEvent({
+              tenantId,
+              userId: session.user.id,
+              chatId: chatId || null,
+              level: "info",
+              action: `Executed ${t.name}`,
+              toolName: t.name,
+              status: "completed",
+              durationMs,
+              input: params as any,
+              output: out as any,
+            }).catch(() => {})
+            return out
+          } catch (err: any) {
+            const durationMs = `${Date.now() - start}ms`
+            logCopilotEvent({
+              tenantId,
+              userId: session.user.id,
+              chatId: chatId || null,
+              level: "error",
+              action: `Failed ${t.name}`,
+              toolName: t.name,
+              status: "error",
+              durationMs,
+              input: params as any,
+              error: err?.message || String(err),
+            }).catch(() => {})
+            throw err
+          }
         },
       })
 
-      if (t.requiresApproval) {
+      // When allowAll is true, bypass human confirmation so the agent executes autonomously
+      if (t.requiresApproval && !isAllowAll) {
         toolApprovalRecord[t.name] = {
           type: "user-approval",
-          reason: t.approvalReason || `Authorizing ${t.name} will execute an official operational transaction.`,
+          reason:
+            t.approvalReason ||
+            `Authorizing ${t.name} will execute an official operational transaction.`,
         }
       }
     }
 
-    const result = streamText({
+    const streamConfig: any = {
       model: resolvedModel,
       system: systemPrompt,
       messages: modelMessages,
-      stopWhen: ({ steps }) => steps.length >= 8,
-      toolApproval: toolApprovalRecord,
+      stopWhen: ({ steps }: any) => steps.length >= parseInt(settings.maxSteps || "12", 10),
       tools: toolsRecord,
-    })
+    }
+
+    if (!isAllowAll && Object.keys(toolApprovalRecord).length > 0) {
+      streamConfig.toolApproval = toolApprovalRecord
+    }
+
+    const result = streamText(streamConfig)
 
     return result.toUIMessageStreamResponse()
   } catch (error: any) {

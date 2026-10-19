@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState, memo } from "react";
 import { cn } from "@/lib/utils";
 
-export type BotMood = "idle" | "listen" | "think" | "happy" | "sleep" | "wow";
+export type BotMood =
+  | "idle"
+  | "listen"
+  | "think"
+  | "tool"
+  | "stream"
+  | "happy"
+  | "sleep"
+  | "wow"
+  | "error";
 export type BotCoat =
   | "ink"
   | "cream"
@@ -170,13 +179,17 @@ export const MuvxBot = memo(function MuvxBot({
   const isChild = variant === "child";
   const isLarge = size === "lg" || size === "xl";
 
-  // When thinking, look thoughtfully up and to the right
+  // When thinking, look thoughtfully up and to the right; when tool calling, focused scanning
   const pupilTransform =
     mood === "think"
-      ? "translate(3px, -6px)"
-      : mood === "sleep"
-        ? "translate(0px, 4px)"
-        : `translate(${pupil.x}px, ${pupil.y}px)`;
+      ? "translate(4px, -6px)"
+      : mood === "tool"
+        ? "translate(-3px, 2px)"
+        : mood === "stream"
+          ? "translate(0px, -2px)"
+          : mood === "sleep"
+            ? "translate(0px, 4px)"
+            : `translate(${pupil.x}px, ${pupil.y}px)`;
 
   return (
     <div
@@ -217,9 +230,36 @@ export const MuvxBot = memo(function MuvxBot({
           0%, 100% { transform: translateY(6px) scale(1.06, 0.92) rotate(-2deg); }
           50% { transform: translateY(2px) scale(1.08, 0.9) rotate(2deg); }
         }
-        @keyframes mote-think {
-          0%, 100% { transform: rotate(-3deg) scale(1, 1); }
-          50% { transform: rotate(3deg) scale(1.01, 0.99); }
+        /* Thinking: Smooth breathing scale growth & shrinkage with thoughtful tilt */
+        @keyframes mote-think-pulse {
+          0%, 100% { transform: scale(0.97) rotate(-2deg); }
+          50% { transform: scale(1.07) rotate(2deg); }
+        }
+        @keyframes mote-think-halo {
+          0%, 100% { opacity: 0.25; transform: scale(1); }
+          50% { opacity: 0.65; transform: scale(1.14); }
+        }
+        /* Tool Calling: Dual counter-rotating orbital data rings and micro-pulse */
+        @keyframes mote-orbit-cw {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes mote-orbit-ccw {
+          0% { transform: rotate(360deg); }
+          100% { transform: rotate(0deg); }
+        }
+        @keyframes mote-tool-pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.045); }
+        }
+        /* Streaming: Radiant acoustic ripple transmission wave */
+        @keyframes mote-ripple-1 {
+          0% { transform: scale(0.96); opacity: 0.75; }
+          100% { transform: scale(1.36); opacity: 0; }
+        }
+        @keyframes mote-ripple-2 {
+          0% { transform: scale(0.96); opacity: 0.75; }
+          100% { transform: scale(1.36); opacity: 0; }
         }
         @keyframes dot-pulse {
           0%, 70%, 100% { opacity: 0.25; transform: translateY(0); }
@@ -260,9 +300,129 @@ export const MuvxBot = memo(function MuvxBot({
               animation:
                 mood === "happy"
                   ? "mote-shadow-fast 0.7s ease-in-out infinite"
-                  : "mote-shadow 3.6s ease-in-out infinite",
+                  : mood === "tool"
+                    ? "mote-shadow-fast 1.2s ease-in-out infinite"
+                    : mood === "think"
+                      ? "mote-shadow 2.2s ease-in-out infinite"
+                      : "mote-shadow 3.6s ease-in-out infinite",
             }}
           />
+
+          {/* Thinking State Radiant Halo Aura */}
+          {mood === "think" && (
+            <circle
+              cx="160"
+              cy={isChild ? "160" : "156"}
+              r={isChild ? "102" : "120"}
+              fill="none"
+              stroke={palette.blush}
+              strokeWidth="5"
+              opacity="0.4"
+              style={{
+                transformOrigin: "160px 156px",
+                animation: "mote-think-halo 2.2s ease-in-out infinite",
+              }}
+            />
+          )}
+
+          {/* Tool Calling Dual Counter-Rotating Orbital Data Rings */}
+          {mood === "tool" && (
+            <g>
+              {/* Outer CW Orbit Ring with Particles */}
+              <g
+                style={{
+                  transformOrigin: "160px 156px",
+                  animation: "mote-orbit-cw 3.6s linear infinite",
+                }}
+              >
+                <circle
+                  cx="160"
+                  cy="156"
+                  r={isChild ? "108" : "126"}
+                  fill="none"
+                  stroke={palette.blush}
+                  strokeWidth="2"
+                  strokeDasharray="9 7"
+                  opacity="0.75"
+                />
+                <circle
+                  cx={isChild ? "268" : "286"}
+                  cy="156"
+                  r="4.5"
+                  fill={palette.blush}
+                  filter="drop-shadow(0 0 4px rgba(255, 122, 89, 0.6))"
+                />
+                <circle
+                  cx={isChild ? "52" : "34"}
+                  cy="156"
+                  r="3.5"
+                  fill={palette.eye}
+                />
+              </g>
+
+              {/* Inner CCW Orbit Ring with Particles */}
+              <g
+                style={{
+                  transformOrigin: "160px 156px",
+                  animation: "mote-orbit-ccw 2.6s linear infinite",
+                }}
+              >
+                <circle
+                  cx="160"
+                  cy="156"
+                  r={isChild ? "118" : "138"}
+                  fill="none"
+                  stroke={palette.eye}
+                  strokeWidth="1.5"
+                  strokeDasharray="14 10"
+                  opacity="0.5"
+                />
+                <circle
+                  cx="160"
+                  cy={isChild ? "42" : "18"}
+                  r="4"
+                  fill={palette.blush}
+                />
+                <circle
+                  cx="160"
+                  cy={isChild ? "278" : "294"}
+                  r="3"
+                  fill={palette.eye}
+                />
+              </g>
+            </g>
+          )}
+
+          {/* Streaming State Radiating Transmission Ripples */}
+          {mood === "stream" && (
+            <g>
+              <circle
+                cx="160"
+                cy={isChild ? "160" : "156"}
+                r={isChild ? "95" : "110"}
+                fill="none"
+                stroke={palette.blush}
+                strokeWidth="2.5"
+                style={{
+                  transformOrigin: "160px 156px",
+                  animation: "mote-ripple-1 2s cubic-bezier(0, 0.2, 0.8, 1) infinite",
+                }}
+              />
+              <circle
+                cx="160"
+                cy={isChild ? "160" : "156"}
+                r={isChild ? "95" : "110"}
+                fill="none"
+                stroke={palette.eye}
+                strokeWidth="2"
+                style={{
+                  transformOrigin: "160px 156px",
+                  animation: "mote-ripple-2 2s cubic-bezier(0, 0.2, 0.8, 1) infinite",
+                  animationDelay: "1s",
+                }}
+              />
+            </g>
+          )}
 
           {/* Organic Blob Body with Responsive Mood Motion */}
           <g
@@ -271,15 +431,19 @@ export const MuvxBot = memo(function MuvxBot({
               animation:
                 mood === "happy"
                   ? "mote-happy 0.7s ease-in-out infinite"
-                  : mood === "listen"
-                    ? "mote-listen 2.4s ease-in-out infinite"
+                  : mood === "tool"
+                    ? "mote-tool-pulse 1.2s ease-in-out infinite"
                     : mood === "think"
-                      ? "mote-think 2.2s ease-in-out infinite"
-                      : mood === "wow"
-                        ? "mote-wow 0.9s ease-in-out infinite"
-                        : mood === "sleep"
-                          ? "mote-sleep 4.8s ease-in-out infinite"
-                          : "mote-idle 3.6s ease-in-out infinite",
+                      ? "mote-think-pulse 2.2s ease-in-out infinite"
+                      : mood === "stream"
+                        ? "mote-listen 1.8s ease-in-out infinite"
+                        : mood === "listen"
+                          ? "mote-listen 2.4s ease-in-out infinite"
+                          : mood === "wow"
+                            ? "mote-wow 0.9s ease-in-out infinite"
+                            : mood === "sleep"
+                              ? "mote-sleep 4.8s ease-in-out infinite"
+                              : "mote-idle 3.6s ease-in-out infinite",
             }}
           >
             {/* Child Bot Little Sprout on Head */}

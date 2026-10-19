@@ -12,6 +12,7 @@ import {
   History,
   UserCog,
   Paintbrush,
+  Sparkles,
   ArrowUpRight,
   ArrowLeft,
   type LucideIcon,
@@ -50,6 +51,15 @@ const CARDS: SettingsCard[] = [
     href: "/settings/workspace/branding",
     icon: Paintbrush,
     requiresKey: "workspace.profile.edit",
+  },
+  {
+    id: "copilot",
+    title: "AI Copilot",
+    description: "Autonomous dispatch rules, orb appearance, memory, and token capacity.",
+    href: "/settings/copilot",
+    icon: Sparkles,
+    requiresKey: "workspace.profile.view",
+    kicker: "Intelligence",
   },
   {
     id: "members",

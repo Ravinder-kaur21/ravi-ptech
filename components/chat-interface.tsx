@@ -10,7 +10,7 @@ import {
   type FileUIPart,
   type UIMessage,
 } from "ai";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import AI_Input_Search from "@/components/kokonutui/ai-input-search";
 import {
@@ -439,14 +439,31 @@ function renderPart(
 
   if (isReasoningUIPart(part)) {
     return (
-      <Reasoning
+      <ChainOfThought
         key={`${message.id}-reasoning-${index}`}
-        isStreaming={part.state === "streaming"}
-        className="my-1.5"
+        defaultOpen
+        className="my-2 p-0 border-0"
       >
-        <ReasoningTrigger />
-        <ReasoningContent>{part.text}</ReasoningContent>
-      </Reasoning>
+        <ChainOfThoughtStep
+          label={
+            <span className="font-medium text-xs text-brand-ink">
+              Step-by-Step Reasoning
+            </span>
+          }
+          description={
+            <span className="text-[11px] text-brand-muted-soft font-mono">
+              {part.state === "streaming"
+                ? "Evaluating freight rules & dispatch constraints..."
+                : "Operational reasoning deduction"}
+            </span>
+          }
+          status={part.state === "streaming" ? "active" : "complete"}
+        >
+          <div className="rounded-lg border border-brand-rule/70 bg-brand-cream/30 p-2.5 text-xs text-brand-ink leading-relaxed font-sans whitespace-pre-wrap">
+            {part.text}
+          </div>
+        </ChainOfThoughtStep>
+      </ChainOfThought>
     );
   }
 
@@ -1709,6 +1726,144 @@ function renderPart(
       );
     }
 
+    // 5b. Coworker Driver Task Assignment
+    if (toolName === "assignDriverTask") {
+      const task = output?.task || input;
+      return (
+        <div key={key} className="my-2 p-3.5 rounded-xl border border-brand-accent/30 bg-gradient-to-br from-brand-accent/5 to-transparent text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Truck className="size-4 text-brand-accent" />
+              <span className="font-semibold text-brand-ink">
+                Driver Task: {input?.targetDriverName || "Fleet Driver"}
+              </span>
+            </div>
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 font-mono uppercase">
+              {output ? "Dispatched" : "Pending"}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-brand-card border border-brand-rule text-brand-ink/90 space-y-1">
+            <div className="font-medium text-xs text-brand-ink">{input?.title}</div>
+            {input?.description && (
+              <div className="text-brand-muted-soft text-[11px] leading-relaxed">
+                {input.description}
+              </div>
+            )}
+            {input?.targetDriverPhone && (
+              <div className="text-[10.5px] font-mono text-brand-muted-soft pt-1">
+                Dispatch Phone: {input.targetDriverPhone}
+              </div>
+            )}
+          </div>
+          {approval && (
+            <Confirmation approval={approval} state={toolPart.state} className="mt-2">
+              <ConfirmationRequest>
+                <ConfirmationTitle>
+                  {approval.requestReason || `Dispatch task to driver ${input?.targetDriverName}?`}
+                </ConfirmationTitle>
+              </ConfirmationRequest>
+              <ConfirmationAccepted>
+                <CheckIcon className="size-4 text-emerald-600" />
+                <span>Driver task dispatched</span>
+              </ConfirmationAccepted>
+              <ConfirmationRejected>
+                <XIcon className="size-4 text-destructive" />
+                <span>Driver task cancelled</span>
+              </ConfirmationRejected>
+              <ConfirmationActions>
+                <ConfirmationAction
+                  variant="outline"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                >
+                  Cancel
+                </ConfirmationAction>
+                <ConfirmationAction
+                  variant="default"
+                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                >
+                  Confirm & Dispatch
+                </ConfirmationAction>
+              </ConfirmationActions>
+            </Confirmation>
+          )}
+        </div>
+      );
+    }
+
+    // 5c. Coworker Driver Question
+    if (toolName === "askDriverQuestion") {
+      return (
+        <div key={key} className="my-2 p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="size-4 text-indigo-600" />
+              <span className="font-semibold text-brand-ink">
+                Driver Query: {input?.targetDriverName || "Commercial Driver"}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-indigo-600 uppercase bg-indigo-500/10 px-2 py-0.5 rounded">
+              {input?.channel || "SMS"}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-brand-card border border-brand-rule text-brand-ink/90 italic">
+            &ldquo;{input?.question}&rdquo;
+          </div>
+          {output && (
+            <div className="text-[11px] font-mono text-emerald-600 flex items-center gap-1.5 pt-0.5">
+              <CheckCircle2 className="size-3.5" />
+              <span>{output.message || "Question transmitted to driver cab"}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 5d. Coworker Automated Task Scheduler
+    if (toolName === "scheduleCoworkerTask") {
+      return (
+        <div key={key} className="my-2 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/5 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="size-4 text-amber-600" />
+              <span className="font-semibold text-brand-ink">
+                Coworker Task Scheduled
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-amber-700 uppercase bg-amber-500/10 px-2 py-0.5 rounded">
+              {input?.scheduleType || "once"}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-brand-card border border-brand-rule text-brand-ink/90 space-y-1">
+            <div className="font-medium text-xs">{input?.title}</div>
+            <div className="text-[11px] text-brand-muted-soft font-mono">
+              Run time: {input?.runAt || "As scheduled"} · Specialist: {input?.specialist || "dispatcher"}
+            </div>
+          </div>
+          {output && (
+            <div className="text-[11px] font-mono text-emerald-600 flex items-center gap-1.5 pt-0.5">
+              <CheckCircle2 className="size-3.5" />
+              <span>{output.message}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 5e. Save Copilot Enterprise Memory
+    if (toolName === "saveCopilotMemory") {
+      return (
+        <div key={key} className="my-2 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-xs space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400 font-mono text-[11px] uppercase">
+            <ShieldCheck className="size-3.5" />
+            Enterprise Memory Persisted
+          </div>
+          <div className="text-brand-ink font-mono text-[11px]">
+            [{input?.key}] ({input?.category}): {input?.content}
+          </div>
+        </div>
+      );
+    }
+
     // 6. All other tool calls rendered via ToolCallsSection
     const toolCategory = toolName.includes("rate")
       ? "rate_auditor"
@@ -1739,11 +1894,43 @@ function renderPart(
     };
 
     return (
-      <ToolCallsSection
-        key={key}
-        toolCalls={[entry]}
-        defaultExpanded={isRunning}
-      />
+      <div key={key} className="my-2 space-y-2">
+        <ToolCallsSection
+          toolCalls={[entry]}
+          defaultExpanded={isRunning}
+        />
+        {approval && (
+          <Confirmation approval={approval} state={toolPart.state} className="mt-2">
+            <ConfirmationRequest>
+              <ConfirmationTitle>
+                {approval.requestReason || `Authorize execution of ${toolName.replace(/([A-Z])/g, " $1")}?`}
+              </ConfirmationTitle>
+            </ConfirmationRequest>
+            <ConfirmationAccepted>
+              <CheckIcon className="size-4 text-emerald-600" />
+              <span>Action confirmed</span>
+            </ConfirmationAccepted>
+            <ConfirmationRejected>
+              <XIcon className="size-4 text-destructive" />
+              <span>Action cancelled</span>
+            </ConfirmationRejected>
+            <ConfirmationActions>
+              <ConfirmationAction
+                variant="outline"
+                onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+              >
+                Reject
+              </ConfirmationAction>
+              <ConfirmationAction
+                variant="default"
+                onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+              >
+                Approve & Execute
+              </ConfirmationAction>
+            </ConfirmationActions>
+          </Confirmation>
+        )}
+      </div>
     );
   }
 
@@ -1754,13 +1941,81 @@ export default function ChatInterface() {
   const [provider, setProvider] = useState<string>(DEFAULT_PROVIDER);
   const [availableModels, setAvailableModels] = useState<AIModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
-  const [interactiveMood, setInteractiveMood] = useState<BotMood>("idle");
   const [botCoat, setBotCoat] = useState<BotCoat>("ink");
-  const [activeSpecialist, setActiveSpecialist] = useState<BotRole>("main");
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [allowAll, setAllowAll] = useState(false);
+  const [recentFinish, setRecentFinish] = useState(false);
 
-  const { messages, sendMessage, status, error, addToolApprovalResponse } = useChat({
+  const { messages, setMessages, sendMessage, status, error, addToolApprovalResponse } = useChat({
     id: "ai-chat",
   });
+
+  const prevStatusRef = useRef(status);
+
+  // Load chat and settings from PostgreSQL on mount
+  useEffect(() => {
+    fetch("/api/copilot/chats")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.chat?.id) {
+          setCurrentChatId(data.chat.id);
+        }
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(data.messages);
+        }
+      })
+      .catch((err) => console.error("Failed to load chat session:", err));
+
+    fetch("/api/copilot/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.settings?.coat) setBotCoat(data.settings.coat);
+        if (data.settings?.allowAll !== undefined) setAllowAll(data.settings.allowAll);
+      })
+      .catch((err) => console.error("Failed to load copilot settings:", err));
+  }, [setMessages]);
+
+  // Persist conversation messages to database
+  useEffect(() => {
+    if (!currentChatId || messages.length === 0) return;
+    const timer = setTimeout(() => {
+      fetch("/api/copilot/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: currentChatId, messages }),
+      }).catch((err) => console.error("Error saving chat:", err));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [currentChatId, messages]);
+
+  // Track completion transition to joyful bounce
+  useEffect(() => {
+    if (prevStatusRef.current === "streaming" && status === "ready") {
+      setRecentFinish(true);
+      const timer = setTimeout(() => setRecentFinish(false), 2000);
+      return () => clearTimeout(timer);
+    }
+    prevStatusRef.current = status;
+  }, [status]);
+
+  // Calculate real-time dynamic bot mood
+  const isAnyToolRunning = messages.some((m) =>
+    m.parts?.some(
+      (p) =>
+        isToolUIPart(p) &&
+        ((p as any).state === "input-streaming" || (p as any).state === "input-available")
+    )
+  );
+
+  const copilotMood: BotMood = isAnyToolRunning
+    ? "tool"
+    : status === "submitted"
+      ? "think"
+      : status === "streaming"
+        ? "stream"
+        : recentFinish
+          ? "happy"
+          : "idle";
 
   // Fetch all dynamically available models from provider on mount
   useEffect(() => {
@@ -1794,6 +2049,14 @@ export default function ChatInterface() {
       fileParts = await filesToFileUIParts(options.files);
     }
 
+    const requestBody = {
+      provider,
+      model: options.model ?? selectedModel,
+      webSearch: options.webSearch,
+      chatId: currentChatId,
+      allowAll,
+    };
+
     if (fileParts && fileParts.length > 0) {
       sendMessage(
         {
@@ -1801,22 +2064,14 @@ export default function ChatInterface() {
           files: fileParts,
         },
         {
-          body: {
-            provider,
-            model: options.model ?? selectedModel,
-            webSearch: options.webSearch,
-          },
+          body: requestBody,
         }
       );
     } else if (text.trim()) {
       sendMessage(
         { text },
         {
-          body: {
-            provider,
-            model: options.model ?? selectedModel,
-            webSearch: options.webSearch,
-          },
+          body: requestBody,
         }
       );
     }
@@ -1830,26 +2085,17 @@ export default function ChatInterface() {
           body: {
             provider,
             model: selectedModel,
+            chatId: currentChatId,
+            allowAll,
           },
         }
       );
     });
   };
 
-  const handleSuggestionClick = (text: string) => {
-    sendWithProvider(text, { webSearch: false, model: selectedModel });
-  };
-
-  const handleSelectSpecialist = (sp: BotSpecialist) => {
-    setActiveSpecialist(sp.id);
-    setBotCoat(sp.coat);
-    setInteractiveMood("happy");
-    setTimeout(() => setInteractiveMood("idle"), 1200);
-  };
-
   const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
-  const adaptiveSuggestions = getAdaptiveSuggestions(lastAssistantMessage, activeSpecialist);
-  const emptyStateSuggestions = getAdaptiveSuggestions(undefined, activeSpecialist);
+  const adaptiveSuggestions = getAdaptiveSuggestions(lastAssistantMessage, "main");
+  const emptyStateSuggestions = getAdaptiveSuggestions(undefined, "main");
 
   if (messages.length === 0) {
     return (
@@ -1860,134 +2106,22 @@ export default function ChatInterface() {
           </div>
         )}
 
-        <div className="w-full max-w-2xl text-center mb-5 space-y-2">
-          {/* Muvx Copilot Master Bot with Pointer Tracking and Mood Expressions */}
+        <div className="w-full max-w-2xl text-center mb-6 space-y-3">
+          {/* Muvx Copilot Agent Orb with Dynamic Activity Animations */}
           <MuvxBot
             size="lg"
             coat={botCoat}
-            role={activeSpecialist}
-            mood={
-              status === "submitted"
-                ? "think"
-                : status === "streaming"
-                  ? "listen"
-                  : interactiveMood
-            }
-            showDots={status === "submitted" || interactiveMood === "think"}
-            className="mb-1 mx-auto"
+            mood={copilotMood}
+            showDots={status === "submitted"}
+            className="mb-2 mx-auto"
           />
 
-          {/* Interactive Mood Selector & Color Swatches */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-            <div className="flex items-center gap-1">
-              {(["idle", "listen", "think", "happy", "wow", "sleep"] as BotMood[]).map(
-                (m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setInteractiveMood(m)}
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all capitalize",
-                      interactiveMood === m && status !== "submitted" && status !== "streaming"
-                        ? "bg-brand-ink text-brand-cream shadow-2xs"
-                        : "bg-brand-card/80 border border-brand-rule text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40"
-                    )}
-                  >
-                    {m}
-                  </button>
-                )
-              )}
-            </div>
-
-            <div className="h-4 w-px bg-brand-rule hidden sm:block" />
-
-            {/* Coat Palette Swatches */}
-            <div className="flex items-center gap-1.5">
-              {[
-                { id: "ink", label: "Obsidian Ink", bg: "#141414" },
-                { id: "cream", label: "Warm Cream", bg: "#fff6ea" },
-                { id: "peach", label: "Coral Peach", bg: "#ffb199" },
-                { id: "grove", label: "Forest Grove", bg: "#163d36" },
-              ].map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  title={c.label}
-                  aria-label={c.label}
-                  onClick={() => setBotCoat(c.id as BotCoat)}
-                  className={cn(
-                    "size-4 rounded-full border transition-transform",
-                    botCoat === c.id
-                      ? "ring-2 ring-brand-accent ring-offset-1 scale-110 border-transparent"
-                      : "border-brand-rule hover:scale-105 opacity-80"
-                  )}
-                  style={{ backgroundColor: c.bg }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink pt-1">
+          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
             What can I help you dispatch today?
           </h1>
-          <p className="text-xs text-brand-muted-soft max-w-md mx-auto">
-            Autonomous freight intelligence, rate confirmation analysis, FMCSA safety checks, and load dispatching.
+          <p className="text-xs text-brand-muted-soft max-w-md mx-auto leading-relaxed">
+            Autonomous freight intelligence, rate confirmation analysis, FMCSA compliance audits, and driver task dispatching.
           </p>
-        </div>
-
-        {/* Grok Bot Teams Concept: Specialist Team Bar */}
-        <div className="w-full max-w-2xl mb-4">
-          <div className="flex items-center justify-between pb-2 px-1 text-xs text-brand-muted-soft">
-            <span className="font-mono text-[10px] uppercase tracking-wider font-semibold text-brand-ink/80 flex items-center gap-1.5">
-              <Sparkles className="size-3 text-brand-accent" />
-              Logistics Specialist Team
-            </span>
-            <span className="text-[10px] text-brand-muted-soft hidden sm:inline">
-              Select specialist to focus AI agency
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-            {SPECIALIST_TEAMS.map((sp) => {
-              const isSelected = activeSpecialist === sp.id;
-              return (
-                <button
-                  key={sp.id}
-                  type="button"
-                  onClick={() => handleSelectSpecialist(sp)}
-                  className={cn(
-                    "flex flex-col items-start p-2.5 rounded-xl text-left border transition-all duration-150 cursor-pointer",
-                    isSelected
-                      ? "border-brand-ink bg-brand-cream/80 shadow-xs ring-1 ring-brand-ink/30"
-                      : "border-brand-rule bg-brand-card/70 hover:border-brand-accent/40 hover:bg-brand-cream/30 text-brand-muted-soft"
-                  )}
-                >
-                  <div className="flex items-center gap-1.5 w-full">
-                    <div
-                      className="size-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor:
-                          sp.coat === "ink"
-                            ? "#141414"
-                            : sp.coat === "indigo"
-                              ? "#4f46e5"
-                              : sp.coat === "emerald"
-                                ? "#059669"
-                                : sp.coat === "amber"
-                                  ? "#d97706"
-                                  : "#163d36",
-                      }}
-                    />
-                    <span className="text-[11px] font-semibold text-brand-ink truncate">
-                      {sp.name}
-                    </span>
-                  </div>
-                  <span className="text-[9.5px] text-brand-muted-soft mt-0.5 line-clamp-1">
-                    {sp.tagline}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Centered AI Input with Live Model Picker */}
@@ -1998,12 +2132,12 @@ export default function ChatInterface() {
             onModelChange={setSelectedModel}
             onSubmit={sendWithProvider}
             onFilesSelected={handleFiles}
-            placeholder={`Ask ${SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}, draft a load, or paste rate con...`}
+            placeholder="Ask Copilot, draft a load, schedule driver task, or paste rate con..."
             searchLabel="Web Search"
           />
         </div>
 
-        {/* Dynamic Contextual Suggestion Chips tailored to current specialist */}
+        {/* Dynamic Contextual Suggestion Chips */}
         <div className="mt-4 max-w-2xl px-2">
           <Suggestions className="justify-center flex-wrap gap-1.5">
             {emptyStateSuggestions.map((item, idx) => (
@@ -2011,7 +2145,7 @@ export default function ChatInterface() {
                 key={`${item.title}-${idx}`}
                 suggestion={item.title}
                 onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
-                className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs"
+                className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs text-xs"
               />
             ))}
           </Suggestions>
@@ -2022,52 +2156,6 @@ export default function ChatInterface() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      {/* Grok Bot Teams Header Dots */}
-      <div className="shrink-0 border-b border-brand-rule/60 bg-brand-card/40 px-4 py-2 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-brand-muted-soft">Team:</span>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {SPECIALIST_TEAMS.map((sp) => {
-              const isSelected = activeSpecialist === sp.id;
-              return (
-                <button
-                  key={sp.id}
-                  type="button"
-                  title={`${sp.name} · ${sp.title}`}
-                  onClick={() => handleSelectSpecialist(sp)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium transition-all cursor-pointer",
-                    isSelected
-                      ? "bg-brand-ink text-brand-cream shadow-2xs"
-                      : "text-brand-muted-soft hover:text-brand-ink hover:bg-brand-cream/60 border border-brand-rule/50"
-                  )}
-                >
-                  <span
-                    className="size-1.5 rounded-full"
-                    style={{
-                      backgroundColor:
-                        sp.coat === "ink"
-                          ? "#141414"
-                          : sp.coat === "indigo"
-                            ? "#6366f1"
-                            : sp.coat === "emerald"
-                              ? "#10b981"
-                              : sp.coat === "amber"
-                                ? "#f59e0b"
-                                : "#14b8a6",
-                    }}
-                  />
-                  <span>{sp.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <span className="font-mono text-[10px] text-brand-muted-soft hidden sm:inline">
-          {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.title}
-        </span>
-      </div>
-
       {/* Error display */}
       {error && (
         <div className="px-4 py-2 text-sm text-destructive shrink-0">
@@ -2089,18 +2177,8 @@ export default function ChatInterface() {
                       <MuvxBot
                         size="xs"
                         coat={botCoat}
-                        role={activeSpecialist}
-                        mood={
-                          isLastMessage && status === "streaming"
-                            ? "listen"
-                            : isLastMessage && status === "submitted"
-                              ? "think"
-                              : "idle"
-                        }
+                        mood={isLastMessage ? copilotMood : "idle"}
                       />
-                      <span className="text-xs font-medium text-brand-ink/90">
-                        {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}
-                      </span>
                     </div>
                   )}
                   <MessageContent>
@@ -2115,7 +2193,7 @@ export default function ChatInterface() {
                     )}
                   </MessageContent>
                   {isAssistant && (
-                    <MessageToolbar className="mt-1">
+                    <MessageToolbar>
                       <MessageActions>
                         <CopyButton message={message} />
                       </MessageActions>
@@ -2124,55 +2202,36 @@ export default function ChatInterface() {
                 </Message>
               );
             })}
-
-            {/* Thinking indicator while the model is preparing a response */}
-            {status === "submitted" && (
-              <Message from="assistant" className="gap-1.5">
-                <div className="flex items-center gap-2 mb-0.5 select-none">
-                  <MuvxBot size="xs" coat={botCoat} role={activeSpecialist} mood="think" />
-                  <span className="text-xs font-medium text-brand-ink/90">
-                    {SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}
-                  </span>
-                </div>
-                <MessageContent>
-                  <Shimmer duration={2}>Thinking…</Shimmer>
-                </MessageContent>
-              </Message>
-            )}
-
-            {/* Contextual Suggestion Chips dynamically derived from latest response */}
-            {status === "ready" && messages.length > 0 && adaptiveSuggestions.length > 0 && (
-              <div className="py-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-brand-muted-soft mb-1.5 flex items-center gap-1.5">
-                  <Sparkles className="size-3 text-brand-accent" />
-                  Suggested Next Steps
-                </div>
-                <Suggestions className="justify-start flex-wrap gap-1.5">
-                  {adaptiveSuggestions.map((item, idx) => (
-                    <Suggestion
-                      key={`${item.title}-${idx}`}
-                      suggestion={item.title}
-                      onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
-                      className="text-xs border-brand-rule bg-brand-card/80 text-brand-muted-soft hover:text-brand-ink hover:border-brand-accent/40 hover:bg-brand-cream/50 shadow-2xs transition-all cursor-pointer"
-                    />
-                  ))}
-                </Suggestions>
-              </div>
-            )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
       </div>
 
-      {/* Input container: clean, compact, centered */}
-      <div className="shrink-0 max-w-2xl mx-auto w-full px-4 pb-4 pt-1">
+      {/* Active turn contextual suggestions */}
+      {status === "ready" && adaptiveSuggestions.length > 0 && (
+        <div className="px-4 py-2 max-w-4xl mx-auto w-full">
+          <Suggestions className="flex-wrap gap-1.5">
+            {adaptiveSuggestions.map((item, idx) => (
+              <Suggestion
+                key={`${item.title}-${idx}`}
+                suggestion={item.title}
+                onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
+                className="border-brand-rule bg-brand-card/80 text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs text-xs"
+              />
+            ))}
+          </Suggestions>
+        </div>
+      )}
+
+      {/* Input bar at bottom with file attachment and web search */}
+      <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full shrink-0">
         <AI_Input_Search
           models={availableModels}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
           onSubmit={sendWithProvider}
           onFilesSelected={handleFiles}
-          placeholder={`Message ${SPECIALIST_TEAMS.find((s) => s.id === activeSpecialist)?.name || "Muvx"}...`}
+          placeholder="Message Muvx Copilot..."
           searchLabel="Web Search"
         />
       </div>

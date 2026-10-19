@@ -72,6 +72,16 @@ import {
   askDispatcherTool,
 } from "./system"
 
+// Coworker Scheduler, Driver Tasks & Memory domain
+import {
+  assignDriverTaskTool,
+  askDriverQuestionTool,
+  scheduleCoworkerTaskTool,
+  listScheduledTasksTool,
+  saveCopilotMemoryTool,
+  recallCopilotMemoryTool,
+} from "./coworker"
+
 // Re-export all tools individually
 export * from "./loads"
 export * from "./trips"
@@ -82,6 +92,7 @@ export * from "./invoices"
 export * from "./expenses"
 export * from "./members"
 export * from "./system"
+export * from "./coworker"
 export * from "../types"
 
 /**
@@ -142,4 +153,13 @@ export const ALL_TMS_TOOLS: TmsToolDef<any, any>[] = [
   createExecutionPlanTool,
   delegateSubtaskTool,
   askDispatcherTool,
+
+  // 10. Autonomous Coworker, Driver Tasks & Memory
+  assignDriverTaskTool,
+  askDriverQuestionTool,
+  scheduleCoworkerTaskTool,
+  listScheduledTasksTool,
+  saveCopilotMemoryTool,
+  recallCopilotMemoryTool,
 ]
+

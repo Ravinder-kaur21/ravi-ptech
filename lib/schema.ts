@@ -1321,3 +1321,201 @@ export const apExpenseRelations = relations(apExpense, ({ one }) => ({
     references: [driver.id],
   }),
 }))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENTERPRISE COPILOT & COWORKER TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const copilotChat = pgTable(
+  "copilot_chat",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New Conversation"),
+    specialist: varchar("specialist", { length: 50 }).notNull().default("main"),
+    model: varchar("model", { length: 150 }),
+    provider: varchar("provider", { length: 50 }),
+    pinned: boolean("pinned").notNull().default(false),
+    archived: boolean("archived").notNull().default(false),
+    messages: jsonb("messages").$type<any[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_chat_tenant_user_idx").on(table.tenantId, table.userId, table.updatedAt),
+  ]
+)
+
+export const copilotMessage = pgTable(
+  "copilot_message",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chat_id")
+      .notNull()
+      .references(() => copilotChat.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 30 }).notNull(),
+    parts: jsonb("parts").$type<any[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_message_chat_idx").on(table.chatId, table.createdAt),
+  ]
+)
+
+export const copilotSetting = pgTable(
+  "copilot_setting",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    coat: varchar("coat", { length: 50 }).notNull().default("ink"),
+    customPalette: jsonb("custom_palette").$type<{
+      body: string
+      eye: string
+      pupil: string
+      blush: string
+      shadow: string
+    } | null>(),
+    autoCycleCoat: boolean("auto_cycle_coat").notNull().default(false),
+    defaultSpecialist: varchar("default_specialist", { length: 50 }).notNull().default("main"),
+    allowAll: boolean("allow_all").notNull().default(false),
+    approvalThreshold: varchar("approval_threshold", { length: 50 }).default("0"),
+    memoryEnabled: boolean("memory_enabled").notNull().default(true),
+    customInstructions: text("custom_instructions"),
+    proactiveHeartbeat: boolean("proactive_heartbeat").notNull().default(true),
+    soundEnabled: boolean("sound_enabled").notNull().default(true),
+    showChainOfThought: boolean("show_chain_of_thought").notNull().default(true),
+    maxSteps: varchar("max_steps", { length: 10 }).notNull().default("12"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_setting_tenant_user_idx").on(table.tenantId, table.userId),
+  ]
+)
+
+export const copilotMemory = pgTable(
+  "copilot_memory",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 255 }).notNull(),
+    content: text("content").notNull(),
+    category: varchar("category", { length: 50 }).notNull().default("fact"),
+    source: varchar("source", { length: 50 }).notNull().default("user"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_memory_tenant_user_idx").on(table.tenantId, table.userId),
+  ]
+)
+
+export const copilotLog = pgTable(
+  "copilot_log",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    chatId: text("chat_id"),
+    level: varchar("level", { length: 30 }).notNull().default("info"),
+    action: varchar("action", { length: 150 }).notNull(),
+    toolName: varchar("tool_name", { length: 100 }),
+    specialist: varchar("specialist", { length: 50 }).default("main"),
+    status: varchar("status", { length: 50 }).notNull().default("completed"),
+    durationMs: varchar("duration_ms", { length: 30 }),
+    input: jsonb("input").$type<Record<string, unknown>>(),
+    output: jsonb("output").$type<Record<string, unknown>>(),
+    error: text("error"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_log_tenant_created_idx").on(table.tenantId, table.createdAt),
+    index("copilot_log_chat_idx").on(table.chatId),
+  ]
+)
+
+export const copilotScheduledTask = pgTable(
+  "copilot_scheduled_task",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chatId: text("chat_id"),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    taskType: varchar("task_type", { length: 50 }).notNull().default("driver_task"),
+    specialist: varchar("specialist", { length: 50 }).notNull().default("dispatcher"),
+    targetDriverId: text("target_driver_id"),
+    targetDriverName: varchar("target_driver_name", { length: 255 }),
+    targetDriverPhone: varchar("target_driver_phone", { length: 50 }),
+    targetLoadId: text("target_load_id"),
+    targetLoadNumber: varchar("target_load_number", { length: 100 }),
+    scheduleType: varchar("schedule_type", { length: 30 }).notNull().default("once"),
+    intervalMinutes: varchar("interval_minutes", { length: 20 }),
+    runAt: timestamp("run_at"),
+    nextRunAt: timestamp("next_run_at"),
+    lastRunAt: timestamp("last_run_at"),
+    status: varchar("status", { length: 50 }).notNull().default("scheduled"),
+    priority: varchar("priority", { length: 30 }).notNull().default("normal"),
+    driverPrompt: text("driver_prompt"),
+    driverResponse: text("driver_response"),
+    conversationLog: jsonb("conversation_log")
+      .$type<Array<{ sender: string; text: string; timestamp: string }>>()
+      .default([]),
+    lastResult: jsonb("last_result").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("copilot_task_tenant_status_idx").on(table.tenantId, table.status, table.nextRunAt),
+  ]
+)
+
+export const copilotChatRelations = relations(copilotChat, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [copilotChat.tenantId],
+    references: [organization.id],
+  }),
+  user: one(user, {
+    fields: [copilotChat.userId],
+    references: [user.id],
+  }),
+  messageRows: many(copilotMessage),
+}))
+
+export const copilotMessageRelations = relations(copilotMessage, ({ one }) => ({
+  chat: one(copilotChat, {
+    fields: [copilotMessage.chatId],
+    references: [copilotChat.id],
+  }),
+}))
+

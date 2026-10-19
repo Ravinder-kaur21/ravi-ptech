@@ -52,7 +52,8 @@ export interface StackRow {
 
 export interface StackSection {
   title?: string;
-  rows: StackRow[];
+  rows?: StackRow[];
+  customContent?: ReactNode;
   /** Small print under the section. */
   footer?: string;
 }
@@ -170,13 +171,16 @@ function Page({
               {section.title}
             </h3>
           )}
-          <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl bg-gray-50 dark:divide-gray-800/70 dark:bg-gray-900">
-            {section.rows.map((row) => (
-              <li key={row.id}>
-                <RowView onOpen={onOpen} row={row} />
-              </li>
-            ))}
-          </ul>
+          {section.rows && section.rows.length > 0 && (
+            <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl bg-gray-50 dark:divide-gray-800/70 dark:bg-gray-900">
+              {section.rows.map((row) => (
+                <li key={row.id}>
+                  <RowView onOpen={onOpen} row={row} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {section.customContent}
           {section.footer && (
             <p className="mt-1.5 px-3 text-gray-400 text-xs leading-5 dark:text-gray-500">
               {section.footer}

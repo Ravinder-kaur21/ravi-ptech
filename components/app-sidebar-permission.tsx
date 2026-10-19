@@ -11,6 +11,7 @@ import {
   Plus,
   Settings,
   CreditCard,
+  MoreVertical,
   type LucideIcon,
 } from "lucide-react"
 import {
@@ -22,6 +23,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -244,6 +246,57 @@ export function AppSidebarPermission({
                             {item.label}
                           </span>
                         </SidebarMenuButton>
+
+                        {item.href === "/copilot" && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <SidebarMenuAction
+                                  showOnHover={false}
+                                  className={cn(
+                                    "text-brand-muted-soft hover:text-brand-ink right-1.5",
+                                    isActive && "text-brand-cream/80 hover:text-brand-cream"
+                                  )}
+                                />
+                              }
+                            >
+                              <MoreVertical className="size-4" />
+                              <span className="sr-only">Copilot Options</span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              className="w-52 rounded-xl border-brand-rule bg-brand-card p-1 shadow-lg"
+                              side="right"
+                              align="start"
+                              sideOffset={6}
+                            >
+                              <DropdownMenuGroup>
+                                <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.04em] text-brand-muted-soft px-2 py-1.5">
+                                  AI Copilot
+                                </DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  render={<Link href="/settings/copilot" />}
+                                  className="rounded-lg cursor-pointer text-xs"
+                                >
+                                  <Settings className="mr-2 size-3.5 text-brand-muted-soft" />
+                                  <span>Copilot Settings</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    fetch("/api/copilot/chats", { method: "DELETE" })
+                                      .then(() => {
+                                        window.location.href = "/copilot"
+                                      })
+                                      .catch(() => {})
+                                  }}
+                                  className="rounded-lg cursor-pointer text-xs"
+                                >
+                                  <Plus className="mr-2 size-3.5 text-brand-muted-soft" />
+                                  <span>New Conversation</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </SidebarMenuItem>
                     )
                   })}
