@@ -104,13 +104,26 @@ export function publicUrl(key: string): string {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`
 }
 
-/** Generate a presigned GET URL for public sharing (e.g., invoice logos). */
+/**
+ * Generate a presigned GET URL for public sharing (e.g., invoice logos).
+ *
+ * `mediaType` is passed through as S3's `ResponseContentType`, which overrides
+ * the stored Content-Type on the response. Without it a GET can come back as
+ * `application/octet-stream` (or with no type at all) even though the object
+ * was uploaded with the right type — and a model fetching that URL then refuses
+ * the file with "expected application/pdf, detected unknown".
+ */
 export async function createPresignedGet(
   key: string,
   expiresInSec = 3600, // 1 hour default
+  mediaType?: string,
 ): Promise<{ url: string }> {
   const { GetObjectCommand } = await import("@aws-sdk/client-s3")
-  const command = new GetObjectCommand({ Bucket: bucket, Key: key })
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ...(mediaType ? { ResponseContentType: mediaType } : {}),
+  })
   const url = await getSignedUrl(getS3(), command, { expiresIn: expiresInSec })
   return { url }
 }

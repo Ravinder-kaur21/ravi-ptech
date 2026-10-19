@@ -10,16 +10,12 @@
  * @github: https://github.com/kokonut-labs/kokonutui
  */
 
-import { Globe, Paperclip, Send, FileText, X } from "lucide-react";
+import { Globe, Paperclip, Send } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { ModelPicker, type AIModelItem } from "@/components/ai/model-picker";
-import {
-  Attachments,
-  Attachment,
-  AttachmentPreview,
-} from "@/components/ai-elements/attachments";
+import { MessageFileAttachment } from "@/components/chat/message-file-attachment";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 
@@ -165,28 +161,28 @@ export default function AI_Input_Search({
             value={value}
           />
 
-          {/* Staged files — official <Attachments variant="inline"> from AI Elements:
-              compact badges with hover preview and a remove affordance. */}
+          {/* Staged files — compact cards matching the message treatment. Same
+              component so a file looks identical before and after sending. */}
           {stagedFiles.length > 0 && (
-            <Attachments variant="inline" className="px-3.5 pb-2 pt-0.5">
+            <div className="flex flex-wrap items-start gap-1.5 px-3.5 pb-2 pt-1">
               {stagedFiles.map((file, idx) => (
-                <Attachment
+                <MessageFileAttachment
                   key={`${file.name}-${idx}`}
-                  data={{
-                    id: `${file.name}-${idx}`,
+                  id={`staged-${file.name}-${idx}`}
+                  part={{
                     type: "file",
                     mediaType: file.type || "application/octet-stream",
                     filename: file.name,
                     url: "",
+                    size: file.size,
                   }}
-                  onRemove={() => {
-                    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
-                  }}
-                >
-                  <AttachmentPreview />
-                </Attachment>
+                  className="group/attachment"
+                  onRemove={() =>
+                    setStagedFiles((prev) => prev.filter((_, i) => i !== idx))
+                  }
+                />
               ))}
-            </Attachments>
+            </div>
           )}
 
           <div className="flex items-center justify-between rounded-b-2xl bg-brand-cream/30 px-3 pt-1.5 pb-2.5 border-t border-brand-rule/60">

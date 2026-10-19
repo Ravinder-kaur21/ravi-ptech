@@ -45,7 +45,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { url } = await createPresignedGet(key, 3600)
+    // Same media-type override as the initial upload so a re-signed URL is
+    // indistinguishable from a fresh one to the model.
+    const mediaType =
+      typeof body?.mediaType === "string" && body.mediaType
+        ? body.mediaType
+        : undefined
+
+    const { url } = await createPresignedGet(key, 3600, mediaType)
     return NextResponse.json({ url })
   } catch (error) {
     console.error("[COPILOT-UPLOAD-SIGN] Error:", error)

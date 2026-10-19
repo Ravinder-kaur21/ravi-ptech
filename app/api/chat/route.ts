@@ -443,6 +443,20 @@ Never speculate about results of a tool that was denied. Report only what actual
     } as Parameters<typeof streamText>[0])
 
     const stream = createUIMessageStream({
+      // Runs once the whole generation is done. The placeholder "thinking"
+      // step is written with status `active` at the top of this stream, so
+      // without this finalisation it would stay `active` forever and the
+      // client's shimmer would keep looping long after the answer arrived.
+      onFinish: () => {
+        emitCotStep("cot-thinking", {
+          id: "cot-thinking",
+          toolName: "__thinking__",
+          icon: "think",
+          label: "",
+          status: "complete",
+        })
+        trace.finish({ reason: "stream-complete" })
+      },
       execute: async ({ writer }) => {
         writerRef = writer
 

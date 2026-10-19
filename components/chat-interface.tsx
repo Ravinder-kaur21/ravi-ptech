@@ -100,6 +100,10 @@ import {
 } from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import {
+  MessageFileAttachment,
+  type StoredFilePart,
+} from "@/components/chat/message-file-attachment";
+import {
   Context,
   ContextTrigger,
   ContextContent,
@@ -255,62 +259,6 @@ const STARTER_SUGGESTIONS = [
     prompt: "Show me the oldest overdue customer invoices and their aging balances.",
   },
 ];
-
-/**
- * Attachment rendering + download affordance.
- *
- * The stored URL is an S3 presigned GET, so it stays clickable for the hour it
- * was signed. `refreshAttachmentUrl` re-signs on demand when a persisted chat
- * is loaded back into the session.
- */
-function MessageAttachments({
-  parts,
-  botCoat,
-}: {
-  parts: FileUIPart[];
-  botCoat: BotCoat;
-}) {
-  const [parts_, setParts] = useState(parts);
-  const [busy, setBusy] = useState(false);
-
-  // Keep local state in sync when the message updates from a newer stream.
-  useEffect(() => setParts(parts), [parts]);
-
-  const handleDownload = async (part: FileUIPart) => {
-    setBusy(true);
-    try {
-      const fresh = await refreshAttachmentUrl(part);
-      window.open(fresh.url, "_blank", "noopener,noreferrer");
-    } catch {
-      window.open(part.url, "_blank", "noopener,noreferrer");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Attachments variant="grid" className="mb-2">
-      {parts_.map((file, i) => (
-        <Attachment key={`${file.url}-${i}`} data={{ ...file, id: `${file.url}-${i}` }}>
-          <AttachmentPreview />
-          <div className="absolute right-1 top-1 z-10">
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              className="size-6 rounded-full opacity-0 transition-opacity group-hover/attachment:opacity-100 focus-visible:opacity-100"
-              disabled={busy}
-              aria-label={`Download ${file.filename ?? "attachment"}`}
-              onClick={() => handleDownload(file)}
-            >
-              <DownloadIcon className="size-3" />
-            </Button>
-          </div>
-        </Attachment>
-      ))}
-    </Attachments>
-  );
-}
 
 function CopyButton({ message }: { message: UIMessage }) {
   const [copied, setCopied] = useState(false);
@@ -505,8 +453,13 @@ function renderMessageParts(
   message: UIMessage,
   addToolApprovalResponse?: (options: { id: string; approved: boolean; reason?: string }) => void,
   onSendMessage?: (text: string) => void,
-  botMood: BotMood = "idle",
-  botCoat: BotCoat = "ink"
+  botCoat: BotCoat = "ink",
+  /**
+   * True only while this exact message is the one currently streaming. Drives
+   * the live "Thinking…" shimmer; once the run finishes the step keeps its
+   * label and stops animating.
+   */
+  isLive: boolean = false
 ): React.ReactNode {
   const parts = message.parts;
   const out: React.ReactNode[] = [];
@@ -523,14 +476,12 @@ function renderMessageParts(
         defaultOpen
         className="my-2 border-none bg-transparent"
       >
-        {/* No label children — ChainOfThoughtHeader renders its own default
-            "Chain of Thought" text, matching the AI Elements reference. The
-            brand avatar is passed via headerIcon so the bot mood stays live. */}
-        <ChainOfThoughtHeader
-          headerIcon={
-            <MuvxBot size="xs" coat={botCoat} mood={botMood} isActive={botMood === "think" || botMood === "tool"} />
-          }
-        />
+        {/* `headerIcon={null}` opts out of BOTH the Brain glyph and the
+            default "Chain of Thought" label. The message row above already
+            renders the bot avatar, so a second face inside the collapsible —
+            plus the generic label — read as a rendering bug rather than a
+            product affordance. */}
+        <ChainOfThoughtHeader headerIcon={null} />
         <ChainOfThoughtContent>{steps}</ChainOfThoughtContent>
       </ChainOfThought>
     );
@@ -576,27 +527,20 @@ function renderPart(
         defaultOpen
         className="my-2 border-none bg-transparent"
       >
-        {/* No children — ChainOfThoughtHeader renders its own "Chain of
-            Thought" label. Brand avatar comes in via headerIcon so the bot
-            mood stays live while the stream runs. */}
-        <ChainOfThoughtHeader
-          headerIcon={
-            <MuvxBot
-              size="xs"
-              coat={botCoat}
-              mood={isStreaming ? "think" : "idle"}
-              isActive={isStreaming}
-            />
-          }
-        />
+        {/* Bare header: the message row above already draws the bot avatar, so
+            the collapsible adds no second face and no generic label. The step
+            itself carries the state instead of the Brain glyph. */}
+        <ChainOfThoughtHeader headerIcon={null} />
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
-            icon={Brain}
+            icon={isStreaming ? Brain : CheckCircle2}
             status={isStreaming ? "active" : "complete"}
             label={
               isStreaming ? (
                 <Shimmer duration={1.4}>Thinking…</Shimmer>
-              ) : undefined
+              ) : (
+                "Thought for a moment"
+              )
             }
           >
             <div className="border-brand-rule/70 bg-brand-cream/30 text-brand-ink leading-relaxed whitespace-pre-wrap rounded-lg border p-2.5 font-sans text-xs">
@@ -624,17 +568,22 @@ function renderPart(
       error?: string;
     };
     const Icon = resolveCotIcon(cot.icon);
-    // An empty label means the placeholder "started thinking" step. Keep it
-    // as a live shimmer line rather than a blank row.
+    // An empty label is the server's placeholder "thinking" step. It only
+    // animates while it is still `active`; once the run completes the status
+    // flips and the shimmer stops. Rendering the shimmer purely off
+    // `!label` left it looping forever after the response had finished.
     const isPlaceholder = !cot.label?.trim();
+    const status = cot.status ?? "complete";
     return (
       <ChainOfThoughtStep
         key={cot.id ?? `${message.id}-cot-${index}`}
         icon={Icon}
-        status={cot.status ?? "complete"}
+        status={status}
         label={
-          isPlaceholder ? (
+          isPlaceholder && status === "active" ? (
             <Shimmer duration={1.4}>Thinking…</Shimmer>
+          ) : isPlaceholder ? (
+            "Thought for a moment"
           ) : (
             cot.label
           )
@@ -655,15 +604,20 @@ function renderPart(
   }
 
   if (isFileUIPart(part)) {
+    // User-uploaded documents render as a content-sized chip, not a fixed
+    // thumbnail square — a 96px grey box around a 16px icon reads as an empty
+    // panel. The container hugs its content and wraps for multiple files.
     return (
-      <Attachments key={`${message.id}-file-${index}`} variant="grid" className="mb-2">
-        <Attachment
-          data={{ ...part, id: `${message.id}-${index}` }}
+      <div
+        key={`${message.id}-file-${index}`}
+        className="mb-1.5 flex flex-wrap items-start justify-end gap-1.5"
+      >
+        <MessageFileAttachment
+          id={`${message.id}-${index}`}
+          part={part as StoredFilePart}
           className="group/attachment"
-        >
-          <AttachmentPreview />
-        </Attachment>
-      </Attachments>
+        />
+      </div>
     );
   }
 
@@ -1771,26 +1725,31 @@ function renderPart(
             )}
             {findings && (
               <TaskItem>
-                <div className="flex items-start gap-2.5">
-                  <MuvxBot
-                    variant="child"
-                    role={childRole}
-                    size="sm"
-                    mood="happy"
-                    className="mt-0.5 shrink-0"
-                  />
-                  <div className="flex-1">
-                    <ChainOfThought defaultOpen className="border-none bg-transparent">
-                      <ChainOfThoughtHeader>
-                        {subtaskTitle || "Sub-agent analysis"}
-                      </ChainOfThoughtHeader>
-                      <ChainOfThoughtContent>
-                        <ChainOfThoughtStep
-                          status="complete"
-                          icon={CheckCircle2}
-                          label={objective || "Operational verification"}
-                          description="Sub-agent completed cross-check"
-                        >
+                {/* Single face: the sub-agent avatar owns the row. The
+                    collapsible below renders bare (no headerIcon) so it does
+                    not draw a second one. */}
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <MuvxBot
+                      variant="child"
+                      role={childRole}
+                      size="xs"
+                      mood="happy"
+                      className="shrink-0"
+                    />
+                    <p className="font-medium text-xs text-brand-ink">
+                      {subtaskTitle || "Sub-agent analysis"}
+                    </p>
+                  </div>
+                  <ChainOfThought defaultOpen className="border-none bg-transparent">
+                    <ChainOfThoughtHeader headerIcon={null} />
+                    <ChainOfThoughtContent>
+                      <ChainOfThoughtStep
+                        status="complete"
+                        icon={CheckCircle2}
+                        label={objective || "Operational verification"}
+                        description="Sub-agent completed cross-check"
+                      >
                           {findings.verdict && (
                             <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                               {findings.verdict}
@@ -1816,7 +1775,6 @@ function renderPart(
                         </ChainOfThoughtStep>
                       </ChainOfThoughtContent>
                     </ChainOfThought>
-                  </div>
                 </div>
               </TaskItem>
             )}
@@ -2482,8 +2440,8 @@ export default function ChatInterface() {
                       message,
                       addToolApprovalResponse,
                       (text) => sendWithProvider(text, { webSearch: false, model: selectedModel }),
-                      rowMood,
-                      botCoat
+                      botCoat,
+                      isLastMessage && status === "streaming"
                     )}
                   </MessageContent>
                   {isAssistant && (

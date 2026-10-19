@@ -115,8 +115,10 @@ export async function POST(req: NextRequest) {
       size,
       300,
     )
-    // Long-lived enough that the model can fetch it during the run.
-    const { url: getUrl } = await createPresignedGet(key, 3600)
+    // Long-lived enough that the model can fetch it during the run. The media
+    // type is pinned onto the response so the model never sees
+    // application/octet-stream and rejects the file.
+    const { url: getUrl } = await createPresignedGet(key, 3600, mediaType)
 
     return NextResponse.json({
       key,

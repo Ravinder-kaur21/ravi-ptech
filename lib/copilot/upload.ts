@@ -48,9 +48,11 @@ async function uploadOne(file: File): Promise<FileUIPart> {
     mediaType: presigned.mediaType,
     filename: presigned.filename,
     url: presigned.url,
-    // Persisted alongside the message so history can be re-signed on read.
+    // Persisted alongside the message so history can be re-signed on read,
+    // and so the UI can show a human-readable file size without re-uploading.
     key: presigned.key,
-  } as FileUIPart;
+    size: presigned.size,
+  } as FileUIPart & { key: string; size: number };
 }
 
 /** Uploads every file, surfacing the first failure to the caller. */
@@ -74,7 +76,7 @@ export async function refreshAttachmentUrl(
   const res = await fetch("/api/copilot/upload/sign", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify({ key, mediaType: part.mediaType }),
   });
 
   if (!res.ok) return part;
