@@ -11,6 +11,7 @@ import {
 } from "@/components/kokonutui/stack-panel";
 import AvatarPicker from "@/components/kokonutui/avatar-picker";
 import AIContextMeter from "@/components/kokonutui/ai-context-meter";
+import { ScheduledTasksPanel } from "@/components/copilot/scheduled-tasks-panel";
 import {
   MuvxBot,
   type BotCoat,
@@ -74,6 +75,11 @@ export function CopilotSettingsPageClient() {
   const [customInstructions, setCustomInstructions] = useState("");
 
   // Intelligence & Defaults
+  // `defaultModel` / `webSearchDefault` are not yet columns on the schema;
+  // we keep the form values in the localStorage mirror of the user's choices
+  // until the schema is migrated to add them. The actual model selection happens
+  // from the chat bar's AI Elements <PromptInput> + <ModelSelector> combo, which
+  // is the official location for per-message model choice (see elements.ai-sdk.dev).
   const [defaultModel, setDefaultModel] = useState("gemini-2.5-flash");
   const [webSearchDefault, setWebSearchDefault] = useState(false);
 
@@ -98,12 +104,23 @@ export function CopilotSettingsPageClient() {
         if (data.settings) {
           setCoat(data.settings.coat || "ink");
           setAutoCycleCoat(Boolean(data.settings.autoCycleCoat));
-          setAllowAll(Boolean(data.settings.allowAllTools));
+          // The schema column is `allowAll` — the old "allowAllTools" key is
+          // an outdated client-only label and never lands on the row.
+          setAllowAll(Boolean(data.settings.allowAll));
           setMaxSteps(String(data.settings.maxSteps || "12"));
           setProactiveHeartbeat(data.settings.proactiveHeartbeat ?? true);
           setCustomInstructions(data.settings.customInstructions || "");
-          setDefaultModel(data.settings.defaultModel || "gemini-2.5-flash");
-          setWebSearchDefault(Boolean(data.settings.webSearchDefault));
+          // `defaultModel` and `webSearchDefault` are not columns yet — fall
+          // back to localStorage so the form still remembers the user's choice.
+          try {
+            const cached = typeof window !== "undefined" ? window.localStorage.getItem("muvx:copilot:prefs") : null;
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed.defaultModel) setDefaultModel(parsed.defaultModel);
+              if (typeof parsed.webSearchDefault === "boolean") setWebSearchDefault(parsed.webSearchDefault);
+            }
+          } catch {}
+          setDefaultModel((prev) => prev || "gemini-2.5-flash");
         }
       }
     } catch (e) {
@@ -156,7 +173,7 @@ export function CopilotSettingsPageClient() {
         body: JSON.stringify({
           coat,
           autoCycleCoat,
-          allowAllTools: allowAll,
+          allowAll,
           maxSteps: parseInt(maxSteps, 10) || 12,
           proactiveHeartbeat,
           customInstructions,
@@ -335,6 +352,12 @@ export function CopilotSettingsPageClient() {
                 to: "audit",
               },
               {
+                id: "row-scheduled",
+                label: "Scheduled Coworker Tasks",
+                detail: "Autonomous Queue",
+                to: "scheduled",
+              },
+              {
                 id: "row-clear",
                 label: "Clear Conversation History",
                 detail: "Reset Chat",
@@ -343,6 +366,23 @@ export function CopilotSettingsPageClient() {
               },
             ],
             footer: "Manage learned dispatch policies, shipper contacts, and security audit traces.",
+          },
+        ],
+      },
+
+      // ── Scheduled Tasks Page (autonomous cron queue) ──
+      scheduled: {
+        title: "Scheduled Coworker Tasks",
+        sections: [
+          {
+            title: "Autonomous Background Queue",
+            customContent: (
+              <div className="my-2">
+                <ScheduledTasksPanel />
+              </div>
+            ),
+            footer:
+              "The cron worker (/api/cron/copilot-tasks) ticks every minute. Scheduled tasks claim themselves atomically with FOR UPDATE SKIP LOCKED so concurrent workers never double-run a row.",
           },
         ],
       },

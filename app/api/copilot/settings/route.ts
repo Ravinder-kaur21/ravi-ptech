@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
       soundEnabled: body.soundEnabled,
       showChainOfThought: body.showChainOfThought,
       maxSteps: body.maxSteps,
+      defaultModel: body.defaultModel,
+      defaultProvider: body.defaultProvider,
+      webSearchDefault: body.webSearchDefault,
     })
 
     return NextResponse.json({ success: true, settings: updated })

@@ -106,6 +106,13 @@
       "when": 1792295253665,
       "tag": "0014_moaning_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792384709433,
+      "tag": "0015_copilot_setting_extra",
+      "breakpoints": true
     }
   ]
 }

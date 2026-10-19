@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import { streamText, convertToModelMessages, tool } from "ai"
+import {
+  streamText,
+  convertToModelMessages,
+  tool,
+  stepCountIs,
+  type UIMessage,
+} from "ai"
 import { getModel } from "@/lib/ai-providers"
 import { getSession } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/copilot/tools"
+import { persistCopilotMessages } from "@/lib/copilot/message-store"
 
-export const maxDuration = 60
+/**
+ * Long-running agent: Pro/Enterprise on Bun supports up to 1800s per function call.
+ * Anything longer must move to Vercel Workflows / `WorkflowAgent` (see `lib/copilot/scheduled-runner.ts`).
+ */
+export const maxDuration = 1800
+export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
   try {
@@ -113,7 +125,11 @@ You have direct read, search, and transactional tools across EVERY TMS domain:
 10. Multi-Step Execution & Sub-Agents:
     - Formulate multi-step plans ('createExecutionPlan')
     - Delegate subtasks to specialized coworker personas ('delegateSubtask')
-    - Consult human dispatcher when decisions are required ('askDispatcher')${memorySnippet}${customInstructionsSnippet}
+    - Consult human dispatcher when decisions are required ('askDispatcher')
+11. Downloadable Documents (think before calling — these create S3 artefacts):
+    - Generate a PDF / CSV / Markdown / HTML / text from inline content ('generateDocument')
+    - Export load rows in a date range as CSV ('exportLoadsCsv')
+    - Each tool returns a 'publicUrl' AND a short-lived 'downloadUrl' (5 minutes) the user can click to download. Use the Queue AI Element to surface queued document generation jobs and render the 'downloadUrl' as a link in the assistant response.${memorySnippet}${customInstructionsSnippet}
 
 PROTOCOL:
 Be concise, freight-fluent, proactive, and accurate. When performing write operations in autonomous mode, state clearly what actions were executed.`
@@ -181,12 +197,59 @@ Be concise, freight-fluent, proactive, and accurate. When performing write opera
       }
     }
 
+    const maxStepsRaw = parseInt(settings.maxSteps || "12", 10)
+    const maxSteps = Number.isFinite(maxStepsRaw) && maxStepsRaw > 0 ? maxStepsRaw : 12
+
     const streamConfig: any = {
       model: resolvedModel,
       system: systemPrompt,
       messages: modelMessages,
-      stopWhen: ({ steps }: any) => steps.length >= parseInt(settings.maxSteps || "12", 10),
+      // v5+/v7 official replacement for the deprecated `maxSteps` option.
+      stopWhen: stepCountIs(maxSteps),
       tools: toolsRecord,
+      onError: ({ error }: { error: unknown }) => {
+        console.error("[COPILOT-CHAT] streamText error:", error)
+        logCopilotEvent({
+          tenantId,
+          userId: session.user.id,
+          chatId: chatId || null,
+          level: "error",
+          action: "streamText error",
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        }).catch(() => {})
+      },
+      onFinish: async ({ usage, finishReason, response }: any) => {
+        const messages = response?.messages ?? []
+        if (chatId && Array.isArray(messages) && messages.length > 0) {
+          await persistCopilotMessages({
+            tenantId,
+            userId: session.user.id,
+            chatId,
+            newMessages: messages,
+          }).catch((err) => {
+            console.error("[COPILOT-CHAT] persist failed:", err)
+          })
+        }
+        if (usage) {
+          await logCopilotEvent({
+            tenantId,
+            userId: session.user.id,
+            chatId: chatId || null,
+            level: "info",
+            action: "streamText finished",
+            status: "completed",
+            durationMs: usage.totalDurationMs ?? null,
+            output: usage as any,
+          }).catch(() => {})
+        }
+      },
+      // Pull reasoning/sources out of the wire to feed <Reasoning> and <Sources>
+      // AI Elements and the AI SDK docs make these opt-in flags on the stream helper.
+      experimental_providerOptions: {
+        anthropic: { thinking: { type: "enabled", budgetTokens: 8000 } },
+        openai: { reasoningEffort: "medium" },
+      },
     }
 
     if (!isAllowAll && Object.keys(toolApprovalRecord).length > 0) {
@@ -195,7 +258,16 @@ Be concise, freight-fluent, proactive, and accurate. When performing write opera
 
     const result = streamText(streamConfig)
 
-    return result.toUIMessageStreamResponse()
+    // sendReasoning + sendSources are required for the Reasoning and Sources AI Elements
+    // to receive their corresponding UI stream parts. See elements.ai-sdk.dev.
+    return result.toUIMessageStreamResponse({
+      sendReasoning: true,
+      sendSources: true,
+      onError: (error) => {
+        console.error("[COPILOT-CHAT] UI stream error:", error)
+        return "The agent encountered an error while generating a response."
+      },
+    })
   } catch (error: any) {
     console.error("Chat API error:", error)
     return NextResponse.json(

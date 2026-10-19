@@ -1,0 +1,16 @@
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": ["*"],
+      "AllowedMethods": ["GET", "HEAD", "PUT"],
+      "AllowedOrigins": [
+        "https://app.muvx.com",
+        "https://muvx.com",
+        "http://localhost:3000",
+        "http://localhost:3001"
+      ],
+      "ExposeHeaders": ["ETag", "x-amz-meta-*"],
+      "MaxAgeSeconds": 600
+    }
+  ]
+}
