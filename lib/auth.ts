@@ -35,6 +35,13 @@ console.log("[AUTH] Resend API Key exists:", !!process.env.RESEND_API_KEY)
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,
+  trustedOrigins: [
+    "https://app.muvxtms.com",
+    "http://app.muvxtms.com",
+    "http://52.62.31.143",
+    "http://localhost:3000",
+    ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+  ],
 
   plugins: [
     username(),

@@ -15,7 +15,7 @@ import {
 import { ac, owner, administrator, member, opsManager, dispatcher, accounting, driverRole, safety } from "./auth-roles"
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000",
+  baseURL: typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_BETTER_AUTH_URL || process.env.BETTER_AUTH_URL || ""),
   plugins: [
     // Mirror the server's user.additionalFields so session.user is fully
     // typed on the client (otherwise phone is missing from session.user).
