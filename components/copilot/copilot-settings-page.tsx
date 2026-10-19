@@ -12,6 +12,7 @@ import {
 import AvatarPicker from "@/components/kokonutui/avatar-picker";
 import AIContextMeter from "@/components/kokonutui/ai-context-meter";
 import { ScheduledTasksPanel } from "@/components/copilot/scheduled-tasks-panel";
+import { CopilotContextMeter } from "@/components/copilot/copilot-context-meter";
 import {
   MuvxBot,
   type BotCoat,
@@ -467,7 +468,16 @@ export function CopilotSettingsPageClient() {
           {
             title: "Live Token Capacity & Context Window",
             customContent: (
-              <div className="my-3 flex flex-col items-center">
+              <div className="my-3 flex flex-col items-center gap-3">
+                <CopilotContextMeter
+                  usage={
+                    {
+                      inputTokens: 85_000,
+                      outputTokens: 12_000,
+                    } as any
+                  }
+                  modelId="openai/gpt-4o"
+                />
                 <AIContextMeter
                   limit={1_000_000}
                   model="Gemini 2.5 Flash / Claude 3.7"
@@ -477,6 +487,11 @@ export function CopilotSettingsPageClient() {
                     toast.success("Context compacted into high-density semantic summary");
                   }}
                 />
+                <p className="text-[11px] text-muted-foreground max-w-md">
+                  Top card is the official AI Elements <code>&lt;Context&gt;</code> meter wired to
+                  <code> tokenlens</code> for cost accounting. Bottom is the legacy
+                  kokonutui meter (kept for the compact button).
+                </p>
                 <div className="mt-3 p-3 rounded-xl bg-brand-cream/40 border border-brand-rule/60 text-xs text-brand-ink/80 w-full space-y-1">
                   <div className="flex justify-between font-mono text-[11px]">
                     <span className="text-brand-muted-soft">Context Limit:</span>
