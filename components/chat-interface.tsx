@@ -13,9 +13,6 @@ import {
 import { useEffect, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import AI_Input_Search from "@/components/kokonutui/ai-input-search";
-import { ChatPromptInput } from "@/components/copilot/chat-prompt-input";
-import { DocumentArtifact } from "@/components/copilot/document-artifact";
-import { renderToolShell } from "@/lib/copilot/tool-renderer-registry";
 import {
   Conversation,
   ConversationContent,
@@ -431,6 +428,62 @@ async function filesToFileUIParts(files: File[]): Promise<FileUIPart[]> {
  * Both tools return `{ publicUrl, downloadUrl, format, filename, ... }`. The
  * downloadUrl is a 5-minute presigned S3 link the user can click to download.
  */
+function DocumentDownloadCard({
+  output,
+  toolName,
+}: {
+  output: any
+  toolName: string
+}) {
+  const downloadUrl: string | undefined = output?.downloadUrl
+  const publicUrl: string | undefined = output?.publicUrl
+  const filename: string | undefined = output?.filename
+  const format: string | undefined = output?.format
+  const sizeBytes: number | undefined = output?.sizeBytes
+  const count: number | undefined = output?.count
+  if (!downloadUrl && !publicUrl) return null
+  return (
+    <div className="my-2 rounded-lg border border-brand-rule/70 bg-brand-card px-4 py-3 shadow-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-brand-ink">
+            {toolName === "exportLoadsCsv" ? "CSV export ready" : "Document ready"}
+          </div>
+          <div className="mt-0.5 text-[11px] text-brand-muted-soft font-mono">
+            {filename}
+            {format ? ` · ${format.toUpperCase()}` : ""}
+            {typeof sizeBytes === "number" ? ` · ${(sizeBytes / 1024).toFixed(1)} KB` : ""}
+            {typeof count === "number" ? ` · ${count} rows` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              download={filename ?? true}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-brand-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-accent/90"
+            >
+              ⬇ Download
+            </a>
+          )}
+          {publicUrl && (
+            <a
+              href={publicUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-brand-rule bg-brand-cream/60 px-3 py-1.5 text-xs text-brand-ink hover:bg-brand-cream"
+            >
+              Open
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CopyButton({ message }: { message: UIMessage }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -515,14 +568,13 @@ function renderPart(
       toolPart.state === "input-available";
 
     // 0. Downloadable artefacts from `generateDocument` / `exportLoadsCsv`
-    // rendered using the official AI Elements <Artifact> primitive.
     if (
       (toolName === "generateDocument" || toolName === "exportLoadsCsv") &&
       output &&
       (output.downloadUrl || output.publicUrl)
     ) {
       return (
-        <DocumentArtifact
+        <DocumentDownloadCard
           key={key}
           output={output}
           toolName={toolName}
@@ -1973,26 +2025,6 @@ function renderPart(
     );
   }
 
-  // Generic fallback for any tool part — uses the official AI Elements
-  // <Tool> shell through our tool-renderer-registry.
-  if (isToolUIPart(part) || (part as any)?.type?.startsWith?.("tool-")) {
-    const tp = part as any
-    const toolName = tp.toolName ?? (tp.type?.startsWith("tool-") ? tp.type.slice(5) : undefined) ?? "tool"
-    return renderToolShell(
-      `${message.id}-tool-fallback-${index}`,
-      {
-        toolName,
-        state: tp.state ?? "output-available",
-        input: tp.input,
-        output: tp.output,
-        errorText: tp.errorText,
-        approval: tp.approval,
-        approvalId: tp.approval?.id,
-      },
-      addToolApprovalResponse,
-    )
-  }
-
   return null;
 }
 
@@ -2142,18 +2174,11 @@ export default function ChatInterface() {
 
   const sendWithProvider = async (
     text: string,
-    options: { webSearch: boolean; model: string | null; files?: File[] | FileUIPart[] }
+    options: { webSearch: boolean; model: string | null; files?: File[] }
   ) => {
     let fileParts: FileUIPart[] | undefined;
     if (options.files && options.files.length > 0) {
-      const first = options.files[0] as any
-      if (first && typeof first === "object" && first.type === "file") {
-        // Already FileUIPart[] (URLs from S3) — pass through.
-        fileParts = options.files as FileUIPart[]
-      } else {
-        // Raw File[] — legacy path. Convert via the S3 presigner.
-        fileParts = await filesToFileUIParts(options.files as File[])
-      }
+      fileParts = await filesToFileUIParts(options.files);
     }
 
     const requestBody = {
@@ -2173,14 +2198,14 @@ export default function ChatInterface() {
         {
           body: requestBody,
         }
-      )
+      );
     } else if (text.trim()) {
       sendMessage(
         { text },
         {
           body: requestBody,
         }
-      )
+      );
     }
   };
 
@@ -2231,21 +2256,16 @@ export default function ChatInterface() {
           </p>
         </div>
 
-        {/* Centered AI Input with Live Model Picker — official AI Elements <PromptInput> */}
+        {/* Centered AI Input with Live Model Picker */}
         <div className="w-full max-w-2xl">
-          <ChatPromptInput
-            status={status as any}
-            availableModels={availableModels as any}
+          <AI_Input_Search
+            models={availableModels}
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
-            onSubmit={async (text, options) =>
-              sendWithProvider(text, {
-                webSearch: options.webSearch,
-                model: options.model,
-                files: options.files as any,
-              })
-            }
-            onStop={() => stopStream?.()}
+            onSubmit={sendWithProvider}
+            onFilesSelected={handleFiles}
+            placeholder="Ask Copilot, draft a load, schedule driver task, or paste rate con..."
+            searchLabel="Web Search"
           />
         </div>
 
@@ -2353,21 +2373,16 @@ export default function ChatInterface() {
         </div>
       )}
 
-      {/* Input bar at bottom with file attachment and web search — official AI Elements <PromptInput> */}
+      {/* Input bar at bottom with file attachment and web search */}
       <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full shrink-0">
-        <ChatPromptInput
-          status={status as any}
-          availableModels={availableModels as any}
+        <AI_Input_Search
+          models={availableModels}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
-          onSubmit={async (text, options) =>
-            sendWithProvider(text, {
-              webSearch: options.webSearch,
-              model: options.model,
-              files: options.files as any,
-            })
-          }
-          onStop={() => stopStream?.()}
+          onSubmit={sendWithProvider}
+          onFilesSelected={handleFiles}
+          placeholder="Message Muvx Copilot..."
+          searchLabel="Web Search"
         />
         {/* Stream controls — Stop while streaming / Regenerate when ready. */}
         <div className="mt-2 flex items-center justify-between text-[11px] text-brand-muted-soft">
