@@ -120,6 +120,14 @@ import {
   uploadFilesToS3,
   refreshAttachmentUrl,
 } from "@/lib/copilot/upload";
+import {
+  traceDebug,
+  traceError,
+  traceGroup,
+  traceInfo,
+  traceWarn,
+  describePart,
+} from "@/lib/copilot/client-trace";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
@@ -2199,13 +2207,33 @@ export default function ChatInterface() {
 
   // Track completion transition to joyful bounce
   useEffect(() => {
+    // Stream lifecycle: this is where "response stopped" becomes visible as a
+    // distinct status transition rather than a silent stall.
+    if (prevStatusRef.current !== status) {
+      traceInfo("chat:status", { from: prevStatusRef.current, to: status });
+    }
     if (prevStatusRef.current === "streaming" && status === "ready") {
+      traceInfo("chat:stream-complete");
       setRecentFinish(true);
       const timer = setTimeout(() => setRecentFinish(false), 2000);
       return () => clearTimeout(timer);
     }
     prevStatusRef.current = status;
   }, [status]);
+
+  // Report which parts actually landed on the last assistant message — the
+  // fastest way to tell "streaming stopped" from "server sent nothing".
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    traceDebug("chat:parts", {
+      messageId: last.id,
+      parts: last.parts.map((p) => describePart(p)),
+      textLength: last.parts
+        .filter(isTextUIPart)
+        .reduce((n, p) => n + p.text.length, 0),
+    });
+  }, [messages]);
 
   // ── Context-aware suggestions ────────────────────────────────────────
   // Suggestions are generated server-side from the actual conversation so they
@@ -2299,6 +2327,19 @@ export default function ChatInterface() {
     text: string,
     options: { webSearch: boolean; model: string | null; files?: File[] }
   ) => {
+    // No text and no files — nothing to send.
+    if (!text.trim() && !options.files?.length) {
+      traceDebug("send:skipped-empty");
+      return;
+    }
+
+    const endSend = traceGroup("chat:send", {
+      chars: text.length,
+      fileCount: options.files?.length ?? 0,
+      model: options.model ?? selectedModel,
+      webSearch: options.webSearch,
+    });
+
     const requestBody = {
       provider,
       model: options.model ?? selectedModel,
@@ -2307,20 +2348,23 @@ export default function ChatInterface() {
       allowAll,
     };
 
-    // No text and no files — nothing to send.
-    if (!text.trim() && !options.files?.length) return;
-
     let fileParts: FileUIPart[] | undefined;
     if (options.files && options.files.length > 0) {
       setUploadState("uploading");
       try {
         // Browser → S3 direct. The server only signs.
         fileParts = await uploadFilesToS3(options.files);
+        traceInfo("upload:ok", {
+          count: fileParts.length,
+          files: fileParts.map((f) => f.filename),
+        });
       } catch (err) {
-        setUploadError(
-          err instanceof Error ? err.message : "Upload failed"
-        );
+        traceError("upload:failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        setUploadError(err instanceof Error ? err.message : "Upload failed");
         setUploadState("error");
+        endSend();
         return;
       } finally {
         setUploadState("idle");
@@ -2340,6 +2384,7 @@ export default function ChatInterface() {
     } else {
       sendMessage({ text }, { body: requestBody });
     }
+    endSend();
   };
 
   const handleFiles = (files: File[]) =>

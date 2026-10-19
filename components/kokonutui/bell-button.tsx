@@ -80,7 +80,8 @@ function RollingNumber({ value }: { value: number }) {
   );
 }
 
-export interface BellButtonProps {
+export interface BellButtonProps
+  extends Omit<React.ComponentProps<"button">, "onClick" | "title"> {
   /** `default` shows the label and count, `compact` the label, `icon` the bell alone. */
   variant?: "default" | "compact" | "icon";
   /** Controlled state. */
@@ -107,6 +108,12 @@ export function BellButton({
   className,
   onClick,
   title,
+  // Any remaining button attributes (and `ref`) are forwarded so this button
+  // can double as a library trigger — e.g. Base UI's PopoverTrigger `render`,
+  // which merges its own props onto the element it is given. Forwarding is
+  // what keeps a single <button> in the DOM instead of nesting one inside
+  // another (invalid HTML → hydration mismatch).
+  ...rest
 }: BellButtonProps) {
   const [internal, setInternal] = useState(defaultSubscribed);
   const subscribed = subscribedProp ?? internal;
@@ -311,6 +318,7 @@ export function BellButton({
           : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50 active:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:active:bg-zinc-800 dark:hover:bg-zinc-900",
         className
       )}
+      {...rest}
       onClick={handleClick}
       onPointerEnter={handlePointerEnter}
       type="button"

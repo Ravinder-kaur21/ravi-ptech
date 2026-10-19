@@ -9,12 +9,15 @@ import {
   isStepCount,
   hasToolCall,
   pruneMessages,
+  isToolUIPart,
+  type UIMessage,
   type UIMessageStreamWriter,
 } from "ai"
 import { getModel } from "@/lib/ai-providers"
 import { getSession } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/copilot/tools"
+import { TurnLogger } from "@/lib/copilot/logging"
 
 // Long-running freight workflows (FMCSA audits, 50+ load matching, invoice
 // runs) can exceed a minute. Self-hosted on AWS/ECS, so this is a real ceiling
@@ -35,11 +38,16 @@ type CotStepData = {
 
 /** Minimal shape of streamText's `onStepEnd` payload that we consume. */
 type StepEndEvent = {
+  stepNumber?: number
   toolCalls?: { toolCallId: string; toolName: string }[]
   toolResults?: { toolCallId: string; output?: unknown }[]
+  usage?: unknown
 }
 
 export async function POST(req: NextRequest) {
+  // Hoisted outside the try so the catch block can report failures that happen
+  // before the logger is constructed (auth, settings load, model resolution).
+  let logger: TurnLogger | null = null
   try {
     const session = await getSession()
     if (!session?.user) {
@@ -57,6 +65,9 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Messages array is required" }, { status: 400 })
     }
+
+    // One correlation id per turn; every log line below carries it.
+    const turnId = crypto.randomUUID()
 
     const {
       getOrCreateCopilotSettings,
@@ -76,12 +87,64 @@ export async function POST(req: NextRequest) {
 
     const resolvedModel = getModel(targetProvider, targetModel)
 
-    // Official AI SDK conversion. `ignoreIncompleteToolCalls` drops tool calls
-    // that never produced a result — which is exactly what happens when a user
-    // cancels, stops the stream, or dismisses an approval dialog mid-run.
-    // Without it the next request carries a dangling tool call and the
-    // provider rejects it.
-    const modelMessages = await convertToModelMessages(messages, {
+    // Structured turn logger — one line per lifecycle event, correlated by
+    // turnId. See lib/copilot/logging.ts.
+    // Assigning into `logger` keeps it reachable from the catch block; `trace`
+    // is the narrowed const that the closures below capture, so TypeScript
+    // does not widen it back to `TurnLogger | null` inside callbacks.
+    const trace = (logger = new TurnLogger(turnId, {
+      tenantId,
+      userId: session.user.id,
+      chatId: chatId ?? null,
+      provider: targetProvider,
+      model: targetModel,
+      messageCount: messages.length,
+      allowAll: isAllowAll,
+    }))
+
+    // ── Approval-state sanitiser ──────────────────────────────────────
+    // Why this exists: a manual tool-approval turn leaves tool parts in
+    // states that carry a tool-call but NO tool-result:
+    //
+    //   approval-requested — model asked, operator has not answered yet
+    //   approval-responded — operator answered; the SDK executes it itself
+    //                       on the next generation and emits the result there
+    //
+    // `convertToModelMessages` validates that every assistant tool-call has a
+    // matching tool-result and throws `AI_MissingToolResultsError` otherwise.
+    // `ignoreIncompleteToolCalls` does NOT save us: its filter explicitly
+    // KEEPS `approval-responded` parts. So when two approvals render at once
+    // and the operator answers one, the still-pending sibling leaves a
+    // dangling call and the request dies with a 200 and an empty body.
+    //
+    // Both states are therefore stripped before conversion. The SDK re-asks
+    // for anything still unanswered, so nothing is lost.
+    const sanitizedMessages = (messages as UIMessage[]).map((m) => ({
+      ...m,
+      parts: m.parts.filter((p) => {
+        if (!isToolUIPart(p)) return true;
+        return p.state !== "approval-requested" && p.state !== "approval-responded";
+      }),
+    }))
+
+    const droppedParts = (messages as UIMessage[]).reduce(
+      (n, m) =>
+        n +
+        m.parts.filter(
+          (p) =>
+            isToolUIPart(p) &&
+            (p.state === "approval-requested" || p.state === "approval-responded"),
+        ).length,
+      0,
+    );
+
+    trace.chunk({
+      phase: "sanitize",
+      incomingMessages: messages.length,
+      droppedApprovalParts: droppedParts,
+    });
+
+    const modelMessages = await convertToModelMessages(sanitizedMessages, {
       ignoreIncompleteToolCalls: true,
     })
 
@@ -179,9 +242,23 @@ Never speculate about results of a tool that was denied. Report only what actual
         inputSchema: t.inputSchema,
         execute: async (params) => {
           const start = Date.now()
+          // Deep trace: input shape + timing go to the structured log even when
+          // the durable audit write below is async (and may itself fail).
+          trace.toolStart({
+            tool: t.name,
+            requiresApproval: Boolean(t.requiresApproval),
+            requiredPermissions: t.requiredPermissions ?? [],
+            input: params,
+          })
           try {
             const out = await t.execute(params, toolCtx)
             const durationMs = `${Date.now() - start}ms`
+            trace.toolEnd({
+              tool: t.name,
+              durationMs: Date.now() - start,
+              ok: true,
+              output: out,
+            })
             logCopilotEvent({
               tenantId,
               userId: session.user.id,
@@ -197,6 +274,12 @@ Never speculate about results of a tool that was denied. Report only what actual
             return out
           } catch (err: any) {
             const durationMs = `${Date.now() - start}ms`
+            trace.toolEnd({
+              tool: t.name,
+              durationMs: Date.now() - start,
+              ok: false,
+              error: err,
+            })
             logCopilotEvent({
               tenantId,
               userId: session.user.id,
@@ -216,14 +299,24 @@ Never speculate about results of a tool that was denied. Report only what actual
 
       // When allowAll is true, bypass human confirmation so the agent executes autonomously
       if (t.requiresApproval && !isAllowAll) {
-        toolApprovalRecord[t.name] = {
-          type: "user-approval",
-          reason:
-            t.approvalReason ||
-            `Authorizing ${t.name} will execute an official operational transaction.`,
-        }
+        const reason =
+          t.approvalReason ||
+          `Authorizing ${t.name} will execute an official operational transaction.`
+        toolApprovalRecord[t.name] = { type: "user-approval", reason }
+        // Surface the gate at WARN so "why did the agent stop?" is answerable
+        // from logs alone instead of guessing from the UI.
+        trace.approval({
+          tool: t.name,
+          reason,
+          action: "gated",
+        })
       }
     }
+
+    trace.step({
+      toolsRegistered: Object.keys(toolsRecord).length,
+      approvalGated: Object.keys(toolApprovalRecord),
+    })
 
     const maxSteps = Math.max(
       1,
@@ -319,7 +412,13 @@ Never speculate about results of a tool that was denied. Report only what actual
       // Official per-step hook. Fires after every LLM step (tool round-trip
       // included) while the response is still streaming. Emits one typed cot
       // step per tool call so the client renders a live reasoning trace.
-      onStepEnd: ({ toolCalls, toolResults }: StepEndEvent) => {
+      onStepEnd: ({ toolCalls, toolResults, usage, stepNumber }: StepEndEvent) => {
+        trace.step({
+          stepNumber: stepNumber ?? null,
+          toolCalls: (toolCalls ?? []).map((c) => c.toolName),
+          toolResultCount: (toolResults ?? []).length,
+          usage: usage ?? null,
+        })
         for (const call of toolCalls ?? []) {
           const meta =
             toolMeta[call.toolName] ?? {
@@ -385,6 +484,12 @@ Never speculate about results of a tool that was denied. Report only what actual
             // meter and cost estimate.
             messageMetadata: ({ part }) => {
               if (part.type === "finish") {
+                // Final accounting for this turn: what the operator actually
+                // paid for, in one line.
+                trace.finish({
+                  usage: part.totalUsage,
+                  finishReason: "complete",
+                })
                 return { totalUsage: part.totalUsage }
               }
             },
@@ -395,6 +500,9 @@ Never speculate about results of a tool that was denied. Report only what actual
 
     return createUIMessageStreamResponse({ stream })
   } catch (error: any) {
+    // Structured failure, correlated by turnId where we got far enough to
+    // create the logger.
+    if (logger) logger.fail(error)
     console.error("Chat API error:", error)
     return NextResponse.json(
       { error: error?.message || "Internal server error" },
