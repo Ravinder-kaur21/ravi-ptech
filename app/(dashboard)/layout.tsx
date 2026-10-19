@@ -16,7 +16,7 @@ import { db } from "@/lib/db"
 import { announcement, member, user as userTable } from "@/lib/schema"
 import { isMaintenanceMode } from "@/lib/request-gate"
 
-export const dynamic = "force-dynamic"
+export const instant = false
 
 export default async function DashboardLayout({
   children,

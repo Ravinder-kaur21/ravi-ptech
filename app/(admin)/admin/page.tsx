@@ -9,9 +9,12 @@ import { RecentActivity } from "@/components/admin/overview/recent-activity"
 import { QuickActions } from "@/components/admin/overview/quick-actions"
 import { SystemHealth } from "@/components/admin/overview/system-health"
 
+import { connection } from "next/server"
+
 export const instant = false
 
 export default async function AdminHomePage() {
+  await connection()
   console.log("[ADMIN/HOME] rendering")
   const [admin, overview, session] = await Promise.all([
     requireAdmin(),

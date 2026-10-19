@@ -4,7 +4,12 @@ import { formatWorkspaceDate, DEFAULT_TIMEZONE } from "@/lib/timezone"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
+import { connection } from "next/server"
+
+export const instant = false
+
 export default async function MaintenancePage() {
+  await connection()
   console.log("[MAINTENANCE-PAGE] rendering")
   const snap = await getMaintenanceSnapshot()
   return (

@@ -4,7 +4,7 @@ import { isIpAllowlisted } from "@/lib/request-gate"
 import { AdminShell } from "@/components/admin/admin-shell"
 import { IpBlockedScreen } from "@/components/ip-blocked-screen"
 
-export const dynamic = "force-dynamic"
+export const instant = false
 
 export const metadata = {
   title: "Admin · Muvx",
