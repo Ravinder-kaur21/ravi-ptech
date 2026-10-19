@@ -15,6 +15,11 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { ModelPicker, type AIModelItem } from "@/components/ai/model-picker";
+import {
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+} from "@/components/ai-elements/attachments";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 import { cn } from "@/lib/utils";
 
@@ -160,32 +165,28 @@ export default function AI_Input_Search({
             value={value}
           />
 
-          {/* Staged Attached Files Preview Chips */}
+          {/* Staged files — official <Attachments variant="inline"> from AI Elements:
+              compact badges with hover preview and a remove affordance. */}
           {stagedFiles.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-3.5 pb-2 pt-0.5">
+            <Attachments variant="inline" className="px-3.5 pb-2 pt-0.5">
               {stagedFiles.map((file, idx) => (
-                <div
+                <Attachment
                   key={`${file.name}-${idx}`}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand-cream/80 border border-brand-rule px-2.5 py-1 text-xs text-brand-ink animate-in fade-in zoom-in-95 duration-150"
+                  data={{
+                    id: `${file.name}-${idx}`,
+                    type: "file",
+                    mediaType: file.type || "application/octet-stream",
+                    filename: file.name,
+                    url: "",
+                  }}
+                  onRemove={() => {
+                    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
+                  }}
                 >
-                  <FileText className="size-3.5 text-brand-accent shrink-0" />
-                  <span className="max-w-[160px] truncate font-medium text-[11px]">{file.name}</span>
-                  <span className="text-[10px] text-brand-muted-soft font-mono">
-                    ({(file.size / 1024).toFixed(0)} KB)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
-                    }}
-                    className="text-brand-muted-soft hover:text-brand-ink p-0.5 rounded transition-colors"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
+                  <AttachmentPreview />
+                </Attachment>
               ))}
-            </div>
+            </Attachments>
           )}
 
           <div className="flex items-center justify-between rounded-b-2xl bg-brand-cream/30 px-3 pt-1.5 pb-2.5 border-t border-brand-rule/60">

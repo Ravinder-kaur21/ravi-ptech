@@ -1,11 +1,43 @@
 import { NextRequest, NextResponse } from "next/server"
-import { streamText, convertToModelMessages, tool } from "ai"
+import {
+  streamText,
+  convertToModelMessages,
+  tool,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  toUIMessageStream,
+  isStepCount,
+  hasToolCall,
+  pruneMessages,
+  type UIMessageStreamWriter,
+} from "ai"
 import { getModel } from "@/lib/ai-providers"
 import { getSession } from "@/lib/dal"
 import { getEffectivePermissions } from "@/lib/can"
 import { ALL_TMS_TOOLS, type ToolContext } from "@/lib/copilot/tools"
 
-export const maxDuration = 60
+// Long-running freight workflows (FMCSA audits, 50+ load matching, invoice
+// runs) can exceed a minute. Self-hosted on AWS/ECS, so this is a real ceiling
+// rather than a serverless platform cap — keep it aligned with the ALB / ECS
+// task timeout so the process isn't killed mid-tool.
+export const maxDuration = 300
+
+/** Payload emitted as a `data-cot-step` data part for the client's CoT UI. */
+type CotStepData = {
+  id: string
+  toolName: string
+  icon: string
+  label: string
+  description: string
+  status: "active" | "complete" | "pending"
+  summary: string[]
+}
+
+/** Minimal shape of streamText's `onStepEnd` payload that we consume. */
+type StepEndEvent = {
+  toolCalls?: { toolCallId: string; toolName: string }[]
+  toolResults?: { toolCallId: string; output?: unknown }[]
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,8 +76,14 @@ export async function POST(req: NextRequest) {
 
     const resolvedModel = getModel(targetProvider, targetModel)
 
-    // Official AI SDK v5: Convert UIMessage[] (from useChat) to ModelMessage[] (for streamText)
-    const modelMessages = await convertToModelMessages(messages)
+    // Official AI SDK conversion. `ignoreIncompleteToolCalls` drops tool calls
+    // that never produced a result — which is exactly what happens when a user
+    // cancels, stops the stream, or dismisses an approval dialog mid-run.
+    // Without it the next request carries a dangling tool call and the
+    // provider rejects it.
+    const modelMessages = await convertToModelMessages(messages, {
+      ignoreIncompleteToolCalls: true,
+    })
 
     const memorySnippet =
       activeMemories.length > 0
@@ -116,7 +154,13 @@ You have direct read, search, and transactional tools across EVERY TMS domain:
     - Consult human dispatcher when decisions are required ('askDispatcher')${memorySnippet}${customInstructionsSnippet}
 
 PROTOCOL:
-Be concise, freight-fluent, proactive, and accurate. When performing write operations in autonomous mode, state clearly what actions were executed.`
+Be concise, freight-fluent, proactive, and accurate. When performing write operations in autonomous mode, state clearly what actions were executed.
+
+APPROVAL HANDLING:
+When a tool execution is denied or rejected by the operator, do not retry it and do not attempt an equivalent action through another tool. Acknowledge the decision in one sentence and continue with whatever remains permitted.
+
+DENIED TOOL REASONING:
+Never speculate about results of a tool that was denied. Report only what actually executed.`
 
     const toolCtx: ToolContext = {
       userId: session.user.id,
@@ -181,21 +225,175 @@ Be concise, freight-fluent, proactive, and accurate. When performing write opera
       }
     }
 
+    const maxSteps = Math.max(
+      1,
+      Math.min(32, parseInt(String(settings.maxSteps || "12"), 10) || 12),
+    )
+
+    // Rough token estimate. Char/4 is close enough to decide when to compact;
+    // the provider reports the real number afterwards.
+    const estimateTokens = (msgs: unknown) =>
+      Math.ceil(JSON.stringify(msgs).length / 4)
+    const COMPACTION_THRESHOLD = 120_000
+
     const streamConfig: any = {
       model: resolvedModel,
       system: systemPrompt,
       messages: modelMessages,
-      stopWhen: ({ steps }: any) => steps.length >= parseInt(settings.maxSteps || "12", 10),
+      // Official built-ins instead of a hand-rolled predicate.
+      // `hasToolCall('askDispatcher')` hands control back to the human the
+      // moment the agent needs a decision — that is the point of the tool.
+      stopWhen: [isStepCount(maxSteps), hasToolCall("askDispatcher")],
       tools: toolsRecord,
+
+      // ── Ordering ────────────────────────────────────────────────────
+      // TMS writes are dependent: bookLoad creates the load that
+      // updateLoad then mutates, dispatchTrip reads the load the previous
+      // step created. The SDK runs tool calls in a step concurrently by
+      // default, which is a race. Serialise them.
+      toolCallConcurrency: 1,
+
+      // ── Context management for long runs ────────────────────────────
+      // A 30-step freight audit can pull hundreds of KB of tool results into
+      // the prompt. Compact once the estimate crosses the threshold instead of
+      // letting the provider reject the request or silently truncate.
+      prepareStep: async ({ messages }: { messages: unknown[] }) => {
+        if (estimateTokens(messages) <= COMPACTION_THRESHOLD) return {}
+
+        return {
+          messages: pruneMessages({
+            messages: messages as never,
+            // Reasoning is never worth re-reading; drop it entirely.
+            reasoning: "all",
+            // Keep the last few tool exchanges — the agent usually refers
+            // back to the most recent results when writing its summary.
+            toolCalls: "before-last-3-messages",
+            // Empty assistant turns carry no signal.
+            emptyMessages: "remove",
+          }),
+        }
+      },
     }
 
     if (!isAllowAll && Object.keys(toolApprovalRecord).length > 0) {
       streamConfig.toolApproval = toolApprovalRecord
     }
 
-    const result = streamText(streamConfig)
+// Tool → presentation metadata for Chain-of-Thought steps.
+    const toolMeta: Record<
+      string,
+      { icon: string; label: string; description: string }
+    > = Object.fromEntries(
+      ALL_TMS_TOOLS.map((t) => [
+        t.name,
+          {
+            icon: inferToolIcon(t.name),
+            label: humanizeToolName(t.name),
+            // Tool descriptions are written for the model, not for humans —
+            // they read like API docs. Showing them verbatim in the UI is
+            // noise, so the label alone carries the meaning.
+            description: "",
+          },
+      ])
+    )
 
-    return result.toUIMessageStreamResponse()
+    // Writer is captured so the streamText `onStepEnd` callback — which fires
+    // WHILE the model is still generating — can push `data-cot-step` parts into
+    // the same response. This keeps the trace live instead of buffered.
+    let writerRef: UIMessageStreamWriter | null = null
+
+    const emitCotStep = (stepId: string, data: CotStepData) => {
+      try {
+        writerRef?.write({
+          type: "data-cot-step",
+          id: stepId,
+          data,
+        })
+      } catch {
+        // Client disconnected mid-stream; ignore.
+      }
+    }
+
+    const result = streamText({
+      ...streamConfig,
+      // Official per-step hook. Fires after every LLM step (tool round-trip
+      // included) while the response is still streaming. Emits one typed cot
+      // step per tool call so the client renders a live reasoning trace.
+      onStepEnd: ({ toolCalls, toolResults }: StepEndEvent) => {
+        for (const call of toolCalls ?? []) {
+          const meta =
+            toolMeta[call.toolName] ?? {
+              icon: "wrench",
+              label: humanizeToolName(call.toolName),
+              description: "",
+            }
+          const res = (toolResults ?? []).find(
+            (r) => r.toolCallId === call.toolCallId
+          )
+          emitCotStep(`cot-${call.toolCallId}`, {
+            id: `cot-${call.toolCallId}`,
+            toolName: call.toolName,
+            icon: meta.icon,
+            label: meta.label,
+            description: meta.description,
+            status: res ? "complete" : "active",
+            summary: res ? summarizeToolOutput(res.output) : [],
+          })
+        }
+      },
+    } as Parameters<typeof streamText>[0])
+
+    const stream = createUIMessageStream({
+      execute: async ({ writer }) => {
+        writerRef = writer
+
+        // 1. Emit a placeholder step FIRST so the UI has instant feedback the
+        //    moment the user hits enter. The label stays neutral — the client
+        //    renders the shimmer and swaps in the real step labels that
+        //    onStepEnd emits as tools actually run.
+        writer.write({
+          type: "data-cot-step",
+          id: "cot-thinking",
+          data: {
+            id: "cot-thinking",
+            toolName: "__thinking__",
+            icon: "think",
+            label: "",
+            status: "active",
+          },
+        })
+
+        // 2. Bridge the real UI stream immediately so text/reasoning/tool
+        //    chunks reach the client token-by-token. This MUST happen before any
+        //    awaiting, otherwise the entire run is buffered server-side and the
+        //    UI only updates once generation has finished.
+        writer.merge(
+          toUIMessageStream({
+            stream: result.stream,
+            sendReasoning: true,
+            // Surface real failures to the operator instead of the SDK's
+            // default "An error occurred." — a silent black box makes a TMS
+            // that mutates freight data genuinely dangerous to debug.
+            onError: (error) => {
+              if (error == null) return "Unknown error";
+              if (typeof error === "string") return error;
+              if (error instanceof Error) return error.message;
+              return JSON.stringify(error);
+            },
+            // Official hook for token usage. The client's <Context> component
+            // reads this off message.metadata to render the context-window
+            // meter and cost estimate.
+            messageMetadata: ({ part }) => {
+              if (part.type === "finish") {
+                return { totalUsage: part.totalUsage }
+              }
+            },
+          })
+        )
+      },
+    })
+
+    return createUIMessageStreamResponse({ stream })
   } catch (error: any) {
     console.error("Chat API error:", error)
     return NextResponse.json(
@@ -203,4 +401,127 @@ Be concise, freight-fluent, proactive, and accurate. When performing write opera
       { status: 500 }
     )
   }
+}
+
+/**
+ * Map a tool name to a string icon key the client can resolve to a Lucide icon.
+ * Keeps the server payload tiny and the rendering concern on the client.
+ */
+function inferToolIcon(toolName: string): string {
+  const n = toolName.toLowerCase()
+  if (n.includes("load") && (n.includes("book") || n.includes("create"))) return "package-plus"
+  if (n.includes("load") || n.includes("freight")) return "package"
+  if (n.includes("dispatch") || n.includes("trip")) return "truck"
+  if (n.includes("driver") || n.includes("fleet") || n.includes("truck") || n.includes("trailer")) return "truck"
+  if (n.includes("customer") || n.includes("shipper")) return "building-2"
+  if (n.includes("carrier")) return "truck"
+  if (n.includes("invoice") || n.includes("billing") || n.includes("payment")) return "receipt"
+  if (n.includes("expense") || n.includes("settle")) return "banknote"
+  if (n.includes("member") || n.includes("invite") || n.includes("workspace")) return "user-plus"
+  if (n.includes("audit") || n.includes("security")) return "shield"
+  if (n.includes("plan") || n.includes("delegate") || n.includes("subtask")) return "list-checks"
+  if (n.includes("dispatcher") || n.includes("ask")) return "help-circle"
+  if (n.includes("memory") || n.includes("recall") || n.includes("save")) return "brain"
+  if (n.includes("search") || n.includes("query")) return "search"
+  if (n.includes("email") || n.includes("send")) return "mail"
+  if (n.includes("schedule") || n.includes("task")) return "calendar"
+  if (n.includes("pod") || n.includes("doc") || n.includes("file")) return "file-text"
+  return "wrench"
+}
+
+/**
+ * Tool name → present-continuous status label, matching how VS Code Copilot
+ * phrases its own progress ("Planning refactor strategy"). `queryLoads`
+ * becomes "Searching loads", not the unusable "query Loads".
+ */
+function humanizeToolName(toolName: string): string {
+  const verb = VERB_BY_TOOL[toolName];
+  if (verb) return verb;
+
+  // Unknown tool: fall back to a clean capitalised phrase rather than raw
+  // camelCase soup.
+  const words = toolName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return `Running ${words}`;
+}
+
+/** Explicit verb phrases so every TMS tool reads like a real progress step. */
+const VERB_BY_TOOL: Record<string, string> = {
+  // Loads
+  bookLoad: "Booking load",
+  queryLoads: "Searching loads",
+  updateLoad: "Updating load",
+  updateLoadDocs: "Updating load documents",
+  // Trips & dispatch
+  dispatchTrip: "Dispatching trip",
+  updateTripStatus: "Updating trip status",
+  // Fleet
+  getFleetStatus: "Checking fleet status",
+  createDriver: "Adding driver",
+  updateDriver: "Updating driver",
+  createTruck: "Adding tractor",
+  updateTruck: "Updating tractor",
+  createTrailer: "Adding trailer",
+  // Customers & carriers
+  queryCustomers: "Searching customers",
+  createCustomer: "Adding customer",
+  queryCarriers: "Searching carriers",
+  createCarrier: "Adding carrier",
+  // Invoicing
+  queryInvoices: "Searching invoices",
+  createInvoice: "Generating invoice",
+  sendInvoiceEmail: "Sending invoice email",
+  markInvoicePaid: "Recording payment",
+  getMissingPods: "Checking missing PODs",
+  // Expenses
+  reviewPendingExpenses: "Reviewing pending expenses",
+  approveExpense: "Approving expense",
+  logTripExpense: "Logging trip expense",
+  // Members
+  listWorkspaceMembers: "Listing workspace members",
+  inviteWorkspaceMember: "Inviting member",
+  resendInvitation: "Resending invitation",
+  cancelInvitation: "Cancelling invitation",
+  updateMemberRole: "Updating member role",
+  removeMember: "Removing member",
+  // System & subagents
+  queryAuditLogs: "Reviewing audit log",
+  checkIntegrations: "Checking integrations",
+  searchFreightKnowledge: "Searching freight knowledge",
+  createExecutionPlan: "Building execution plan",
+  delegateSubtask: "Delegating subtask",
+  askDispatcher: "Asking dispatcher",
+  // Coworker
+  assignDriverTask: "Assigning driver task",
+  askDriverQuestion: "Asking driver",
+  scheduleCoworkerTask: "Scheduling checkup",
+  listScheduledTasks: "Listing scheduled tasks",
+  saveCopilotMemory: "Saving memory",
+  recallCopilotMemory: "Recalling memory",
+}
+
+/**
+ * Reduce a tool's output to a few short labels suitable for
+ * ChainOfThoughtSearchResult badges.
+ */
+function summarizeToolOutput(output: unknown): string[] {
+  if (!output || typeof output !== "object") return []
+  const o = output as Record<string, unknown>
+  const out: string[] = []
+  if (Array.isArray(o.results)) {
+    out.push(`${o.results.length} result${o.results.length === 1 ? "" : "s"}`)
+  }
+  if (typeof o.count === "number") {
+    out.push(`${o.count} item${o.count === 1 ? "" : "s"}`)
+  }
+  if (typeof o.success === "boolean") {
+    out.push(o.success ? "ok" : "failed")
+  }
+  if (o.id != null) out.push(`#${String(o.id).slice(0, 8)}`)
+  if (typeof o.message === "string") out.push(o.message.slice(0, 60))
+  return out.slice(0, 4)
 }

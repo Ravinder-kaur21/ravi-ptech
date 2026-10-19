@@ -4,13 +4,15 @@ import { useChat } from "@ai-sdk/react";
 import {
   isTextUIPart,
   isReasoningUIPart,
+  isDataUIPart,
   isFileUIPart,
   isToolUIPart,
   type DynamicToolUIPart,
   type FileUIPart,
   type UIMessage,
+  type LanguageModelUsage,
 } from "ai";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import AI_Input_Search from "@/components/kokonutui/ai-input-search";
 import {
@@ -96,7 +98,28 @@ import {
   ToolOutput,
   type ToolPart,
 } from "@/components/ai-elements/tool";
-import { Attachments, Attachment } from "@/components/ai-elements/attachments";
+import { Button } from "@/components/ui/button";
+import {
+  Context,
+  ContextTrigger,
+  ContextContent,
+  ContextContentHeader,
+  ContextContentBody,
+  ContextContentFooter,
+  ContextInputUsage,
+  ContextOutputUsage,
+  ContextReasoningUsage,
+  ContextCacheUsage,
+} from "@/components/ai-elements/context";
+import {
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+} from "@/components/ai-elements/attachments";
+import {
+  uploadFilesToS3,
+  refreshAttachmentUrl,
+} from "@/lib/copilot/upload";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
@@ -125,7 +148,16 @@ import {
   ExternalLink,
   UserPlus,
   Building2,
-  CircleDollarSign,
+CircleDollarSign,
+  Brain,
+  Package,
+  PackagePlus,
+  Wrench,
+  Calendar,
+  FileText,
+  ListChecks,
+  Shield,
+  DownloadIcon,
 } from "lucide-react";
 import { MuvxBot, type BotMood, type BotCoat, type BotRole } from "@/components/ai/muvx-bot";
 
@@ -196,202 +228,79 @@ export const SPECIALIST_TEAMS: BotSpecialist[] = [
   },
 ];
 
-export function getAdaptiveSuggestions(
-  lastMessage: UIMessage | undefined,
-  activeSpecialist: BotRole = "main"
-): { title: string; prompt: string }[] {
-  if (!lastMessage) {
-    if (activeSpecialist === "dispatcher") {
-      return [
-        { title: "Find available loads", prompt: "Query active freight loads ready for dispatch" },
-        { title: "Match Midwest drivers", prompt: "Find available drivers in the Midwest corridor" },
-        { title: "Calculate lane margin", prompt: "Calculate break-even cost per mile for 600-mile haul" },
-        { title: "Draft load for dispatch", prompt: "Draft new freight load with Chicago pickup" },
-      ];
-    }
-    if (activeSpecialist === "fleet_guardian") {
-      return [
-        { title: "Expiring CDLs (<30d)", prompt: "Check fleet drivers with CDL expiring within 30 days" },
-        { title: "FMCSA 34-hr restart", prompt: "Explain FMCSA 34-hour restart rules for drivers" },
-        { title: "Driver HOS duty logs", prompt: "Check driver availability and HOS driving limits" },
-        { title: "Pre-trip DVIR audits", prompt: "Inspect pre-trip vehicle maintenance inspection logs" },
-      ];
-    }
-    if (activeSpecialist === "rate_auditor") {
-      return [
-        { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
-        { title: "Query overdue invoices", prompt: "Query accounts receivable invoices that are overdue" },
-        { title: "Factoring cashflow", prompt: "Review factorable freight receivables and credit limits" },
-        { title: "Review pending expenses", prompt: "Review pending AP trip expenses awaiting approval" },
-      ];
-    }
-    if (activeSpecialist === "safety_compliance") {
-      return [
-        { title: "Check Samsara GPS sync", prompt: "Check Samsara telematics GPS location sync status" },
-        { title: "Test DAT One rate feed", prompt: "Test DAT One loadboard rate-fetch connection" },
-        { title: "Verify Motive ELD logs", prompt: "Verify Motive ELD duty logs synchronization" },
-        { title: "Inspect Resend status", prompt: "Check Resend invoice email transmission latency" },
-      ];
-    }
-    return [
-      { title: "Draft load from rate con", prompt: "Draft a new load from rate confirmation details" },
-      { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
-      { title: "Fleet driver HOS", prompt: "Check driver availability and FMCSA HOS status" },
-      { title: "Overdue invoices", prompt: "Query overdue accounts receivable invoices" },
-    ];
-  }
-
-  // Check tool parts
-  const toolParts = lastMessage.parts.filter(isToolUIPart) as any[];
-  for (const part of toolParts) {
-    const toolName = part.toolName || part.type;
-
-    if (toolName === "getMissingPods") {
-      return [
-        { title: "Generate factoring batch", prompt: "Generate factoring invoice batch for delivered loads" },
-        { title: "Email carrier for POD", prompt: "Request signed proof of delivery from delivery carrier" },
-        { title: "Query active loads", prompt: "Query active freight loads in the system" },
-        { title: "Check overdue invoices", prompt: "Review customer accounts receivable overdue balances" },
-      ];
-    }
-
-    if (toolName === "queryLoads") {
-      return [
-        { title: "Dispatch next load", prompt: "Dispatch the first available load to an available driver" },
-        { title: "Check Midwest trucks", prompt: "Check available drivers and tractors in the Midwest" },
-        { title: "Calculate lane margin", prompt: "Calculate estimated break-even cost and margin for these loads" },
-        { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed PODs" },
-      ];
-    }
-
-    if (toolName === "bookLoad") {
-      return [
-        { title: "Assign driver & tractor", prompt: "Find available driver and tractor to dispatch this load" },
-        { title: "Calculate route tolls", prompt: "Calculate estimated mileage, tolls, and fuel cost" },
-        { title: "View active loads", prompt: "Query all active freight loads" },
-        { title: "Email rate confirmation", prompt: "Prepare load tender confirmation for customer" },
-      ];
-    }
-
-    if (toolName === "getFleetStatus") {
-      return [
-        { title: "Alert expiring CDLs", prompt: "Notify dispatch about drivers with expiring CDL licenses" },
-        { title: "FMCSA 34-hr restart", prompt: "Explain FMCSA 34-hour restart rules for drivers on duty" },
-        { title: "Assign truck to load", prompt: "Find available loads matching these tractors" },
-        { title: "Check Samsara telematics", prompt: "Check live GPS and telematics integration status" },
-      ];
-    }
-
-    if (toolName === "dispatchTrip") {
-      return [
-        { title: "Send driver instructions", prompt: "Send route instructions and pickup details to assigned driver" },
-        { title: "Track GPS telemetry", prompt: "Monitor live GPS telemetry for this dispatched trip" },
-        { title: "Review trip advance", prompt: "Review driver fuel advances and trip expense limits" },
-        { title: "Check active loads", prompt: "Query remaining available loads" },
-      ];
-    }
-
-    if (toolName === "queryInvoices") {
-      return [
-        { title: "Email overdue reminders", prompt: "Send payment reminder emails to customers with overdue balances" },
-        { title: "Review factorable freight", prompt: "Check factoring eligibility for pending invoices" },
-        { title: "Check missing POD receipts", prompt: "Find delivered loads missing POD receipts for factoring" },
-        { title: "View AP expenses", prompt: "Review pending AP expenses awaiting manager approval" },
-      ];
-    }
-
-    if (toolName === "sendInvoiceEmail") {
-      return [
-        { title: "Check delivery status", prompt: "Verify Resend email delivery status for this invoice" },
-        { title: "Review remaining invoices", prompt: "Query remaining unpaid customer invoices" },
-        { title: "Check missing PODs", prompt: "Audit missing proof of delivery receipts" },
-        { title: "View fleet status", prompt: "Check driver and tractor fleet availability" },
-      ];
-    }
-
-    if (toolName === "checkIntegrations") {
-      return [
-        { title: "Test Samsara GPS sync", prompt: "Check Samsara telematics real-time location sync" },
-        { title: "Check DAT One feed", prompt: "Test DAT One loadboard rate-fetch connection" },
-        { title: "Verify Motive ELD logs", prompt: "Check Motive ELD duty logs synchronization" },
-        { title: "Audit fleet status", prompt: "Check fleet driver HOS and tractor availability" },
-      ];
-    }
-
-    if (toolName === "reviewPendingExpenses" || toolName === "approveExpense") {
-      return [
-        { title: "Export settlements", prompt: "Export weekly driver settlement deductions summary" },
-        { title: "Check fuel receipts", prompt: "Audit driver fuel purchase receipts" },
-        { title: "Query customer invoices", prompt: "Query accounts receivable invoices" },
-        { title: "Check fleet status", prompt: "Check driver and tractor fleet availability" },
-      ];
-    }
-  }
-
-  // Keyword analysis
-  const fullText = lastMessage.parts
-    .filter(isTextUIPart)
-    .map((p: any) => p.text.toLowerCase())
-    .join(" ");
-
-  if (fullText.includes("driver") || fullText.includes("hos") || fullText.includes("cdl") || fullText.includes("hours of service")) {
-    return [
-      { title: "FMCSA 34-hr restart rules", prompt: "What are the FMCSA 34-hour restart rules?" },
-      { title: "Alert expiring CDLs", prompt: "Check fleet drivers with CDL expiring within 30 days" },
-      { title: "Assign driver to load", prompt: "Find available loads matching these drivers" },
-      { title: "Check telematics sync", prompt: "Check telematics integration status" },
-    ];
-  }
-
-  if (fullText.includes("rate") || fullText.includes("broker") || fullText.includes("margin") || fullText.includes("mile")) {
-    return [
-      { title: "Calculate break-even RPM", prompt: "Calculate break-even cost per mile for a 500-mile haul" },
-      { title: "Audit rate confirmation", prompt: "Audit rate confirmation for detention and accessorial terms" },
-      { title: "Book load into system", prompt: "Book load into Muvx TMS" },
-      { title: "Check market spot rates", prompt: "Compare contract vs DAT spot rates for this corridor" },
-    ];
-  }
-
-  if (fullText.includes("invoice") || fullText.includes("factoring") || fullText.includes("pod") || fullText.includes("paid")) {
-    return [
-      { title: "Email invoice reminder", prompt: "Send invoice payment reminder to customer via Resend" },
-      { title: "Audit missing PODs", prompt: "Check delivered loads missing signed POD receipts" },
-      { title: "Factoring cashflow check", prompt: "Review factoring credit eligibility" },
-      { title: "Review pending expenses", prompt: "Review pending AP expenses" },
-    ];
-  }
-
-  return [
-    { title: "Audit missing PODs", prompt: "Check delivered loads with missing signed POD receipts" },
-    { title: "Find available loads", prompt: "Query active freight loads in the system" },
-    { title: "Check fleet availability", prompt: "Check driver and tractor fleet availability" },
-    { title: "Review overdue invoices", prompt: "Query overdue accounts receivable invoices" },
-  ];
-}
+/** Shown on an empty chat. Mirrors the server's static fallback list. */
+const STARTER_SUGGESTIONS = [
+  {
+    title: "Show today's active loads",
+    prompt: "Show me all loads active today with their current status.",
+  },
+  {
+    title: "Audit missing PODs",
+    prompt: "Find delivered loads from the last 7 days that are still missing a signed POD.",
+  },
+  {
+    title: "Fleet availability",
+    prompt: "Which tractors and drivers are available for dispatch right now?",
+  },
+  {
+    title: "Overdue AR",
+    prompt: "Show me the oldest overdue customer invoices and their aging balances.",
+  },
+];
 
 /**
- * Convert raw File[] (from the kokonutui file picker) into FileUIPart[]
- * that the AI SDK uses for message attachments.
+ * Attachment rendering + download affordance.
  *
- * This mirrors the official `convertFileListToFileUIParts` helper that the
- * AI SDK uses internally when a `FileList` is passed to `sendMessage`.
+ * The stored URL is an S3 presigned GET, so it stays clickable for the hour it
+ * was signed. `refreshAttachmentUrl` re-signs on demand when a persisted chat
+ * is loaded back into the session.
  */
-async function filesToFileUIParts(files: File[]): Promise<FileUIPart[]> {
-  return Promise.all(
-    files.map(async (file) => {
-      const url = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      return {
-        type: "file" as const,
-        mediaType: file.type || "application/octet-stream",
-        filename: file.name,
-        url,
-      };
-    })
+function MessageAttachments({
+  parts,
+  botCoat,
+}: {
+  parts: FileUIPart[];
+  botCoat: BotCoat;
+}) {
+  const [parts_, setParts] = useState(parts);
+  const [busy, setBusy] = useState(false);
+
+  // Keep local state in sync when the message updates from a newer stream.
+  useEffect(() => setParts(parts), [parts]);
+
+  const handleDownload = async (part: FileUIPart) => {
+    setBusy(true);
+    try {
+      const fresh = await refreshAttachmentUrl(part);
+      window.open(fresh.url, "_blank", "noopener,noreferrer");
+    } catch {
+      window.open(part.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Attachments variant="grid" className="mb-2">
+      {parts_.map((file, i) => (
+        <Attachment key={`${file.url}-${i}`} data={{ ...file, id: `${file.url}-${i}` }}>
+          <AttachmentPreview />
+          <div className="absolute right-1 top-1 z-10">
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="size-6 rounded-full opacity-0 transition-opacity group-hover/attachment:opacity-100 focus-visible:opacity-100"
+              disabled={busy}
+              aria-label={`Download ${file.filename ?? "attachment"}`}
+              onClick={() => handleDownload(file)}
+            >
+              <DownloadIcon className="size-3" />
+            </Button>
+          </div>
+        </Attachment>
+      ))}
+    </Attachments>
   );
 }
 
@@ -423,13 +332,227 @@ function CopyButton({ message }: { message: UIMessage }) {
   );
 }
 
+/**
+ * Context window meter.
+ *
+ * Sums the per-message token usage the server attaches through
+ * `messageMetadata` and renders the official <Context> hover card: a
+ * utilisation ring plus input / output / reasoning / cache breakdown and an
+ * estimated cost. Hidden entirely until the first assistant response lands so
+ * the input bar stays clean on an empty chat.
+ */
+function TokenContextMeter({ messages }: { messages: UIMessage[] }) {
+  const latest = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const usage = (messages[i].metadata as { totalUsage?: LanguageModelUsage })
+        ?.totalUsage;
+      if (usage) return usage;
+    }
+    return null;
+  }, [messages]);
+
+  if (!latest) return null;
+
+  // Provider models route through OpenRouter, so nominal window sizes vary
+  // widely. 128K is a safe working assumption for the utilisation ring.
+  const MAX_TOKENS = 128_000;
+  const usedTokens = Math.min(
+    MAX_TOKENS,
+    (latest.inputTokens ?? 0) +
+      (latest.outputTokens ?? 0) +
+      (latest.totalTokens ?? 0)
+  );
+
+  return (
+    <div className="mb-1.5 flex justify-end">
+      <Context
+        usedTokens={usedTokens}
+        maxTokens={MAX_TOKENS}
+        usage={latest}
+        modelId="anthropic:claude-sonnet-4-5"
+      >
+        <ContextTrigger className="h-6 px-2 text-brand-muted-soft hover:text-brand-ink text-xs" />
+        <ContextContent>
+          <ContextContentHeader />
+          <ContextContentBody>
+            <ContextInputUsage />
+            <ContextOutputUsage />
+            <ContextReasoningUsage />
+            <ContextCacheUsage />
+          </ContextContentBody>
+          <ContextContentFooter />
+        </ContextContent>
+      </Context>
+    </div>
+  );
+}
+
+/**
+ * Past-tense label for a completed tool call, e.g. "Booking load" →
+ * "Booked load". Falls back to a de-camelised phrase rather than leaking the
+ * raw identifier into the UI.
+ */
+function toolStatusVerb(toolName: string): string {
+  const map: Record<string, string> = {
+    bookLoad: "Booked load",
+    queryLoads: "Searched loads",
+    updateLoad: "Updated load",
+    updateLoadDocs: "Updated load documents",
+    dispatchTrip: "Dispatched trip",
+    updateTripStatus: "Updated trip status",
+    getFleetStatus: "Checked fleet status",
+    createDriver: "Added driver",
+    updateDriver: "Updated driver",
+    createTruck: "Added tractor",
+    updateTruck: "Updated tractor",
+    createTrailer: "Added trailer",
+    queryCustomers: "Searched customers",
+    createCustomer: "Added customer",
+    queryCarriers: "Searched carriers",
+    createCarrier: "Added carrier",
+    queryInvoices: "Searched invoices",
+    createInvoice: "Generated invoice",
+    sendInvoiceEmail: "Sent invoice email",
+    markInvoicePaid: "Recorded payment",
+    getMissingPods: "Checked missing PODs",
+    reviewPendingExpenses: "Reviewed pending expenses",
+    approveExpense: "Approved expense",
+    logTripExpense: "Logged trip expense",
+    listWorkspaceMembers: "Listed workspace members",
+    inviteWorkspaceMember: "Invited member",
+    resendInvitation: "Resent invitation",
+    cancelInvitation: "Cancelled invitation",
+    updateMemberRole: "Updated member role",
+    removeMember: "Removed member",
+    queryAuditLogs: "Reviewed audit log",
+    checkIntegrations: "Checked integrations",
+    searchFreightKnowledge: "Searched freight knowledge",
+    createExecutionPlan: "Built execution plan",
+    delegateSubtask: "Delegated subtask",
+    askDispatcher: "Asked dispatcher",
+    assignDriverTask: "Assigned driver task",
+    askDriverQuestion: "Asked driver",
+    scheduleCoworkerTask: "Scheduled checkup",
+    listScheduledTasks: "Listed scheduled tasks",
+    saveCopilotMemory: "Saved memory",
+    recallCopilotMemory: "Recalled memory",
+  };
+  if (map[toolName]) return map[toolName];
+
+  const words = toolName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return `Ran ${words}`;
+}
+
+/** Resolve a cot step icon key (string) to a Lucide component. */
+function resolveCotIcon(iconKey?: string) {
+  switch (iconKey) {
+    case "think":
+      return Brain;
+    case "package-plus":
+      return PackagePlus;
+    case "package":
+      return Package;
+    case "truck":
+      return Truck;
+    case "search":
+      return Search;
+    case "brain":
+      return Brain;
+    case "building-2":
+      return Building2;
+    case "receipt":
+      return Receipt;
+    case "banknote":
+      return Banknote;
+    case "user-plus":
+      return UserPlus;
+    case "shield":
+      return Shield;
+    case "list-checks":
+      return ListChecks;
+    case "help-circle":
+      return HelpCircle;
+    case "mail":
+      return Mail;
+    case "calendar":
+      return Calendar;
+    case "file-text":
+      return FileText;
+    default:
+      return Wrench;
+  }
+}
+
+/**
+ * Render a message's parts. Consecutive `data-cot-step` parts are grouped
+ * into a single ChainOfThought wrapper so the user sees a coherent step list
+ * (collapsible header + content) instead of disjoint step rows.
+ */
+function renderMessageParts(
+  message: UIMessage,
+  addToolApprovalResponse?: (options: { id: string; approved: boolean; reason?: string }) => void,
+  onSendMessage?: (text: string) => void,
+  botMood: BotMood = "idle",
+  botCoat: BotCoat = "ink"
+): React.ReactNode {
+  const parts = message.parts;
+  const out: React.ReactNode[] = [];
+  let cotBuffer: UIMessage["parts"][number][] = [];
+
+  const flushCot = (anchorIndex: number) => {
+    if (cotBuffer.length === 0) return;
+    const steps = cotBuffer.map((p, i) =>
+      renderPart(message, p, anchorIndex + i, addToolApprovalResponse, onSendMessage, botCoat)
+    );
+    out.push(
+      <ChainOfThought
+        key={`${message.id}-cot-group-${anchorIndex}`}
+        defaultOpen
+        className="my-2 border-none bg-transparent"
+      >
+        {/* No label children — ChainOfThoughtHeader renders its own default
+            "Chain of Thought" text, matching the AI Elements reference. The
+            brand avatar is passed via headerIcon so the bot mood stays live. */}
+        <ChainOfThoughtHeader
+          headerIcon={
+            <MuvxBot size="xs" coat={botCoat} mood={botMood} isActive={botMood === "think" || botMood === "tool"} />
+          }
+        />
+        <ChainOfThoughtContent>{steps}</ChainOfThoughtContent>
+      </ChainOfThought>
+    );
+    cotBuffer = [];
+  };
+
+  parts.forEach((part, i) => {
+    if (isDataUIPart(part) && part.type === "data-cot-step") {
+      cotBuffer.push(part);
+      return;
+    }
+    flushCot(i);
+    out.push(
+      <Fragment key={`${message.id}-p-${i}`}>
+        {renderPart(message, part, i, addToolApprovalResponse, onSendMessage, botCoat)}
+      </Fragment>
+    );
+  });
+  flushCot(parts.length);
+  return out;
+}
+
 /** Render a single UIMessagePart using the appropriate AI Element component. */
 function renderPart(
   message: UIMessage,
   part: UIMessage["parts"][number],
   index: number,
   addToolApprovalResponse?: (options: { id: string; approved: boolean; reason?: string }) => void,
-  onSendMessage?: (text: string) => void
+  onSendMessage?: (text: string) => void,
+  botCoat: BotCoat = "ink"
 ): React.ReactNode {
   if (isTextUIPart(part)) {
     return (
@@ -438,39 +561,100 @@ function renderPart(
   }
 
   if (isReasoningUIPart(part)) {
+    const isStreaming = part.state === "streaming";
     return (
       <ChainOfThought
         key={`${message.id}-reasoning-${index}`}
         defaultOpen
-        className="my-2 p-0 border-0"
+        className="my-2 border-none bg-transparent"
       >
-        <ChainOfThoughtStep
-          label={
-            <span className="font-medium text-xs text-brand-ink">
-              Step-by-Step Reasoning
-            </span>
+        {/* No children — ChainOfThoughtHeader renders its own "Chain of
+            Thought" label. Brand avatar comes in via headerIcon so the bot
+            mood stays live while the stream runs. */}
+        <ChainOfThoughtHeader
+          headerIcon={
+            <MuvxBot
+              size="xs"
+              coat={botCoat}
+              mood={isStreaming ? "think" : "idle"}
+              isActive={isStreaming}
+            />
           }
-          description={
-            <span className="text-[11px] text-brand-muted-soft font-mono">
-              {part.state === "streaming"
-                ? "Evaluating freight rules & dispatch constraints..."
-                : "Operational reasoning deduction"}
-            </span>
-          }
-          status={part.state === "streaming" ? "active" : "complete"}
-        >
-          <div className="rounded-lg border border-brand-rule/70 bg-brand-cream/30 p-2.5 text-xs text-brand-ink leading-relaxed font-sans whitespace-pre-wrap">
-            {part.text}
-          </div>
-        </ChainOfThoughtStep>
+        />
+        <ChainOfThoughtContent>
+          <ChainOfThoughtStep
+            icon={Brain}
+            status={isStreaming ? "active" : "complete"}
+            label={
+              isStreaming ? (
+                <Shimmer duration={1.4}>Thinking…</Shimmer>
+              ) : undefined
+            }
+          >
+            <div className="border-brand-rule/70 bg-brand-cream/30 text-brand-ink leading-relaxed whitespace-pre-wrap rounded-lg border p-2.5 font-sans text-xs">
+              {part.text}
+            </div>
+          </ChainOfThoughtStep>
+        </ChainOfThoughtContent>
       </ChainOfThought>
+    );
+  }
+
+  // Structured Chain-of-Thought data parts emitted by /api/chat route. Each
+  // tool invocation lands here as a typed step (icon + label + status).
+  // The renderer below is used both standalone and by the group renderer
+  // when consecutive cot steps share the same parent message.
+  if (isDataUIPart(part) && part.type === "data-cot-step") {
+    const cot = part.data as {
+      id?: string;
+      toolName?: string;
+      icon?: string;
+      label?: string;
+      description?: string;
+      status?: "active" | "complete" | "pending";
+      summary?: string[];
+      error?: string;
+    };
+    const Icon = resolveCotIcon(cot.icon);
+    // An empty label means the placeholder "started thinking" step. Keep it
+    // as a live shimmer line rather than a blank row.
+    const isPlaceholder = !cot.label?.trim();
+    return (
+      <ChainOfThoughtStep
+        key={cot.id ?? `${message.id}-cot-${index}`}
+        icon={Icon}
+        status={cot.status ?? "complete"}
+        label={
+          isPlaceholder ? (
+            <Shimmer duration={1.4}>Thinking…</Shimmer>
+          ) : (
+            cot.label
+          )
+        }
+        description={cot.description || (cot.error ? cot.error : undefined)}
+      >
+        {Array.isArray(cot.summary) && cot.summary.length > 0 && (
+          <ChainOfThoughtSearchResults className="mt-1.5">
+            {cot.summary.map((s, i) => (
+              <ChainOfThoughtSearchResult key={`${cot.id ?? index}-s-${i}`}>
+                {s}
+              </ChainOfThoughtSearchResult>
+            ))}
+          </ChainOfThoughtSearchResults>
+        )}
+      </ChainOfThoughtStep>
     );
   }
 
   if (isFileUIPart(part)) {
     return (
-      <Attachments key={`${message.id}-file-${index}`}>
-        <Attachment data={{ ...part, id: `${message.id}-${index}` }} />
+      <Attachments key={`${message.id}-file-${index}`} variant="grid" className="mb-2">
+        <Attachment
+          data={{ ...part, id: `${message.id}-${index}` }}
+          className="group/attachment"
+        >
+          <AttachmentPreview />
+        </Attachment>
       </Attachments>
     );
   }
@@ -1588,36 +1772,41 @@ function renderPart(
                     className="mt-0.5 shrink-0"
                   />
                   <div className="flex-1">
-                    <ChainOfThought defaultOpen className="p-0 border-0 space-y-2">
-                      <ChainOfThoughtStep
-                        status="complete"
-                        icon={CheckCircle2}
-                        label={subtaskTitle}
-                        description={objective || "Sub-agent verification and analysis complete"}
-                      >
-                        {findings.verdict && (
-                          <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            {findings.verdict}
-                          </div>
-                        )}
-                        <ChainOfThoughtSearchResults className="mt-2">
-                          {Object.entries(findings)
-                            .filter(([k]) => k !== "availableDrivers" && k !== "verdict")
-                            .map(([k, v]) => (
-                              <ChainOfThoughtSearchResult key={k}>
-                                <span className="font-medium text-brand-ink capitalize">
-                                  {k.replace(/([A-Z])/g, " $1")}:
-                                </span>{" "}
-                                {typeof v === "object" ? JSON.stringify(v) : String(v)}
-                              </ChainOfThoughtSearchResult>
-                            ))}
-                        </ChainOfThoughtSearchResults>
-                        {findings.recommendation && (
-                          <p className="mt-2 text-xs text-brand-muted-soft italic">
-                            {findings.recommendation}
-                          </p>
-                        )}
-                      </ChainOfThoughtStep>
+                    <ChainOfThought defaultOpen className="border-none bg-transparent">
+                      <ChainOfThoughtHeader>
+                        {subtaskTitle || "Sub-agent analysis"}
+                      </ChainOfThoughtHeader>
+                      <ChainOfThoughtContent>
+                        <ChainOfThoughtStep
+                          status="complete"
+                          icon={CheckCircle2}
+                          label={objective || "Operational verification"}
+                          description="Sub-agent completed cross-check"
+                        >
+                          {findings.verdict && (
+                            <div className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              {findings.verdict}
+                            </div>
+                          )}
+                          <ChainOfThoughtSearchResults className="mt-2">
+                            {Object.entries(findings)
+                              .filter(([k]) => k !== "availableDrivers" && k !== "verdict")
+                              .map(([k, v]) => (
+                                <ChainOfThoughtSearchResult key={k}>
+                                  <span className="font-medium text-brand-ink capitalize">
+                                    {k.replace(/([A-Z])/g, " $1")}:
+                                  </span>{" "}
+                                  {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                                </ChainOfThoughtSearchResult>
+                              ))}
+                          </ChainOfThoughtSearchResults>
+                          {findings.recommendation && (
+                            <p className="mt-2 text-xs text-brand-muted-soft italic">
+                              {findings.recommendation}
+                            </p>
+                          )}
+                        </ChainOfThoughtStep>
+                      </ChainOfThoughtContent>
                     </ChainOfThought>
                   </div>
                 </div>
@@ -1884,10 +2073,9 @@ function renderPart(
     const entry: ToolCallEntry = {
       tool_name: toolName,
       tool_category: toolCategory,
-      message:
-        toolName === "checkFleetAvailability"
-          ? `Checked fleet trucks in ${input?.location || "target corridor"}`
-          : `Executed ${toolName.replace(/([A-Z])/g, " $1").toLowerCase()}`,
+      // Past-tense summary. Raw camelCase ("Executed query loads") reads like
+      // a log line, so reuse the same verb vocabulary the progress steps use.
+      message: `${toolStatusVerb(toolName)}`,
       inputs: input,
       output:
         output?.findings || output?.result || output?.message || output,
@@ -1903,7 +2091,8 @@ function renderPart(
           <Confirmation approval={approval} state={toolPart.state} className="mt-2">
             <ConfirmationRequest>
               <ConfirmationTitle>
-                {approval.requestReason || `Authorize execution of ${toolName.replace(/([A-Z])/g, " $1")}?`}
+                {approval.requestReason ||
+                  `Authorize ${toolStatusVerb(toolName).toLowerCase()}?`}
               </ConfirmationTitle>
             </ConfirmationRequest>
             <ConfirmationAccepted>
@@ -1952,16 +2141,36 @@ export default function ChatInterface() {
 
   const prevStatusRef = useRef(status);
 
+  // Upload lifecycle surfaced to the input bar so the user gets feedback
+  // while bytes move browser → S3.
+  const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">(
+    "idle"
+  );
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   // Load chat and settings from PostgreSQL on mount
   useEffect(() => {
     fetch("/api/copilot/chats")
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         if (data.chat?.id) {
           setCurrentChatId(data.chat.id);
         }
         if (Array.isArray(data.messages) && data.messages.length > 0) {
-          setMessages(data.messages);
+          // Presigned GET URLs expire after an hour. Refresh every stored
+          // attachment so a reopened chat still renders previews and
+          // downloads keep working.
+          const reSigned = await Promise.all(
+            data.messages.map(async (m: UIMessage) => ({
+              ...m,
+              parts: await Promise.all(
+                (m.parts ?? []).map((p) =>
+                  isFileUIPart(p) ? refreshAttachmentUrl(p) : p
+                )
+              ),
+            }))
+          );
+          setMessages(reSigned);
         }
       })
       .catch((err) => console.error("Failed to load chat session:", err));
@@ -1997,6 +2206,52 @@ export default function ChatInterface() {
     }
     prevStatusRef.current = status;
   }, [status]);
+
+  // ── Context-aware suggestions ────────────────────────────────────────
+  // Suggestions are generated server-side from the actual conversation so they
+  // follow what was just discussed rather than a fixed list. Re-fetched once
+  // the chat goes ready; the starter list covers the empty state.
+  const [adaptiveSuggestions, setAdaptiveSuggestions] = useState<
+    { title: string; prompt: string }[]
+  >(STARTER_SUGGESTIONS);
+
+  useEffect(() => {
+    if (status !== "ready" || messages.length === 0) return;
+
+    const transcript = messages
+      .slice(-8)
+      .map((m) => {
+        const text = m.parts
+          .filter(isTextUIPart)
+          .map((p) => p.text)
+          .join(" ")
+          .trim();
+        return text ? `${m.role}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    if (transcript.length < 20) return;
+
+    const controller = new AbortController();
+    fetch("/api/copilot/suggestions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, role: "main", model: selectedModel }),
+      signal: controller.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.suggestions) && data.suggestions.length > 0) {
+          setAdaptiveSuggestions(data.suggestions);
+        }
+      })
+      .catch(() => {
+        // Suggestions are best-effort; keep whatever is on screen.
+      });
+
+    return () => controller.abort();
+  }, [status, messages, selectedModel]);
 
   // Calculate real-time dynamic bot mood
   const isAnyToolRunning = messages.some((m) =>
@@ -2044,11 +2299,6 @@ export default function ChatInterface() {
     text: string,
     options: { webSearch: boolean; model: string | null; files?: File[] }
   ) => {
-    let fileParts: FileUIPart[] | undefined;
-    if (options.files && options.files.length > 0) {
-      fileParts = await filesToFileUIParts(options.files);
-    }
-
     const requestBody = {
       provider,
       model: options.model ?? selectedModel,
@@ -2057,45 +2307,45 @@ export default function ChatInterface() {
       allowAll,
     };
 
+    // No text and no files — nothing to send.
+    if (!text.trim() && !options.files?.length) return;
+
+    let fileParts: FileUIPart[] | undefined;
+    if (options.files && options.files.length > 0) {
+      setUploadState("uploading");
+      try {
+        // Browser → S3 direct. The server only signs.
+        fileParts = await uploadFilesToS3(options.files);
+      } catch (err) {
+        setUploadError(
+          err instanceof Error ? err.message : "Upload failed"
+        );
+        setUploadState("error");
+        return;
+      } finally {
+        setUploadState("idle");
+      }
+    }
+
     if (fileParts && fileParts.length > 0) {
       sendMessage(
         {
-          text: text.trim() || "Please review and process the attached freight document(s).",
+          text:
+            text.trim() ||
+            "Please review and process the attached freight document(s).",
           files: fileParts,
         },
-        {
-          body: requestBody,
-        }
+        { body: requestBody }
       );
-    } else if (text.trim()) {
-      sendMessage(
-        { text },
-        {
-          body: requestBody,
-        }
-      );
+    } else {
+      sendMessage({ text }, { body: requestBody });
     }
   };
 
-  const handleFiles = (files: File[]) => {
-    filesToFileUIParts(files).then((fileParts) => {
-      sendMessage(
-        { text: "Please review and process the attached freight document(s).", files: fileParts },
-        {
-          body: {
-            provider,
-            model: selectedModel,
-            chatId: currentChatId,
-            allowAll,
-          },
-        }
-      );
-    });
-  };
+  const handleFiles = (files: File[]) =>
+    sendWithProvider("", { webSearch: false, model: selectedModel, files });
 
-  const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
-  const adaptiveSuggestions = getAdaptiveSuggestions(lastAssistantMessage, "main");
-  const emptyStateSuggestions = getAdaptiveSuggestions(undefined, "main");
+  const emptyStateSuggestions = STARTER_SUGGESTIONS;
 
   if (messages.length === 0) {
     return (
@@ -2117,10 +2367,11 @@ export default function ChatInterface() {
           />
 
           <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
-            What can I help you dispatch today?
+            What would you like to look into?
           </h1>
           <p className="text-xs text-brand-muted-soft max-w-md mx-auto leading-relaxed">
-            Autonomous freight intelligence, rate confirmation analysis, FMCSA compliance audits, and driver task dispatching.
+            Ask about loads, rates, drivers, fleet, invoices, or compliance — or
+            upload a document and let Copilot work through it.
           </p>
         </div>
 
@@ -2132,7 +2383,7 @@ export default function ChatInterface() {
             onModelChange={setSelectedModel}
             onSubmit={sendWithProvider}
             onFilesSelected={handleFiles}
-            placeholder="Ask Copilot, draft a load, schedule driver task, or paste rate con..."
+            placeholder="Ask about loads, rates, drivers, invoices, or upload a rate con…"
             searchLabel="Web Search"
           />
         </div>
@@ -2163,33 +2414,31 @@ export default function ChatInterface() {
         </div>
       )}
 
-      {/* Message list with auto-scroll */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <Conversation>
+      {/* Message list with auto-scroll.
+          NOTE: Do NOT wrap <Conversation> in another overflow-y-auto
+          container. Conversation is a StickToBottom root that manages its own
+          scroll; a competing scroll container steals the scroll and breaks
+          auto-scroll. `min-h-0` keeps it shrinkable inside the flex column. */}
+      <Conversation className="flex-1 min-h-0">
           <ConversationContent className="max-w-4xl mx-auto w-full px-4 py-4 gap-4">
             {messages.map((message, mIdx) => {
               const isLastMessage = mIdx === messages.length - 1;
               const isAssistant = message.role === "assistant";
+              const rowMood: BotMood = isLastMessage ? copilotMood : "idle";
               return (
                 <Message key={message.id} from={message.role} className="gap-1.5">
                   {isAssistant && (
                     <div className="flex items-center gap-2 mb-0.5 select-none">
-                      <MuvxBot
-                        size="xs"
-                        coat={botCoat}
-                        mood={isLastMessage ? copilotMood : "idle"}
-                      />
+                      <MuvxBot size="xs" coat={botCoat} mood={rowMood} />
                     </div>
                   )}
                   <MessageContent>
-                    {message.parts.map((part, i) =>
-                      renderPart(
-                        message,
-                        part,
-                        i,
-                        addToolApprovalResponse,
-                        (text) => sendWithProvider(text, { webSearch: false, model: selectedModel })
-                      )
+                    {renderMessageParts(
+                      message,
+                      addToolApprovalResponse,
+                      (text) => sendWithProvider(text, { webSearch: false, model: selectedModel }),
+                      rowMood,
+                      botCoat
                     )}
                   </MessageContent>
                   {isAssistant && (
@@ -2202,10 +2451,43 @@ export default function ChatInterface() {
                 </Message>
               );
             })}
+
+            {/* Instant "alive" feedback: rendered locally the moment the user
+                hits enter, before the server sends its first chunk. Prevents the
+                dead-air gap where the UI looks frozen. */}
+            {(status === "submitted" || status === "streaming") &&
+              !messages.some(
+                (m) =>
+                  m.role === "assistant" &&
+                  m.parts.some(
+                    (p) =>
+                      (isTextUIPart(p) && p.text.trim().length > 0) ||
+                      isToolUIPart(p) ||
+                      (isDataUIPart(p) && p.type === "data-cot-step")
+                  )
+              ) && (
+                <Message from="assistant" className="gap-1.5">
+                  <div className="flex items-center gap-2 mb-0.5 select-none">
+                    <MuvxBot
+                      size="xs"
+                      coat={botCoat}
+                      mood={copilotMood}
+                      showDots
+                      isActive
+                    />
+                  </div>
+                  <MessageContent>
+                    <Shimmer duration={1.6}>
+                      {status === "submitted"
+                        ? "Connecting to Copilot…"
+                        : "Thinking through your request…"}
+                    </Shimmer>
+                  </MessageContent>
+                </Message>
+              )}
           </ConversationContent>
           <ConversationScrollButton />
-        </Conversation>
-      </div>
+      </Conversation>
 
       {/* Active turn contextual suggestions */}
       {status === "ready" && adaptiveSuggestions.length > 0 && (
@@ -2223,8 +2505,37 @@ export default function ChatInterface() {
         </div>
       )}
 
+      {/* Upload feedback — the browser pushes bytes straight to S3, so surface
+          progress and any storage rejection above the input bar. */}
+      {uploadState !== "idle" && (
+        <div className="max-w-4xl mx-auto w-full px-4 pb-1.5">
+          <div
+            className={cn(
+              "flex items-center gap-2 text-xs",
+              uploadState === "error"
+                ? "text-destructive"
+                : "text-brand-muted-soft"
+            )}
+          >
+            {uploadState === "uploading" ? (
+              <>
+                <Shimmer duration={1.4}>Uploading to secure storage…</Shimmer>
+              </>
+            ) : (
+              <>
+                <FileWarning className="size-3.5 shrink-0" />
+                <span>{uploadError ?? "Upload failed"}</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Input bar at bottom with file attachment and web search */}
       <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full shrink-0">
+        {/* Context window meter — reads token usage the server attaches via
+            messageMetadata and renders a ring + cost breakdown on hover. */}
+        <TokenContextMeter messages={messages} />
         <AI_Input_Search
           models={availableModels}
           selectedModel={selectedModel}
