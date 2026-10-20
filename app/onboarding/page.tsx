@@ -474,7 +474,10 @@ function OnboardingContent() {
           </span>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress bar — segmented rail with completed/current/future
+            states. Each segment is also a step jumper for steps the user
+            has already reached, so they can revise earlier answers without
+            losing what they typed later. */}
         <div className="mt-8 flex gap-1.5">
           {STEPS.map((_, i) => (
             <button

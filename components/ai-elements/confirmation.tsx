@@ -52,9 +52,21 @@ export const Confirmation = ({
     return null;
   }
 
+  const isRequested = state === "approval-requested";
+  const isApproved = approval.approved === true;
+
   return (
     <ConfirmationContext.Provider value={contextValue}>
-      <Alert className={cn("flex flex-col gap-2", className)} {...props} />
+      <Alert
+        className={cn(
+          "flex flex-col gap-2.5 rounded-xl border-2 px-4 py-3.5",
+          isRequested && "border-amber-300/80 bg-amber-50/30",
+          isApproved && "border-emerald-300/60 bg-emerald-50/20",
+          !isRequested && !isApproved && "border-red-200/60 bg-red-50/20",
+          className,
+        )}
+        {...props}
+      />
     </ConfirmationContext.Provider>
   );
 };
@@ -142,7 +154,7 @@ export const ConfirmationActions = ({
 
   return (
     <div
-      className={cn("flex items-center justify-end gap-2 self-end", className)}
+      className={cn("flex items-center justify-end gap-2.5 self-end pt-1", className)}
       {...props}
     />
   );

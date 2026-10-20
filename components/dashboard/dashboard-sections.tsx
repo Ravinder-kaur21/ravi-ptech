@@ -67,12 +67,16 @@ function KpiCard({
   icon: LucideIcon
 }) {
   return (
-    <Card className="border-brand-rule bg-brand-card p-4">
+    <Card className="border-brand-rule bg-brand-card p-5 transition-shadow hover:shadow-sm">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[12px] text-brand-muted-soft">{label}</p>
-        <Icon className="size-4 text-brand-muted-soft" strokeWidth={1.6} />
+        <div>
+          <p className="text-[11px] font-geist-mono uppercase tracking-[0.04em] text-brand-muted-soft">{label}</p>
+          <p className="mt-2 font-serif text-3xl tracking-tight text-brand-ink">{value}</p>
+        </div>
+        <div className="flex size-9 items-center justify-center rounded-xl bg-brand-accent-tint/60">
+          <Icon className="size-4 text-brand-accent" strokeWidth={1.8} />
+        </div>
       </div>
-      <p className="mt-2 font-serif text-2xl text-brand-ink">{value}</p>
     </Card>
   )
 }

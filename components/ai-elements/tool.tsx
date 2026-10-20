@@ -25,7 +25,7 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
   <Collapsible
-    className={cn("group not-prose mb-4 w-full rounded-md border", className)}
+    className={cn("group not-prose mb-3 w-full rounded-xl border border-brand-rule/60 bg-brand-card/50 shadow-2xs overflow-hidden", className)}
     {...props}
   />
 );
@@ -85,14 +85,23 @@ export const ToolHeader = ({
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-center justify-between gap-4 p-3",
+        "flex w-full items-center justify-between gap-4 px-3.5 py-2.5",
+        state === "approval-requested" && "bg-amber-50/50",
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 text-muted-foreground" />
-        <span className="font-medium text-sm">{title ?? derivedName}</span>
+      <div className="flex items-center gap-2.5">
+        <div className={cn(
+          "flex size-6 items-center justify-center rounded-md",
+          state === "output-available" ? "bg-emerald-100 text-emerald-600" :
+          state === "approval-requested" ? "bg-amber-100 text-amber-600" :
+          state === "output-error" || state === "output-denied" ? "bg-red-100 text-red-600" :
+          "bg-muted text-muted-foreground"
+        )}>
+          <WrenchIcon className="size-3.5" />
+        </div>
+        <span className="font-medium text-[13px]">{title ?? derivedName}</span>
         {getStatusBadge(state)}
       </div>
       <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

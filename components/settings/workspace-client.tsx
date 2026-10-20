@@ -325,6 +325,7 @@ export function WorkspaceSettingsClient() {
 
   const uploadLogoMutation = useMutation({
     mutationFn: async (file: File) => {
+      setLogoUploading(true)
       const presignRes = await fetch("/api/upload/logo", {
         method: "POST",
         credentials: "include",
@@ -336,7 +337,7 @@ export function WorkspaceSettingsClient() {
       })
       if (!presignRes.ok) {
         const err = await presignRes.json().catch(() => ({}))
-        throw new Error(err.message || `Upload failed (${presignRes.status})`)
+        throw new Error(err.message || err.error || `Upload failed (${presignRes.status})`)
       }
       const { uploadUrl, publicUrl } = await presignRes.json()
 
@@ -350,11 +351,14 @@ export function WorkspaceSettingsClient() {
       return publicUrl as string
     },
     onSuccess: (url) => {
-      update("logo", url)
+      setForm((s) => ({ ...s, logo: url }))
       toast.success("Logo uploaded. Remember to save changes.")
     },
     onError: (err: Error) => {
       toast.error(err.message)
+    },
+    onSettled: () => {
+      setLogoUploading(false)
     },
   })
 

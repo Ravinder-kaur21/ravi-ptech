@@ -474,15 +474,15 @@ function renderMessageParts(
       <ChainOfThought
         key={`${message.id}-cot-group-${anchorIndex}`}
         defaultOpen
-        className="my-2 border-none bg-transparent"
+        className="my-3 rounded-xl border border-brand-rule/40 bg-brand-cream/20 px-3.5 py-2.5"
       >
-        {/* `headerIcon={null}` opts out of BOTH the Brain glyph and the
-            default "Chain of Thought" label. The message row above already
-            renders the bot avatar, so a second face inside the collapsible —
-            plus the generic label — read as a rendering bug rather than a
-            product affordance. */}
-        <ChainOfThoughtHeader headerIcon={null} />
-        <ChainOfThoughtContent>{steps}</ChainOfThoughtContent>
+        <ChainOfThoughtHeader headerIcon={null}>
+          <span className="flex items-center gap-2 text-[13px] font-medium text-brand-muted">
+            <Cpu className="size-3.5 text-brand-accent/70" />
+            Working through it
+          </span>
+        </ChainOfThoughtHeader>
+        <ChainOfThoughtContent className="mt-1">{steps}</ChainOfThoughtContent>
       </ChainOfThought>
     );
     cotBuffer = [];
@@ -524,29 +524,28 @@ function renderPart(
     return (
       <ChainOfThought
         key={`${message.id}-reasoning-${index}`}
-        defaultOpen
-        className="my-2 border-none bg-transparent"
+        defaultOpen={isStreaming}
+        className="my-3 rounded-xl border border-brand-rule/40 bg-brand-cream/20 px-3.5 py-2.5"
       >
-        {/* Bare header: the message row above already draws the bot avatar, so
-            the collapsible adds no second face and no generic label. The step
-            itself carries the state instead of the Brain glyph. */}
-        <ChainOfThoughtHeader headerIcon={null} />
+        <ChainOfThoughtHeader headerIcon={null}>
+          <span className="flex items-center gap-2 text-[13px] font-medium text-brand-muted">
+            {isStreaming ? (
+              <>
+                <Brain className="size-3.5 animate-pulse text-brand-accent" />
+                <Shimmer duration={1.4}>Reasoning…</Shimmer>
+              </>
+            ) : (
+              <>
+                <Brain className="size-3.5 text-brand-muted-soft" />
+                Reasoned through the request
+              </>
+            )}
+          </span>
+        </ChainOfThoughtHeader>
         <ChainOfThoughtContent>
-          <ChainOfThoughtStep
-            icon={isStreaming ? Brain : CheckCircle2}
-            status={isStreaming ? "active" : "complete"}
-            label={
-              isStreaming ? (
-                <Shimmer duration={1.4}>Thinking…</Shimmer>
-              ) : (
-                "Thought for a moment"
-              )
-            }
-          >
-            <div className="border-brand-rule/70 bg-brand-cream/30 text-brand-ink leading-relaxed whitespace-pre-wrap rounded-lg border p-2.5 font-sans text-xs">
-              {part.text}
-            </div>
-          </ChainOfThoughtStep>
+          <div className="mt-1 border-l-2 border-brand-rule/50 pl-3 text-[13px] leading-relaxed text-brand-muted whitespace-pre-wrap">
+            {part.text}
+          </div>
         </ChainOfThoughtContent>
       </ChainOfThought>
     );
@@ -568,27 +567,37 @@ function renderPart(
       error?: string;
     };
     const Icon = resolveCotIcon(cot.icon);
-    // An empty label is the server's placeholder "thinking" step. It only
-    // animates while it is still `active`; once the run completes the status
-    // flips and the shimmer stops. Rendering the shimmer purely off
-    // `!label` left it looping forever after the response had finished.
     const isPlaceholder = !cot.label?.trim();
     const status = cot.status ?? "complete";
+    const isError = !!cot.error;
     return (
       <ChainOfThoughtStep
         key={cot.id ?? `${message.id}-cot-${index}`}
         icon={Icon}
         status={status}
         label={
-          isPlaceholder && status === "active" ? (
-            <Shimmer duration={1.4}>Thinking…</Shimmer>
-          ) : isPlaceholder ? (
-            "Thought for a moment"
-          ) : (
-            cot.label
-          )
+          <span className={cn(
+            "text-[13px] font-medium",
+            status === "active" && "text-brand-ink",
+            status === "complete" && !isError && "text-brand-muted",
+            isError && "text-destructive"
+          )}>
+            {isPlaceholder && status === "active" ? (
+              <Shimmer duration={1.4}>Analyzing…</Shimmer>
+            ) : isPlaceholder ? (
+              "Completed analysis"
+            ) : (
+              cot.label
+            )}
+          </span>
         }
-        description={cot.description || (cot.error ? cot.error : undefined)}
+        description={
+          cot.error ? (
+            <span className="text-destructive/80 text-xs">{cot.error}</span>
+          ) : cot.description ? (
+            <span className="text-brand-muted-soft text-xs">{cot.description}</span>
+          ) : undefined
+        }
       >
         {Array.isArray(cot.summary) && cot.summary.length > 0 && (
           <ChainOfThoughtSearchResults className="mt-1.5">
@@ -604,18 +613,23 @@ function renderPart(
   }
 
   if (isFileUIPart(part)) {
-    // User-uploaded documents render as a content-sized chip, not a fixed
-    // thumbnail square — a 96px grey box around a 16px icon reads as an empty
-    // panel. The container hugs its content and wraps for multiple files.
+    const filePart = part as StoredFilePart;
+    const isImg = filePart.mediaType?.startsWith("image/");
     return (
       <div
         key={`${message.id}-file-${index}`}
-        className="mb-1.5 flex flex-wrap items-start justify-end gap-1.5"
+        className={cn(
+          "mb-2 flex flex-wrap items-start gap-2",
+          message.role === "user" ? "justify-end" : "justify-start"
+        )}
       >
         <MessageFileAttachment
           id={`${message.id}-${index}`}
-          part={part as StoredFilePart}
-          className="group/attachment"
+          part={filePart}
+          className={cn(
+            "group/attachment",
+            isImg && "max-w-xs rounded-xl overflow-hidden border border-brand-rule/50 shadow-sm"
+          )}
         />
       </div>
     );
@@ -2352,57 +2366,99 @@ export default function ChatInterface() {
 
   if (messages.length === 0) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto">
-        {error && (
-          <div className="mb-4 w-full max-w-2xl rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-            {error.message}
+      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-[#f7f3ec]">
+        {/* Radial brand-accent glow — sets the calm, premium mood without
+            competing with the input. Sits behind everything and fades out
+            toward the edges so the page stays read-friendly. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(60% 50% at 50% 38%, rgba(217,98,43,0.10) 0%, rgba(217,98,43,0.04) 35%, rgba(247,243,236,0) 70%)",
+          }}
+        />
+
+        <div className="relative z-10 w-full max-w-2xl px-6 flex flex-col items-center">
+          {error && (
+            <div className="mb-6 w-full rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error.message}
+            </div>
+          )}
+
+          {/* Small decorative orb. Gemini keeps the headline + input as the
+              dual focal points; the agent orb here is a quiet accent, not a
+              billboard. A tiny animated coat halo sells "alive" without
+              stealing attention. */}
+          <div className="relative mb-3">
+            <MuvxBot
+              size="sm"
+              coat={botCoat}
+              mood={copilotMood}
+              showDots={status === "submitted"}
+              className="relative"
+            />
           </div>
-        )}
 
-        <div className="w-full max-w-2xl text-center mb-6 space-y-3">
-          {/* Muvx Copilot Agent Orb with Dynamic Activity Animations */}
-          <MuvxBot
-            size="lg"
-            coat={botCoat}
-            mood={copilotMood}
-            showDots={status === "submitted"}
-            className="mb-2 mx-auto"
-          />
-
-          <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-brand-ink">
-            What would you like to look into?
+          {/* Hero headline — single, clean line. No eyebrow, no decorative
+              subtitle; the input below carries the affordance, and excess
+              chrome around it dilutes the focus. */}
+          <h1 className="font-serif text-[clamp(28px,4vw,40px)] leading-[1.1] tracking-tight text-brand-ink text-center">
+            What should <span className="italic text-brand-accent">Muvx</span> handle next?
           </h1>
-          <p className="text-xs text-brand-muted-soft max-w-md mx-auto leading-relaxed">
-            Ask about loads, rates, drivers, fleet, invoices, or compliance — or
-            upload a document and let Copilot work through it.
-          </p>
-        </div>
 
-        {/* Centered AI Input with Live Model Picker */}
-        <div className="w-full max-w-2xl">
-          <AI_Input_Search
-            models={availableModels}
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            onSubmit={sendWithProvider}
-            onFilesSelected={handleFiles}
-            placeholder="Ask about loads, rates, drivers, invoices, or upload a rate con…"
-            searchLabel="Web Search"
-          />
-        </div>
+          {/* Hero input — the focal point. The AI_Input_Search component
+              already renders the model picker inline on the right edge; we
+              leave it as-is so the affordance matches the rest of the app. */}
+          <div className="mt-7 w-full">
+            <AI_Input_Search
+              models={availableModels}
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              onSubmit={sendWithProvider}
+              onFilesSelected={handleFiles}
+              placeholder="Ask Muvx anything — loads, rates, drivers, invoices, or attach a document…"
+              searchLabel="Web Search"
+            />
+          </div>
 
-        {/* Dynamic Contextual Suggestion Chips */}
-        <div className="mt-4 max-w-2xl px-2">
-          <Suggestions className="justify-center flex-wrap gap-1.5">
-            {emptyStateSuggestions.map((item, idx) => (
-              <Suggestion
-                key={`${item.title}-${idx}`}
-                suggestion={item.title}
-                onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
-                className="border-brand-rule bg-brand-card text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs text-xs"
-              />
-            ))}
-          </Suggestions>
+          {/* Whisper-quiet suggestions — icon + plain text rows below the
+              input, echoing the Gemini "small hints" pattern. No card chrome,
+              no button backgrounds; they read as flavor, not as competitors
+              to the input above. */}
+          <div className="mt-8 w-full">
+            <ul className="flex flex-col gap-1">
+              {emptyStateSuggestions.map((item, idx) => {
+                const Icon =
+                  idx === 0 ? Truck
+                  : idx === 1 ? FileWarning
+                  : idx === 2 ? Users
+                  : CircleDollarSign
+                return (
+                  <li key={`${item.title}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        sendWithProvider(item.prompt, {
+                          webSearch: false,
+                          model: selectedModel,
+                        })
+                      }
+                      className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-brand-cream-soft"
+                    >
+                      <Icon
+                        className="size-3.5 shrink-0 text-brand-muted-soft group-hover:text-brand-accent"
+                        strokeWidth={1.8}
+                      />
+                      <span className="text-[13px] text-brand-muted group-hover:text-brand-ink">
+                        {item.title}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         </div>
       </div>
     );
@@ -2412,8 +2468,14 @@ export default function ChatInterface() {
     <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 text-sm text-destructive shrink-0">
-          {error.message}
+        <div className="mx-4 mt-3 shrink-0 rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-start gap-2">
+            <FileWarning className="mt-0.5 size-4 shrink-0" />
+            <div className="min-w-0">
+              <div className="font-medium">Connection issue</div>
+              <div className="mt-0.5 text-[13px] text-destructive/80 break-words">{error.message}</div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2455,9 +2517,7 @@ export default function ChatInterface() {
               );
             })}
 
-            {/* Instant "alive" feedback: rendered locally the moment the user
-                hits enter, before the server sends its first chunk. Prevents the
-                dead-air gap where the UI looks frozen. */}
+            {/* Instant "alive" feedback before first chunk arrives */}
             {(status === "submitted" || status === "streaming") &&
               !messages.some(
                 (m) =>
@@ -2480,11 +2540,18 @@ export default function ChatInterface() {
                     />
                   </div>
                   <MessageContent>
-                    <Shimmer duration={1.6}>
-                      {status === "submitted"
-                        ? "Connecting to Copilot…"
-                        : "Thinking through your request…"}
-                    </Shimmer>
+                    <div className="flex items-center gap-2.5 py-1">
+                      <div className="flex gap-1">
+                        <span className="size-1.5 rounded-full bg-brand-accent/60 animate-bounce [animation-delay:0ms]" />
+                        <span className="size-1.5 rounded-full bg-brand-accent/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="size-1.5 rounded-full bg-brand-accent/60 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                      <span className="text-[13px] text-brand-muted">
+                        {status === "submitted"
+                          ? "Connecting…"
+                          : "Thinking…"}
+                      </span>
+                    </div>
                   </MessageContent>
                 </Message>
               )}
@@ -2495,13 +2562,13 @@ export default function ChatInterface() {
       {/* Active turn contextual suggestions */}
       {status === "ready" && adaptiveSuggestions.length > 0 && (
         <div className="px-4 py-2 max-w-4xl mx-auto w-full">
-          <Suggestions className="flex-wrap gap-1.5">
+          <Suggestions className="flex-wrap gap-2">
             {adaptiveSuggestions.map((item, idx) => (
               <Suggestion
                 key={`${item.title}-${idx}`}
                 suggestion={item.title}
                 onClick={() => sendWithProvider(item.prompt, { webSearch: false, model: selectedModel })}
-                className="border-brand-rule bg-brand-card/80 text-brand-muted-soft hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs text-xs"
+                className="rounded-lg border-brand-rule bg-brand-card/80 text-brand-muted hover:border-brand-accent/40 hover:text-brand-ink hover:bg-brand-cream/50 shadow-2xs text-[13px] px-3 py-1.5"
               />
             ))}
           </Suggestions>

@@ -320,7 +320,7 @@ Never speculate about results of a tool that was denied. Report only what actual
 
     const maxSteps = Math.max(
       1,
-      Math.min(32, parseInt(String(settings.maxSteps || "12"), 10) || 12),
+      Math.min(48, parseInt(String(settings.maxSteps || "12"), 10) || 12),
     )
 
     // Rough token estimate. Char/4 is close enough to decide when to compact;
@@ -453,7 +453,9 @@ Never speculate about results of a tool that was denied. Report only what actual
           toolName: "__thinking__",
           icon: "think",
           label: "",
+          description: "",
           status: "complete",
+          summary: [],
         })
         trace.finish({ reason: "stream-complete" })
       },
@@ -472,7 +474,9 @@ Never speculate about results of a tool that was denied. Report only what actual
             toolName: "__thinking__",
             icon: "think",
             label: "",
+            description: "",
             status: "active",
+            summary: [],
           },
         })
 
@@ -519,7 +523,16 @@ Never speculate about results of a tool that was denied. Report only what actual
     if (logger) logger.fail(error)
     console.error("Chat API error:", error)
     return NextResponse.json(
-      { error: error?.message || "Internal server error" },
+      {
+        error: error?.message || "Internal server error",
+        code: error?.code || "CHAT_FAILED",
+        reason:
+          error?.message?.includes("API")
+            ? "provider_api"
+            : error?.message?.includes("timeout")
+            ? "timeout"
+            : "server",
+      },
       { status: 500 }
     )
   }

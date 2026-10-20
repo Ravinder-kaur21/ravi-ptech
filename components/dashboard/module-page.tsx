@@ -39,15 +39,24 @@ export function ModulePage({
   return (
     <div className="p-4 lg:p-8 space-y-6 max-w-4xl mx-auto">
       <div>
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="size-[7px] shrink-0 rounded-full bg-brand-accent" />
+          <span className="font-geist-mono text-[11px] font-medium uppercase tracking-[0.04em] text-brand-ink">
+            Module
+          </span>
+          <span className="font-geist-mono text-[11px] tracking-[0.04em] text-brand-muted-soft">
+            · {title}
+          </span>
+        </div>
         <div className="flex items-center gap-3 mb-2">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-brand-accent-tint text-brand-accent">
-            <Icon className="h-4 w-4" strokeWidth={1.8} />
+          <div className="flex size-10 items-center justify-center rounded-xl bg-brand-accent-tint text-brand-accent">
+            <Icon className="h-5 w-5" strokeWidth={1.8} />
           </div>
           <h1 className="font-serif text-3xl tracking-tight text-brand-ink">
             <span className="italic text-brand-accent">{title}</span>
           </h1>
         </div>
-        <p className="text-sm text-brand-ink/80">{description}</p>
+        <p className="text-[15px] text-brand-muted leading-relaxed max-w-xl">{description}</p>
       </div>
 
       <Card className="border-brand-rule bg-brand-card p-10 text-center">
