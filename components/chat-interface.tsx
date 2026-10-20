@@ -12,7 +12,7 @@ import {
   type UIMessage,
   type LanguageModelUsage,
 } from "ai";
-import { useEffect, useState, useRef, useMemo, Fragment } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import AI_Input_Search from "@/components/kokonutui/ai-input-search";
 import {
@@ -502,7 +502,7 @@ function renderMessageParts(
     flushCot(i);
     out.push(
       <Fragment key={`${message.id}-p-${i}`}>
-        {renderPart(message, part, i, addToolApprovalResponse, onSendMessage, botCoat)}
+        {renderPart(message, part, i, respondToApproval, onSendMessage, botCoat)}
       </Fragment>
     );
   });
@@ -515,7 +515,13 @@ function renderPart(
   message: UIMessage,
   part: UIMessage["parts"][number],
   index: number,
-  addToolApprovalResponse?: (options: { id: string; approved: boolean; reason?: string }) => void,
+  respondToApproval?: (options: {
+    id: string
+    approved: boolean
+    reason?: string
+    toolName?: string
+    source?: string
+  }) => void,
   onSendMessage?: (text: string) => void,
   botCoat: BotCoat = "ink"
 ): React.ReactNode {
@@ -807,13 +813,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Reject
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Approve & Book
                 </ConfirmationAction>
@@ -919,13 +925,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Dispatch
                 </ConfirmationAction>
@@ -1106,13 +1112,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Send Invoice Email
                 </ConfirmationAction>
@@ -1210,13 +1216,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Changes
                 </ConfirmationAction>
@@ -1278,13 +1284,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Driver
                 </ConfirmationAction>
@@ -1346,13 +1352,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Tractor
                 </ConfirmationAction>
@@ -1414,13 +1420,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Customer
                 </ConfirmationAction>
@@ -1478,13 +1484,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Generate Invoice
                 </ConfirmationAction>
@@ -1556,13 +1562,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Expense
                 </ConfirmationAction>
@@ -1615,13 +1621,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm & Send
                 </ConfirmationAction>
@@ -1680,13 +1686,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Update
                 </ConfirmationAction>
@@ -1948,13 +1954,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                  onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm & Dispatch
                 </ConfirmationAction>
@@ -2092,13 +2098,13 @@ function renderPart(
             <ConfirmationActions>
               <ConfirmationAction
                 variant="outline"
-                onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
+                onClick={() => respondToApproval?.({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
               >
                 Reject
               </ConfirmationAction>
               <ConfirmationAction
                 variant="default"
-                onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
+                onClick={() => respondToApproval?.({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
               >
                 Approve & Execute
               </ConfirmationAction>
@@ -2205,24 +2211,31 @@ export default function ChatInterface() {
         toolName: opts.toolName ?? null,
         source: opts.source ?? "card",
       })
-      const promise = addToolApprovalResponse?.({
+      const result = addToolApprovalResponse?.({
         id: opts.id,
         approved: opts.approved,
         reason: opts.reason,
       })
-      if (!promise) {
+      if (!result) {
         traceError("approval:rejected", { id: opts.id, reason: "sdk-missing" })
         return undefined
       }
-      promise
-        .then(() => traceInfo("approval:invoked", { id: opts.id, ok: true }))
-        .catch((err: unknown) =>
-          traceError("approval:rejected", {
-            id: opts.id,
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        )
-      return promise
+      // The SDK return type is `void | PromiseLike<void>`. The .then /
+      // .catch chain only fires on real promises; a `void` return goes
+      // through the "sync path" instead.
+      if (result && typeof (result as PromiseLike<void>).then === "function") {
+        Promise.resolve(result as PromiseLike<void>)
+          .then(() => traceInfo("approval:invoked", { id: opts.id, ok: true }))
+          .catch((err: unknown) =>
+            traceError("approval:rejected", {
+              id: opts.id,
+              message: err instanceof Error ? err.message : String(err),
+            }),
+          )
+      } else {
+        traceInfo("approval:invoked", { id: opts.id, ok: true, sync: true })
+      }
+      return result
     },
     [addToolApprovalResponse],
   )
@@ -2608,7 +2621,7 @@ export default function ChatInterface() {
                   <MessageContent>
                     {renderMessageParts(
                       message,
-                      addToolApprovalResponse,
+                      respondToApproval,
                       (text) => sendWithProvider(text, { webSearch: false, model: selectedModel }),
                       botCoat,
                       isLastMessage && status === "streaming"
