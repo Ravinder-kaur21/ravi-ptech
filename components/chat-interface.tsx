@@ -135,6 +135,10 @@ import {
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import {
+  StreamingAssistantMessage,
+  fromUIMessage,
+} from "@/components/copilot/agent/streaming-message";
+import {
   MessageSquare,
   Sparkles,
   Copy,
@@ -2611,6 +2615,14 @@ export default function ChatInterface() {
               const isLastMessage = mIdx === messages.length - 1;
               const isAssistant = message.role === "assistant";
               const rowMood: BotMood = isLastMessage ? copilotMood : "idle";
+              const isStreamingNow =
+                isLastMessage && (status === "submitted" || status === "streaming");
+              // Translate the AI-SDK UIMessage into the agentic renderer
+              // schema. Identity translate only — duration is reconstructed
+              // from `parts.length` for memoisation.
+              const streamingMsg = isAssistant
+                ? fromUIMessage(message, isStreamingNow)
+                : null;
               return (
                 <Message key={message.id} from={message.role} className="gap-1.5">
                   {isAssistant && (
@@ -2619,12 +2631,23 @@ export default function ChatInterface() {
                     </div>
                   )}
                   <MessageContent>
-                    {renderMessageParts(
-                      message,
-                      respondToApproval,
-                      (text) => sendWithProvider(text, { webSearch: false, model: selectedModel }),
-                      botCoat,
-                      isLastMessage && status === "streaming"
+                    {isAssistant && streamingMsg ? (
+                      <StreamingAssistantMessage
+                        message={streamingMsg}
+                        isLoading={isStreamingNow}
+                      />
+                    ) : (
+                      renderMessageParts(
+                        message,
+                        respondToApproval,
+                        (text) =>
+                          sendWithProvider(text, {
+                            webSearch: false,
+                            model: selectedModel,
+                          }),
+                        botCoat,
+                        isLastMessage && status === "streaming"
+                      )
                     )}
                   </MessageContent>
                   {isAssistant && (
