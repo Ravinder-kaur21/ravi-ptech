@@ -133,6 +133,28 @@ export class TurnLogger {
   fail = (error: unknown, fields: LogFields = {}) =>
     this.event("turn:error", { error, ...fields }, "ERROR");
 
+  // ── Approval-flow lifecycle ───────────────────────────────────────
+  // Logged at WARN so the operator can grep approval-flow lines quickly
+  // even when the default level is INFO. Every phase of the approval
+  // pipeline gets its own event so a single trace file makes "did the
+  // follow-up request actually fire?" answerable without guesswork.
+  approvalQueued = (fields: LogFields) =>
+    this.event("approval:queued", fields, "WARN");
+  approvalReceived = (fields: LogFields) =>
+    this.event("approval:received", fields, "WARN");
+  approvalAnswered = (fields: LogFields) =>
+    this.event("approval:answered", fields, "WARN");
+  approvalSanitized = (fields: LogFields) =>
+    this.event("approval:sanitized", fields, "WARN");
+  approvalResumed = (fields: LogFields) =>
+    this.event("approval:resumed", fields, "WARN");
+  approvalDangling = (fields: LogFields) =>
+    this.event("approval:dangling", fields, "ERROR");
+  approvalExecuted = (fields: LogFields) =>
+    this.event("approval:executed", fields, "INFO");
+  approvalDenied = (fields: LogFields) =>
+    this.event("approval:denied", fields, "INFO");
+
   /** Wrap a tool's execute so success, failure and duration are all recorded. */
   async traceTool<T>(
     toolName: string,

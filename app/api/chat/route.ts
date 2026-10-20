@@ -102,28 +102,78 @@ export async function POST(req: NextRequest) {
       allowAll: isAllowAll,
     }))
 
+    // ── Approval-flow deep log (server) ────────────────────────────────
+    // Every approval-card turn lands here with three possible flows. We
+    // log every part's terminal state before we touch anything so a
+    // single `grep approval` tells the whole story of a stuck turn.
+    const approvalCounts = {
+      approvalRequested: 0,
+      approvalRespondedApproved: 0,
+      approvalRespondedDenied: 0,
+      inputStreaming: 0,
+      inputAvailable: 0,
+      outputAvailable: 0,
+      outputError: 0,
+      outputDenied: 0,
+    };
+    for (const m of messages as UIMessage[]) {
+      for (const p of m.parts) {
+        if (!isToolUIPart(p)) continue;
+        if (p.state === "approval-requested") approvalCounts.approvalRequested++;
+        else if (p.state === "approval-responded") {
+          const approved = (p as { approval?: { approved?: boolean } }).approval
+            ?.approved;
+          if (approved === true) approvalCounts.approvalRespondedApproved++;
+          else if (approved === false)
+            approvalCounts.approvalRespondedDenied++;
+        } else if (p.state === "input-streaming") approvalCounts.inputStreaming++;
+        else if (p.state === "input-available") approvalCounts.inputAvailable++;
+        else if (p.state === "output-available") approvalCounts.outputAvailable++;
+        else if (p.state === "output-error") approvalCounts.outputError++;
+        else if (p.state === "output-denied") approvalCounts.outputDenied++;
+      }
+    }
+    trace.approvalReceived({
+      trigger: body.trigger ?? "submit-message",
+      messageId: body.messageId ?? null,
+      resendFlag: body.resend ?? body.resendStreamId ?? null,
+      ...approvalCounts,
+    });
+
     // ── Approval-state sanitiser ──────────────────────────────────────
-    // Why this exists: a manual tool-approval turn leaves tool parts in
-    // states that carry a tool-call but NO tool-result:
+    // The SDK's `convertToModelMessages` validates that every
+    // assistant tool-call has a matching tool-result and throws
+    // `AI_MissingToolResultsError` otherwise. There are three tool-part
+    // states that show up between turns and need different handling:
     //
-    //   approval-requested — model asked, operator has not answered yet
-    //   approval-responded — operator answered; the SDK executes it itself
-    //                       on the next generation and emits the result there
+    //   `approval-requested`
+    //     Stale — operator did not answer this one. Drop it. The SDK
+    //     re-emits the request when it needs to, and we don't want
+    //     this part to cause `MissingToolResults` errors.
     //
-    // `convertToModelMessages` validates that every assistant tool-call has a
-    // matching tool-result and throws `AI_MissingToolResultsError` otherwise.
-    // `ignoreIncompleteToolCalls` does NOT save us: its filter explicitly
-    // KEEPS `approval-responded` parts. So when two approvals render at once
-    // and the operator answers one, the still-pending sibling leaves a
-    // dangling call and the request dies with a 200 and an empty body.
+    //   `approval-responded` + `approved === false`
+    //     Denial. The SDK synthesises a tool-result with
+    //     `output-denied` on the next turn (see convertToModelMessages
+    //     in ai/dist/index.js around the `approval-responded` branch),
+    //     so the part STILL leaves a dangling tool-call unless we keep
+    //     it. We DO keep it — the SDK knows how to translate
+    //     approval-responded + approved=false into a synthetic result.
     //
-    // Both states are therefore stripped before conversion. The SDK re-asks
-    // for anything still unanswered, so nothing is lost.
+    //   `approval-responded` + `approved === true`
+    //     Approved. The SDK needs this part in the next request so it
+    //     can drive execution of the tool itself (server-side execute)
+    //     and emit the tool-result. Stripping these was the cause of
+    //     the "approval granted, conversation stops" bug — the model
+    //     never received the matching tool-result on the next turn and
+    //     stalled. KEEP these parts.
+    //
+    // TL;DR: drop only `approval-requested`. Keep `approval-responded`
+    // (the SDK handles both branches cleanly).
     const sanitizedMessages = (messages as UIMessage[]).map((m) => ({
       ...m,
       parts: m.parts.filter((p) => {
         if (!isToolUIPart(p)) return true;
-        return p.state !== "approval-requested" && p.state !== "approval-responded";
+        return p.state !== "approval-requested";
       }),
     }))
 
@@ -131,22 +181,53 @@ export async function POST(req: NextRequest) {
       (n, m) =>
         n +
         m.parts.filter(
-          (p) =>
-            isToolUIPart(p) &&
-            (p.state === "approval-requested" || p.state === "approval-responded"),
+          (p) => isToolUIPart(p) && p.state === "approval-requested",
         ).length,
       0,
     );
 
-    trace.chunk({
-      phase: "sanitize",
+    trace.approvalSanitized({
       incomingMessages: messages.length,
       droppedApprovalParts: droppedParts,
+      keptApprovalResponded: approvalCounts.approvalRespondedApproved +
+        approvalCounts.approvalRespondedDenied,
+      approvedKept: approvalCounts.approvalRespondedApproved,
+      deniedKept: approvalCounts.approvalRespondedDenied,
     });
 
     const modelMessages = await convertToModelMessages(sanitizedMessages, {
       ignoreIncompleteToolCalls: true,
     })
+
+    // After conversion: did every tool-call pair with a tool-result?
+    // If not, the model is about to error and the response will be empty
+    // — that's the symptom we want to surface BEFORE the user sees it.
+    let toolCallCount = 0
+    let toolResultCount = 0
+    for (const m of modelMessages) {
+      const content = (m as { content?: unknown }).content
+      if (!Array.isArray(content)) continue
+      for (const block of content) {
+        const t = (block as { type?: string }).type
+        if (t === "tool-call") toolCallCount++
+        else if (t === "tool-result") toolResultCount++
+      }
+    }
+    if (toolCallCount > toolResultCount) {
+      trace.approvalDangling({
+        toolCalls: toolCallCount,
+        toolResults: toolResultCount,
+        missing: toolCallCount - toolResultCount,
+      })
+    } else if (
+      approvalCounts.approvalRespondedApproved > 0 &&
+      approvalCounts.outputAvailable === 0
+    ) {
+      trace.approvalResumed({
+        approval: "approved-without-yet-emitted-result",
+        sdkWillDriveExecution: true,
+      })
+    }
 
     const memorySnippet =
       activeMemories.length > 0

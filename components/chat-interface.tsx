@@ -451,7 +451,13 @@ function resolveCotIcon(iconKey?: string) {
  */
 function renderMessageParts(
   message: UIMessage,
-  addToolApprovalResponse?: (options: { id: string; approved: boolean; reason?: string }) => void,
+  respondToApproval?: (options: {
+    id: string
+    approved: boolean
+    reason?: string
+    toolName?: string
+    source?: string
+  }) => void,
   onSendMessage?: (text: string) => void,
   botCoat: BotCoat = "ink",
   /**
@@ -468,7 +474,7 @@ function renderMessageParts(
   const flushCot = (anchorIndex: number) => {
     if (cotBuffer.length === 0) return;
     const steps = cotBuffer.map((p, i) =>
-      renderPart(message, p, anchorIndex + i, addToolApprovalResponse, onSendMessage, botCoat)
+      renderPart(message, p, anchorIndex + i, respondToApproval, onSendMessage, botCoat)
     );
     out.push(
       <ChainOfThought
@@ -801,13 +807,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Reject
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Approve & Book
                 </ConfirmationAction>
@@ -913,13 +919,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Dispatch
                 </ConfirmationAction>
@@ -1100,13 +1106,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Send Invoice Email
                 </ConfirmationAction>
@@ -1204,13 +1210,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Changes
                 </ConfirmationAction>
@@ -1272,13 +1278,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Driver
                 </ConfirmationAction>
@@ -1340,13 +1346,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Authorize Tractor
                 </ConfirmationAction>
@@ -1408,13 +1414,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Customer
                 </ConfirmationAction>
@@ -1472,13 +1478,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Generate Invoice
                 </ConfirmationAction>
@@ -1550,13 +1556,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Expense
                 </ConfirmationAction>
@@ -1609,13 +1615,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm & Send
                 </ConfirmationAction>
@@ -1674,13 +1680,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm Update
                 </ConfirmationAction>
@@ -1942,13 +1948,13 @@ function renderPart(
               <ConfirmationActions>
                 <ConfirmationAction
                   variant="outline"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Cancel
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="default"
-                  onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                  onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
                 >
                   Confirm & Dispatch
                 </ConfirmationAction>
@@ -2086,13 +2092,13 @@ function renderPart(
             <ConfirmationActions>
               <ConfirmationAction
                 variant="outline"
-                onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: false })}
+                onClick={() => respondToApproval({ id: approval.id, approved: false, source: "inline", toolName: String(toolPart.type) })}
               >
                 Reject
               </ConfirmationAction>
               <ConfirmationAction
                 variant="default"
-                onClick={() => addToolApprovalResponse?.({ id: approval.id, approved: true })}
+                onClick={() => respondToApproval({ id: approval.id, approved: true, source: "inline", toolName: String(toolPart.type) })}
               >
                 Approve & Execute
               </ConfirmationAction>
@@ -2115,9 +2121,111 @@ export default function ChatInterface() {
   const [allowAll, setAllowAll] = useState(false);
   const [recentFinish, setRecentFinish] = useState(false);
 
+  // `sendAutomaticallyWhen` is THE switch that lets an approved/denied
+  // tool resume the conversation. Without it, `addToolApprovalResponse`
+  // only mutates the part locally and the SDK never POSTs the follow-up
+  // to /api/chat — the UI stays stuck on the approval card even after
+  // the operator clicks Approve. The official helper below is the one
+  // exported by the SDK to detect "the last assistant message still has
+  // unanswered approval cards"; if it returns true the SDK fires the
+  // next request automatically.
   const { messages, setMessages, sendMessage, status, error, addToolApprovalResponse } = useChat({
     id: "ai-chat",
+    sendAutomaticallyWhen: ({ messages: msgs }) => {
+      const last = msgs[msgs.length - 1]
+      if (last?.role !== "assistant") {
+        traceDebug("approval:gate:skip", {
+          reason: "last-message-not-assistant",
+          lastRole: last?.role ?? null,
+        })
+        return false
+      }
+      // Once every tool-call part in the last assistant message has a
+      // terminal state — either a result, an error, a denial, or an
+      // approval-responded — and at least one of them was an answered
+      // approval, the SDK can resume. This avoids hot-pinging the
+      // route while a long tool chain is still streaming.
+      const parts = last.parts ?? []
+      const answered: { id: string; approved: boolean }[] = []
+      const stillRunning: string[] = []
+      for (const p of parts) {
+        if (!isToolUIPart(p)) continue
+        const a = (p as { approval?: { id?: string; approved?: boolean } }).approval
+        if (p.state === "approval-responded") {
+          answered.push({ id: a?.id ?? "<unknown>", approved: Boolean(a?.approved) })
+        } else if (
+          p.state === "input-streaming" ||
+          p.state === "input-available"
+        ) {
+          stillRunning.push(p.state)
+        }
+      }
+      const hasAnsweredApproval = answered.length > 0
+      const allTerminal = parts.every(
+        (p) =>
+          !isToolUIPart(p) ||
+          p.state === "output-available" ||
+          p.state === "output-error" ||
+          p.state === "output-denied" ||
+          p.state === "approval-responded",
+      )
+      const decision = hasAnsweredApproval && allTerminal
+      traceDebug("approval:gate", {
+        messageId: last.id,
+        hasAnsweredApproval,
+        allTerminal,
+        stillRunning,
+        answeredCount: answered.length,
+        decided: decision,
+      })
+      return decision
+    },
   });
+
+  // Wrapped approval-respond function. Every site that used to call
+  // `addToolApprovalResponse?.(...)` now calls this, so the click → SDK
+  // → POST round-trip is observable in one place.
+  //
+  // Levels:
+  //   approval:clicked  — operator pressed Approve/Reject
+  //   approval:invoked  — SDK method was called with the response payload
+  //   approval:rejected — SDK call threw (shouldn't normally happen)
+  const respondToApproval = useCallback(
+    (opts: {
+      id: string
+      approved: boolean
+      reason?: string
+      toolName?: string
+      source?: string
+    }) => {
+      traceInfo("approval:clicked", {
+        id: opts.id,
+        approved: opts.approved,
+        reason: opts.reason ?? null,
+        toolName: opts.toolName ?? null,
+        source: opts.source ?? "card",
+      })
+      const promise = addToolApprovalResponse?.({
+        id: opts.id,
+        approved: opts.approved,
+        reason: opts.reason,
+      })
+      if (!promise) {
+        traceError("approval:rejected", { id: opts.id, reason: "sdk-missing" })
+        return undefined
+      }
+      promise
+        .then(() => traceInfo("approval:invoked", { id: opts.id, ok: true }))
+        .catch((err: unknown) =>
+          traceError("approval:rejected", {
+            id: opts.id,
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        )
+      return promise
+    },
+    [addToolApprovalResponse],
+  )
 
   const prevStatusRef = useRef(status);
 
